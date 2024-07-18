@@ -520,10 +520,10 @@ void flush_icache_pte(struct mm_struct *mm, pte_t pte);
 
 static inline void __set_pte_at(struct mm_struct *mm, pte_t *ptep, pte_t pteval)
 {
-	if (pte_present(pteval) && pte_exec(pteval))
-		flush_icache_pte(mm, pteval);
+	if (pte_present(pteval) && pte_exec(pteval))//如果页表条目存在并且具有执行权限
+		flush_icache_pte(mm, pteval);//刷新与该页表条目关联的icache
 
-	set_pte(ptep, pteval);
+	set_pte(ptep, pteval);//设置页表项
 }
 
 #define PFN_PTE_SHIFT		_PAGE_PFN_SHIFT
@@ -759,6 +759,7 @@ static inline int pmd_trans_huge(pmd_t pmd)
 }
 
 #define __HAVE_ARCH_PMDP_SET_ACCESS_FLAGS
+/*设置PMD页表访问标志*/
 static inline int pmdp_set_access_flags(struct vm_area_struct *vma,
 					unsigned long address, pmd_t *pmdp,
 					pmd_t entry, int dirty)

@@ -32,9 +32,9 @@ static inline bool variable_test_bit(int nr, const void *addr)
 }
 
 #define test_bit(nr,addr) \
-(__builtin_constant_p(nr) ? \
- constant_test_bit((nr),(addr)) : \
- variable_test_bit((nr),(addr)))
+(__builtin_constant_p(nr) ? \		//GCC 提供的一个内建函数，用于判断 nr 是否是一个编译时常量。为常量返回true
+ constant_test_bit((nr),(addr)) : \	//直接计算特定位是否被设置，适用于编译时已知的常量位。
+ variable_test_bit((nr),(addr)))	//在运行时计算特定位是否被设置，适用于在编译时未知的变量位。
 
 static inline void set_bit(int nr, void *addr)
 {

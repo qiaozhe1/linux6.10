@@ -2693,41 +2693,41 @@ static void __init mem_init_print_info(void)
  */
 void __init mm_core_init(void)
 {
-	/* Initializations relying on SMP setup */
-	build_all_zonelists(NULL);
-	page_alloc_init_cpuhp();
+	/* 基于 SMP（对称多处理器）的初始化 */
+	build_all_zonelists(NULL);//构建所有内存区域（zone）的列表，用于内存分配策略
+	page_alloc_init_cpuhp();//初始化页面分配器中的 CPU 热插拔支持
 
 	/*
 	 * page_ext requires contiguous pages,
 	 * bigger than MAX_PAGE_ORDER unless SPARSEMEM.
 	 */
-	page_ext_init_flatmem();
-	mem_debugging_and_hardening_init();
-	kfence_alloc_pool_and_metadata();
-	report_meminit();
-	kmsan_init_shadow();
-	stack_depot_early_init();
-	mem_init();
-	mem_init_print_info();
-	kmem_cache_init();
+	page_ext_init_flatmem();//初始化平面内存模型（Flat Memory Model）的页面扩展（page_ext）
+	mem_debugging_and_hardening_init();//初始化内存调试和加固
+	kfence_alloc_pool_and_metadata();// 分配 KFENCE（Kernel Electric Fence）的内存池和元数据
+	report_meminit();//报告内存初始化信息
+	kmsan_init_shadow();//初始化 KMSAN（Kernel Memory Sanitizer）的影子内存
+	stack_depot_early_init();//早期初始化栈存储（stack depot）
+	mem_init();//初始化内存管理子系统
+	mem_init_print_info();//打印内存初始化信息
+	kmem_cache_init();//初始化内存缓存（kmem cache）
 	/*
 	 * page_owner must be initialized after buddy is ready, and also after
 	 * slab is ready so that stack_depot_init() works properly
 	 */
-	page_ext_init_flatmem_late();
-	kmemleak_init();
-	ptlock_cache_init();
-	pgtable_cache_init();
-	debug_objects_mem_init();
-	vmalloc_init();
-	/* If no deferred init page_ext now, as vmap is fully initialized */
+	page_ext_init_flatmem_late();//晚期初始化平面内存模型的页面扩展（page_ext）
+	kmemleak_init();//初始化 kmemleak（内存泄漏检测器）
+	ptlock_cache_init();//初始化页表锁缓存
+	pgtable_cache_init();//初始化页表缓存
+	debug_objects_mem_init();//初始化调试对象的内存
+	vmalloc_init();//初始化虚拟内存分配器（vmalloc）
+	/* 如果没有延迟初始化页面扩展，现在初始化它，因为 vmap 已完全初始化 */
 	if (!deferred_struct_pages)
 		page_ext_init();
-	/* Should be run before the first non-init thread is created */
+	/* 应在创建第一个非初始化线程之前运行 */
 	init_espfix_bsp();
-	/* Should be run after espfix64 is set up. */
+	/* 应在 espfix64 设置之后运行 */
 	pti_init();
-	kmsan_init_runtime();
-	mm_cache_init();
-	execmem_init();
+	kmsan_init_runtime();//初始化 KMSAN（Kernel Memory Sanitizer）运行时
+	mm_cache_init();//初始化内存缓存
+	execmem_init();//初始化可执行内存
 }

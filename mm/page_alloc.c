@@ -2322,15 +2322,15 @@ void drain_zone_pages(struct zone *zone, struct per_cpu_pages *pcp)
  */
 static void drain_pages_zone(unsigned int cpu, struct zone *zone)
 {
-	struct per_cpu_pages *pcp = per_cpu_ptr(zone->per_cpu_pageset, cpu);
-	int count = READ_ONCE(pcp->count);
+	struct per_cpu_pages *pcp = per_cpu_ptr(zone->per_cpu_pageset, cpu);//获取指定CPU的per_CPU页面集
+	int count = READ_ONCE(pcp->count);//读取per_CPU页面集中的页面计数
 
-	while (count) {
-		int to_drain = min(count, pcp->batch << CONFIG_PCP_BATCH_SCALE_MAX);
-		count -= to_drain;
+	while (count) {//当页面计数不为 0 时，继续循环
+		int to_drain = min(count, pcp->batch << CONFIG_PCP_BATCH_SCALE_MAX);//计算要清空的页面数，清除数量是为当前计数和批量大小的最小值
+		count -= to_drain;//减少当前计数
 
 		spin_lock(&pcp->lock);
-		free_pcppages_bulk(zone, to_drain, pcp, 0);
+		free_pcppages_bulk(zone, to_drain, pcp, 0);//批量释放指定数量的页面
 		spin_unlock(&pcp->lock);
 	}
 }
@@ -2352,12 +2352,12 @@ static void drain_pages(unsigned int cpu)
  */
 void drain_local_pages(struct zone *zone)
 {
-	int cpu = smp_processor_id();
+	int cpu = smp_processor_id();//获取当前处理器的 ID
 
-	if (zone)
+	if (zone)//如果指定了内存区域，则仅清空该区域的本地页面缓存
 		drain_pages_zone(cpu, zone);
 	else
-		drain_pages(cpu);
+		drain_pages(cpu);//否则，清空所有区域的本地页面缓存
 }
 
 /*
@@ -5421,16 +5421,16 @@ build_all_zonelists_init(void)
  */
 void __ref build_all_zonelists(pg_data_t *pgdat)
 {
-	unsigned long vm_total_pages;
+	unsigned long vm_total_pages;//存储系统中总页面数
 
-	if (system_state == SYSTEM_BOOTING) {
-		build_all_zonelists_init();
+	if (system_state == SYSTEM_BOOTING) {//如果系统状态为启动中
+		build_all_zonelists_init();//初始化所有内存区域列表
 	} else {
-		__build_all_zonelists(pgdat);
+		__build_all_zonelists(pgdat);//否则给指定的pgdat构建内存区域列表
 		/* cpuset refresh routine should be here */
 	}
 	/* Get the number of free pages beyond high watermark in all zones. */
-	vm_total_pages = nr_free_zone_pages(gfp_zone(GFP_HIGHUSER_MOVABLE));
+	vm_total_pages = nr_free_zone_pages(gfp_zone(GFP_HIGHUSER_MOVABLE));//获取所有区域中超过高水位线的空闲页面数
 	/*
 	 * Disable grouping by mobility if the number of pages in the
 	 * system is too low to allow the mechanism to work. It would be
@@ -5438,17 +5438,17 @@ void __ref build_all_zonelists(pg_data_t *pgdat)
 	 * made on memory-hotadd so a system can start with mobility
 	 * disabled and enable it later
 	 */
-	if (vm_total_pages < (pageblock_nr_pages * MIGRATE_TYPES))
+	if (vm_total_pages < (pageblock_nr_pages * MIGRATE_TYPES))//如果系统中页面数太少，不足以是移动性分组机制工作，则禁用按移动性分组
 		page_group_by_mobility_disabled = 1;
 	else
-		page_group_by_mobility_disabled = 0;
+		page_group_by_mobility_disabled = 0;//否则启用移动性分组
 
 	pr_info("Built %u zonelists, mobility grouping %s.  Total pages: %ld\n",
 		nr_online_nodes,
 		page_group_by_mobility_disabled ? "off" : "on",
-		vm_total_pages);
+		vm_total_pages);//打印信息，显示构建了多少个内存区域列表，移动性分组是否启用，总页面数。
 #ifdef CONFIG_NUMA
-	pr_info("Policy zone: %s\n", zone_names[policy_zone]);
+	pr_info("Policy zone: %s\n", zone_names[policy_zone]);//如果启用了 NUMA，打印策略区域的信息
 #endif
 }
 

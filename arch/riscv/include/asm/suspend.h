@@ -9,15 +9,15 @@
 
 #include <asm/ptrace.h>
 
-struct suspend_context {
+struct suspend_context {//用于保存系统进入休眠状态时的上下文信息
 	/* Saved and restored by low-level functions */
-	struct pt_regs regs;
+	struct pt_regs regs;//保存 CPU 寄存器状态的结构体 pt_regs，用于在系统休眠和恢复时保存和恢复寄存器的状态。此成员由低级函数保存和恢复。
 	/* Saved and restored by high-level functions */
-	unsigned long envcfg;
-	unsigned long tvec;
-	unsigned long ie;
+	unsigned long envcfg;//保存环境配置的变量 envcfg，用于在系统休眠和恢复时保存和恢复环境配置。此成员由高级函数保存和恢复。
+	unsigned long tvec;//保存中断向量的变量 tvec，用于在系统休眠和恢复时保存和恢复中断向量。
+	unsigned long ie;//保存中断使能寄存器的变量 ie，用于在系统休眠和恢复时保存和恢复中断使能状态。
 #ifdef CONFIG_MMU
-	unsigned long satp;
+	unsigned long satp;//保存地址空间标识符寄存器的变量 satp，用于在系统休眠和恢复时保存和恢复地址空间标识符。仅在启用 MMU 时包含此成员。
 #endif
 };
 

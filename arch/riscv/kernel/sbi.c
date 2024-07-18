@@ -395,12 +395,12 @@ int sbi_remote_sfence_vma_asid(const struct cpumask *cpu_mask,
 				unsigned long size,
 				unsigned long asid)
 {
-	if (asid == FLUSH_TLB_NO_ASID)
+	if (asid == FLUSH_TLB_NO_ASID)//检查是否需要刷新所有 ASID（地址空间标识符）
 		return __sbi_rfence(SBI_EXT_RFENCE_REMOTE_SFENCE_VMA,
-				    cpu_mask, start, size, 0, 0);
+				    cpu_mask, start, size, 0, 0);//如果asid 为FLUSH_TLB_NO_ASID，则调用不带ASID的远程sfence.vma（TLB刷新）指令
 	else
 		return __sbi_rfence(SBI_EXT_RFENCE_REMOTE_SFENCE_VMA_ASID,
-				    cpu_mask, start, size, asid, 0);
+				    cpu_mask, start, size, asid, 0);//如果 asid 不为 FLUSH_TLB_NO_ASID，则调用带 ASID 的远程 sfence.vma 指令
 }
 EXPORT_SYMBOL(sbi_remote_sfence_vma_asid);
 

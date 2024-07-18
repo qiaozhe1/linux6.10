@@ -162,7 +162,7 @@ static void print_vm_layout(void) { }
 
 void __init mem_init(void)
 {
-	bool swiotlb = max_pfn > PFN_DOWN(dma32_phys_limit);
+	bool swiotlb = max_pfn > PFN_DOWN(dma32_phys_limit);//用于表示是否需要启用 swiotlb（Software I/O Translation Lookaside Buffer）。max_pfn 是系统中最大页面帧号，PFN_DOWN(dma32_phys_limit) 将 dma32_phys_limit 转换为页框号。如果 max_pfn 大于 dma32_phys_limit 对应的页框号，则表示系统内存超过 4GB，需要启用 swiotlb。
 #ifdef CONFIG_FLATMEM
 	BUG_ON(!mem_map);
 #endif /* CONFIG_FLATMEM */
@@ -173,17 +173,19 @@ void __init mem_init(void)
 		 * If no bouncing needed for ZONE_DMA, allocate 1MB swiotlb
 		 * buffer per 1GB of RAM for kmalloc() bouncing on
 		 * non-coherent platforms.
+		 * 如果不需要为 ZONE_DMA 进行反弹操作，则为每 1GB RAM 分配 1MB swiotlb
+		 * 缓冲区，用于在非一致性平台上进行 kmalloc() 反弹操作。
 		 */
 		unsigned long size =
-			DIV_ROUND_UP(memblock_phys_mem_size(), 1024);
-		swiotlb_adjust_size(min(swiotlb_size_or_default(), size));
-		swiotlb = true;
+			DIV_ROUND_UP(memblock_phys_mem_size(), 1024);//计算需要的swiotlb大小，memblock_phys_mem_size()返回物理内存大小，除以1024得到MB为单位的内存大小。
+		swiotlb_adjust_size(min(swiotlb_size_or_default(), size));//swiotlb大小取默认大小和经计算得出的大小之间的最小值。
+		swiotlb = true;//表示需要启用swiotb
 	}
 
-	swiotlb_init(swiotlb, SWIOTLB_VERBOSE);
-	memblock_free_all();
+	swiotlb_init(swiotlb, SWIOTLB_VERBOSE);//初始化swiotlb
+	memblock_free_all();//释放memblock分配的内存区域，表示内存初始化完成
 
-	print_vm_layout();
+	print_vm_layout();//打印虚拟内存布局，方便调试和验证内存初始化是否正确。
 }
 
 /* Limit the memory size via mem. */

@@ -367,18 +367,22 @@ static inline void __check_safe_pte_update(struct mm_struct *mm, pte_t *ptep,
 
 static inline void __sync_cache_and_tags(pte_t pte, unsigned int nr_pages)
 {
-	if (pte_present(pte) && pte_user_exec(pte) && !pte_special(pte))
-		__sync_icache_dcache(pte);
+	if (pte_present(pte) && pte_user_exec(pte) && !pte_special(pte))//如果页表条目存在且具有用户执行权限，并且不是特殊条目
+		__sync_icache_dcache(pte);//同步指令缓存和数据缓存(缓存行)
 
 	/*
 	 * If the PTE would provide user space access to the tags associated
 	 * with it then ensure that the MTE tags are synchronised.  Although
 	 * pte_access_permitted() returns false for exec only mappings, they
 	 * don't expose tags (instruction fetches don't check tags).
+	 * system_supports_mte()：检查系统是否支持 MTE（Memory Tagging Extension）。
+	 * pte_access_permitted(pte, false)：检查页表条目是否允许用户空间访问（除了仅执行的映射）
+	 * pte_special(pte)：检查页表条目是否为特殊条目。
+	 * pte_tagged(pte)：检查页表条目是否带有标签
 	 */
 	if (system_supports_mte() && pte_access_permitted(pte, false) &&
 	    !pte_special(pte) && pte_tagged(pte))
-		mte_sync_tags(pte, nr_pages);
+		mte_sync_tags(pte, nr_pages);//条件满足，则执行同步MTE标签。
 }
 
 /*
@@ -598,9 +602,9 @@ static inline void __set_pte_at(struct mm_struct *mm,
 				unsigned long __always_unused addr,
 				pte_t *ptep, pte_t pte, unsigned int nr)
 {
-	__sync_cache_and_tags(pte, nr);
-	__check_safe_pte_update(mm, ptep, pte);
-	__set_pte(ptep, pte);
+	__sync_cache_and_tags(pte, nr);//同步缓存和标签
+	__check_safe_pte_update(mm, ptep, pte);//检查更新页表条目是否安全
+	__set_pte(ptep, pte);//设置页表项
 }
 
 static inline void set_pmd_at(struct mm_struct *mm, unsigned long addr,
@@ -1541,12 +1545,12 @@ static inline unsigned int pte_batch_hint(pte_t *ptep, pte_t pte)
 #define ptep_get ptep_get
 static inline pte_t ptep_get(pte_t *ptep)
 {
-	pte_t pte = __ptep_get(ptep);
+	pte_t pte = __ptep_get(ptep);//从指针中获取 PTE 的值。
 
-	if (likely(!pte_valid_cont(pte)))
+	if (likely(!pte_valid_cont(pte)))//用于检查 PTE 是否为有效的连续条目。如果不是连续条目，直接返回 PTE。
 		return pte;
 
-	return contpte_ptep_get(ptep, pte);
+	return contpte_ptep_get(ptep, pte);//如果 PTE 是连续条目，则调用 contpte_ptep_get 函数处理并返回连续条目。
 }
 
 #define ptep_get_lockless ptep_get_lockless

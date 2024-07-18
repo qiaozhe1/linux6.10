@@ -56,12 +56,12 @@ static void __ipi_flush_tlb_all(void *info)
 
 void flush_tlb_all(void)
 {
-	if (num_online_cpus() < 2)
-		local_flush_tlb_all();
-	else if (riscv_use_sbi_for_rfence())
-		sbi_remote_sfence_vma_asid(NULL, 0, FLUSH_TLB_MAX_SIZE, FLUSH_TLB_NO_ASID);
-	else
-		on_each_cpu(__ipi_flush_tlb_all, NULL, 1);
+	if (num_online_cpus() < 2)//检查当前在线 CPU 的数量是否少于 2
+		local_flush_tlb_all();//如果只有一个 CPU 在线，则只需要在本地 CPU 上刷新 TLB
+	else if (riscv_use_sbi_for_rfence())//如果系统支持通过SBI来进行远程 TLB刷新
+		sbi_remote_sfence_vma_asid(NULL, 0, FLUSH_TLB_MAX_SIZE, FLUSH_TLB_NO_ASID);//执行进行远程TLB刷新
+	else//如果有多个CPU在线，且不使用SBI进行TLB刷新
+		on_each_cpu(__ipi_flush_tlb_all, NULL, 1);//在每个CPU上调用__ipi_flush_tlb_all函数进行TLB刷新
 }
 
 struct flush_tlb_range_data {

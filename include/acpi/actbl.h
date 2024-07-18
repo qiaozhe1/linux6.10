@@ -66,15 +66,15 @@
  ******************************************************************************/
 
 struct acpi_table_header {
-	char signature[ACPI_NAMESEG_SIZE];	/* ASCII table signature */
-	u32 length;		/* Length of table in bytes, including this header */
-	u8 revision;		/* ACPI Specification minor version number */
-	u8 checksum;		/* To make sum of entire table == 0 */
-	char oem_id[ACPI_OEM_ID_SIZE];	/* ASCII OEM identification */
-	char oem_table_id[ACPI_OEM_TABLE_ID_SIZE];	/* ASCII OEM table identification */
-	u32 oem_revision;	/* OEM revision number */
-	char asl_compiler_id[ACPI_NAMESEG_SIZE];	/* ASCII ASL compiler vendor ID */
-	u32 asl_compiler_revision;	/* ASL compiler version */
+	char signature[ACPI_NAMESEG_SIZE];	/* 表的签名,用于标识 ACPI 表的类型。例如，"DSDT" 表示 Differentiated System Description Table，"FADT" 表示 Fixed ACPI Description Table. */
+	u32 length;		/* 表的长度,表示整个 ACPI 表的长度（以字节为单位），包括表头在内。*/
+	u8 revision;		/* 修订版本 */
+	u8 checksum;		/* 校验和 */
+	char oem_id[ACPI_OEM_ID_SIZE];	/* OEM 标识 */
+	char oem_table_id[ACPI_OEM_TABLE_ID_SIZE];	/* OEM 表标识 */
+	u32 oem_revision;	/* OEM 修订版本 */
+	char asl_compiler_id[ACPI_NAMESEG_SIZE];	/* ASL 编译器 ID */
+	u32 asl_compiler_revision;	/* ASL 编译器版本 */
 };
 
 /*******************************************************************************

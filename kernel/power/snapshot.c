@@ -2118,22 +2118,22 @@ static int swsusp_alloc(struct memory_bitmap *copy_bm,
 
 asmlinkage __visible int swsusp_save(void)
 {
-	unsigned int nr_pages, nr_highmem;
+	unsigned int nr_pages, nr_highmem;// 用于存储普通内存页面和高内存页面的数量
 
-	pr_info("Creating image:\n");
+	pr_info("Creating image:\n");//打印信息：正在创建镜像
 
-	drain_local_pages(NULL);
-	nr_pages = count_data_pages();
-	nr_highmem = count_highmem_pages();
-	pr_info("Need to copy %u pages\n", nr_pages + nr_highmem);
+	drain_local_pages(NULL);//清空本地页面缓存，以确保所有页面都被刷新到全局缓存
+	nr_pages = count_data_pages();//计算需要保存的普通内存页面数量
+	nr_highmem = count_highmem_pages();//计算需要保存的高内存页面数量
+	pr_info("Need to copy %u pages\n", nr_pages + nr_highmem);//打印信息：需要复制的页面总数
 
-	if (!enough_free_mem(nr_pages, nr_highmem)) {
-		pr_err("Not enough free memory\n");
+	if (!enough_free_mem(nr_pages, nr_highmem)) {//检查是否有足够的空闲内存来保存镜像
+		pr_err("Not enough free memory\n");//如果内存不足，打印错误信息并返回 -ENOMEM
 		return -ENOMEM;
 	}
 
-	if (swsusp_alloc(&copy_bm, nr_pages, nr_highmem)) {
-		pr_err("Memory allocation failed\n");
+	if (swsusp_alloc(&copy_bm, nr_pages, nr_highmem)) {//分配内存来保存镜像的拷贝位图（copy_bm）
+		pr_err("Memory allocation failed\n");// 如果内存分配失败，打印错误信息并返回 -ENOMEM
 		return -ENOMEM;
 	}
 
@@ -2141,22 +2141,24 @@ asmlinkage __visible int swsusp_save(void)
 	 * During allocating of suspend pagedir, new cold pages may appear.
 	 * Kill them.
 	 */
-	drain_local_pages(NULL);
-	nr_copy_pages = copy_data_pages(&copy_bm, &orig_bm, &zero_bm);
+	drain_local_pages(NULL);//再次清空本地页面缓存，以确保所有新出现的冷页面都被刷新。
+	nr_copy_pages = copy_data_pages(&copy_bm, &orig_bm, &zero_bm);//复制数据页面并生成原始位图（orig_bm）和零页面位图（zero_bm）
 
 	/*
 	 * End of critical section. From now on, we can write to memory,
 	 * but we should not touch disk. This specially means we must _not_
 	 * touch swap space! Except we must write out our image of course.
+	 * 关键部分结束。从现在起，我们可以写入内存，但不应该接触磁盘。
+	 * 这特别意味着我们不能触摸交换空间！当然，除了写出我们的镜像。
 	 */
-	nr_pages += nr_highmem;
-	/* We don't actually copy the zero pages */
-	nr_zero_pages = nr_pages - nr_copy_pages;
-	nr_meta_pages = DIV_ROUND_UP(nr_pages * sizeof(long), PAGE_SIZE);
+	nr_pages += nr_highmem;//更新页面总数，包括高内存页面
+	/* We don't actually copy the zero pages 我们实际上不会复制零页面 */
+	nr_zero_pages = nr_pages - nr_copy_pages;//计算零页面的数量，即总页面数减去复制的页面数
+	nr_meta_pages = DIV_ROUND_UP(nr_pages * sizeof(long), PAGE_SIZE);//计算元数据页面数量,通过将总页面数乘以每个页面的大小（以长整型表示），并向上舍入到最近的页面大小。
 
-	pr_info("Image created (%d pages copied, %d zero pages)\n", nr_copy_pages, nr_zero_pages);
+	pr_info("Image created (%d pages copied, %d zero pages)\n", nr_copy_pages, nr_zero_pages);//打印信息：镜像创建成功，显示复制的页面和零页面数量
 
-	return 0;
+	return 0;//返回 0 表示成功
 }
 
 #ifndef CONFIG_ARCH_HIBERNATION_HEADER

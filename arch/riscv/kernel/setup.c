@@ -248,53 +248,53 @@ extern void __init init_rt_signal_env(void);
 
 void __init setup_arch(char **cmdline_p)
 {
-	parse_dtb();
-	setup_initial_init_mm(_stext, _etext, _edata, _end);
+	parse_dtb();//解析设备树二进制（DTB）
+	setup_initial_init_mm(_stext, _etext, _edata, _end);//设置初始内存管理，传入内核文本段和数据段的起始和结束地址
 
-	*cmdline_p = boot_command_line;
+	*cmdline_p = boot_command_line;//将引导命令行参数指针指向全局的引导命令行
 
-	early_ioremap_setup();
-	sbi_init();
-	jump_label_init();
-	parse_early_param();
+	early_ioremap_setup();//早期IO映射设置
+	sbi_init();//初始化 RISC-V 的 SBI（Supervisor Binary Interface）
+	jump_label_init();//初始化跳转标签，用于优化内核代码路径
+	parse_early_param();//解析早期参数
 
-	efi_init();
-	paging_init();
+	efi_init();//初始化 EFI（可扩展固件接口）
+	paging_init();//初始化分页系统，设置内存分页
 
 	/* Parse the ACPI tables for possible boot-time configuration */
-	acpi_boot_table_init();
+	acpi_boot_table_init();//解析ACPI表，用于引导时的配置
 
 #if IS_ENABLED(CONFIG_BUILTIN_DTB)
-	unflatten_and_copy_device_tree();
+	unflatten_and_copy_device_tree();//展开并复制设备树（如果启用了内建 DTB）
 #else
-	unflatten_device_tree();
+	unflatten_device_tree();//展开设备树
 #endif
-	misc_mem_init();
+	misc_mem_init();//初始化杂项内存
 
-	init_resources();
+	init_resources();//初始化资源
 
 #ifdef CONFIG_KASAN
-	kasan_init();
+	kasan_init();//初始化 KASAN（Kernel Address Sanitizer）
 #endif
 
 #ifdef CONFIG_SMP
-	setup_smp();
+	setup_smp();//初始化 SMP（对称多处理器）
 #endif
-
+	/*如果 ACPI 没有禁用，则初始化 ACPI 的 RINTC（RISC-V Interrupt Controller）映射*/
 	if (!acpi_disabled)
 		acpi_init_rintc_map();
 
-	riscv_init_cbo_blocksizes();
-	riscv_fill_hwcap();
-	init_rt_signal_env();
-	apply_boot_alternatives();
-
+	riscv_init_cbo_blocksizes();//初始化 RISC-V 的 CBO（Cache Block Operation）缓存行大小
+	riscv_fill_hwcap();//填充 RISC-V 硬件能力
+	init_rt_signal_env();//初始化实时信号环境
+	apply_boot_alternatives();//应用引导时的替换方案（如替换特定指令）
+	/*如果启用了 RISC-V ISA ZICBOM 扩展并且该扩展可用，则支持非一致性 */
 	if (IS_ENABLED(CONFIG_RISCV_ISA_ZICBOM) &&
 	    riscv_isa_extension_available(NULL, ZICBOM))
 		riscv_noncoherent_supported();
-	riscv_set_dma_cache_alignment();
+	riscv_set_dma_cache_alignment();//设置 DMA 缓存对齐
 
-	riscv_user_isa_enable();
+	riscv_user_isa_enable();//启用用户态的 RISC-V ISA 扩展
 }
 
 bool arch_cpu_is_hotpluggable(int cpu)

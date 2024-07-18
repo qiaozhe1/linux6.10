@@ -303,69 +303,69 @@ static int create_image(int platform_mode)
 {
 	int error;
 
-	error = dpm_suspend_end(PMSG_FREEZE);
-	if (error) {
+	error = dpm_suspend_end(PMSG_FREEZE);//尝试将设备电源状态转换到冻结状态（PMSG_FREEZE）
+	if (error) {//如果转换失败，打印错误信息并返回错误码。
 		pr_err("Some devices failed to power down, aborting\n");
 		return error;
 	}
 
-	error = platform_pre_snapshot(platform_mode);
-	if (error || hibernation_test(TEST_PLATFORM))
+	error = platform_pre_snapshot(platform_mode);//执行平台特定的预快照操作。
+	if (error || hibernation_test(TEST_PLATFORM))//如果预快照操作失败或平台测试失败，跳转到 Platform_finish 标签。
 		goto Platform_finish;
 
-	error = pm_sleep_disable_secondary_cpus();
-	if (error || hibernation_test(TEST_CPUS))
+	error = pm_sleep_disable_secondary_cpus();//禁用次级 CPU。
+	if (error || hibernation_test(TEST_CPUS))//如果禁用次级 CPU 失败或 CPU 测试失败，跳转到 Enable_cpus 标签。
 		goto Enable_cpus;
 
-	local_irq_disable();
+	local_irq_disable();//禁用本地中断。
 
-	system_state = SYSTEM_SUSPEND;
+	system_state = SYSTEM_SUSPEND;//设置系统状态为挂起。
 
-	error = syscore_suspend();
-	if (error) {
+	error = syscore_suspend();//尝试挂起系统核心。
+	if (error) {//如果挂起系统核心失败，打印错误信息并跳转到 Enable_irqs 标签。
 		pr_err("Some system devices failed to power down, aborting\n");
 		goto Enable_irqs;
 	}
 
-	if (hibernation_test(TEST_CORE) || pm_wakeup_pending())
+	if (hibernation_test(TEST_CORE) || pm_wakeup_pending())//如果核心测试失败或有唤醒挂起，跳转到 Power_up 标签。
 		goto Power_up;
 
-	in_suspend = 1;
-	save_processor_state();
-	trace_suspend_resume(TPS("machine_suspend"), PM_EVENT_HIBERNATE, true);
-	error = swsusp_arch_suspend();
+	in_suspend = 1;//标记系统处于挂起状态。
+	save_processor_state();//保存处理器状态。
+	trace_suspend_resume(TPS("machine_suspend"), PM_EVENT_HIBERNATE, true);//用于跟踪挂起和恢复事件。
+	error = swsusp_arch_suspend();//执行架构特定的挂起操作。
 	/* Restore control flow magically appears here */
-	restore_processor_state();
+	restore_processor_state();//恢复处理器状态。
 	trace_suspend_resume(TPS("machine_suspend"), PM_EVENT_HIBERNATE, false);
-	if (error)
+	if (error)//如果挂起操作失败，打印错误信息。
 		pr_err("Error %d creating image\n", error);
 
-	if (!in_suspend) {
+	if (!in_suspend) {//如果不处于挂起状态，禁用事件检查并清除或空闲页面。
 		events_check_enabled = false;
 		clear_or_poison_free_pages();
 	}
 
-	platform_leave(platform_mode);
+	platform_leave(platform_mode);//执行平台特定的离开操作
 
  Power_up:
-	syscore_resume();
+	syscore_resume();//恢复系统核心。
 
  Enable_irqs:
-	system_state = SYSTEM_RUNNING;
-	local_irq_enable();
+	system_state = SYSTEM_RUNNING;//设置系统状态为运行
+	local_irq_enable();//启用本地中断。
 
  Enable_cpus:
-	pm_sleep_enable_secondary_cpus();
+	pm_sleep_enable_secondary_cpus();//启用次级 CPU。
 
 	/* Allow architectures to do nosmt-specific post-resume dances */
-	if (!in_suspend)
+	if (!in_suspend)//如果不处于挂起状态，执行架构特定的恢复操作。
 		error = arch_resume_nosmt();
 
  Platform_finish:
-	platform_finish(platform_mode);
+	platform_finish(platform_mode);//执行平台特定的结束操作。
 
 	dpm_resume_start(in_suspend ?
-		(error ? PMSG_RECOVER : PMSG_THAW) : PMSG_RESTORE);
+		(error ? PMSG_RECOVER : PMSG_THAW) : PMSG_RESTORE);//恢复设备电源状态，取决于是否挂起以及是否有错误
 
 	return error;
 }

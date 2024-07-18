@@ -232,8 +232,8 @@ do {									\
 
 #define per_cpu_ptr(ptr, cpu)						\
 ({									\
-	__verify_pcpu_ptr(ptr);						\
-	SHIFT_PERCPU_PTR((ptr), per_cpu_offset((cpu)));			\
+	__verify_pcpu_ptr(ptr);						\	//用于验证 ptr 是否是一个有效的 per_cpu 指针。
+	SHIFT_PERCPU_PTR((ptr), per_cpu_offset((cpu)));			\	//将基础指针 ptr 和计算出的偏移量结合，得到指向特定 CPU 上 per_cpu 数据的实际指针。per_cpu_offset((cpu)) 计算出指定 cpu 的 per_cpu 数据的偏移量。
 })
 
 #define raw_cpu_ptr(ptr)						\

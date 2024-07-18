@@ -1270,184 +1270,173 @@ void __set_task_comm(struct task_struct *tsk, const char *buf, bool exec)
  */
 int begin_new_exec(struct linux_binprm * bprm)
 {
-	struct task_struct *me = current;
+	struct task_struct *me = current;//获取当前任务
 	int retval;
 
 	/* Once we are committed compute the creds */
-	retval = bprm_creds_from_file(bprm);
+	retval = bprm_creds_from_file(bprm);//从可执行文件中获取凭据并进行安全检查。如果获取失败，则返回错误代码。
 	if (retval)
 		return retval;
 
 	/*
-	 * This tracepoint marks the point before flushing the old exec where
-	 * the current task is still unchanged, but errors are fatal (point of
-	 * no return). The later "sched_process_exec" tracepoint is called after
-	 * the current task has successfully switched to the new exec.
+	 * 这个跟踪点标志在刷新旧执行文件之前的点，当前任务仍然保持不变，
+	 * 但错误是致命的（没有回头路）.后面的 "sched_process_exec" 跟踪点
+	 * 在成功切换到新执行文件后调用。
 	 */
 	trace_sched_prepare_exec(current, bprm);
 
 	/*
-	 * Ensure all future errors are fatal.
+	 * 确保从现在起的所有错误都是致命的
 	 */
 	bprm->point_of_no_return = true;
 
 	/*
-	 * Make this the only thread in the thread group.
+	 * 使当前任务成为线程组中的唯一线程
 	 */
-	retval = de_thread(me);
+	retval = de_thread(me);//将多线程进程简化为单线程。如果失败，则跳转到错误处理部分。
 	if (retval)
 		goto out;
 
 	/*
-	 * Cancel any io_uring activity across execve
+	 * 取消所有 io_uring 活动，以防止在 execve 期间出现问题
 	 */
-	io_uring_task_cancel();
+	io_uring_task_cancel();//取消与 io_uring 相关的所有活动。以防止在 execve 期间出现问题
 
-	/* Ensure the files table is not shared. */
-	retval = unshare_files();
+	/* 确保文件表未被共享 */
+	retval = unshare_files();//确保当前进程的文件描述符表未被其他进程共享。如果失败，则跳转到错误处理部分。
 	if (retval)
 		goto out;
 
 	/*
-	 * Must be called _before_ exec_mmap() as bprm->mm is
-	 * not visible until then. Doing it here also ensures
-	 * we don't race against replace_mm_exe_file().
+	 * 必须在 exec_mmap() 之前调用，因为 bprm->mm 在此之前不可见。
+	 * 在这里调用还可以确保我们不会与 replace_mm_exe_file() 竞争。
 	 */
-	retval = set_mm_exe_file(bprm->mm, bprm->file);
+	retval = set_mm_exe_file(bprm->mm, bprm->file);//设置新的可执行文件。如果失败，则跳转到错误处理部分
 	if (retval)
 		goto out;
 
-	/* If the binary is not readable then enforce mm->dumpable=0 */
-	would_dump(bprm, bprm->file);
-	if (bprm->have_execfd)
-		would_dump(bprm, bprm->executable);
+	/* 如果二进制文件不可读，则强制设置 mm->dumpable=0 */
+	would_dump(bprm, bprm->file);//检查是否需要设置进程为不可转储
+	if (bprm->have_execfd)//
+		would_dump(bprm, bprm->executable);//
 
 	/*
-	 * Release all of the old mmap stuff
+	 * 释放所有旧的mmap相关内容
 	 */
-	acct_arg_size(bprm, 0);
-	retval = exec_mmap(bprm->mm);
+	acct_arg_size(bprm, 0);//计算新的进程参数大小
+	retval = exec_mmap(bprm->mm);//执行内存映射。如果失败，则跳转到错误处理部分。
 	if (retval)
 		goto out;
 
-	bprm->mm = NULL;
+	bprm->mm = NULL;//清空bprm的mm字段。
 
-	retval = exec_task_namespaces();
+	retval = exec_task_namespaces();//切换任务的命名空间。如果失败，则跳转到解锁部分。
 	if (retval)
 		goto out_unlock;
 
 #ifdef CONFIG_POSIX_TIMERS
 	spin_lock_irq(&me->sighand->siglock);
-	posix_cpu_timers_exit(me);
+	posix_cpu_timers_exit(me);//退出 POSIX CPU 计时器。
 	spin_unlock_irq(&me->sighand->siglock);
-	exit_itimers(me);
-	flush_itimer_signals();
+	exit_itimers(me);//退出 interval timers。
+	flush_itimer_signals();//刷新 interval timer 信号。
 #endif
 
 	/*
-	 * Make the signal table private.
+	 * 使信号表成为私有
 	 */
-	retval = unshare_sighand(me);
+	retval = unshare_sighand(me);//取消共享信号处理程序。如果失败，则跳转到解锁部分。
 	if (retval)
 		goto out_unlock;
 
 	me->flags &= ~(PF_RANDOMIZE | PF_FORKNOEXEC |
-					PF_NOFREEZE | PF_NO_SETAFFINITY);
-	flush_thread();
-	me->personality &= ~bprm->per_clear;
+					PF_NOFREEZE | PF_NO_SETAFFINITY);//清除特定标志位。
+	flush_thread();//刷新线程相关状态。
+	me->personality &= ~bprm->per_clear;//清除 personality 标志。
 
-	clear_syscall_work_syscall_user_dispatch(me);
+	clear_syscall_work_syscall_user_dispatch(me);//清除系统调用工作标志。
 
 	/*
-	 * We have to apply CLOEXEC before we change whether the process is
-	 * dumpable (in setup_new_exec) to avoid a race with a process in userspace
-	 * trying to access the should-be-closed file descriptors of a process
-	 * undergoing exec(2).
+	 * 在改变进程的 dumpable 状态之前，必须应用 CLOEXEC 标志，
+	 * 以避免与试图访问即将关闭的文件描述符的进程竞争。
 	 */
-	do_close_on_exec(me->files);
+	do_close_on_exec(me->files);//关闭所有带有 CLOEXEC 标志的文件描述符。
 
-	if (bprm->secureexec) {
-		/* Make sure parent cannot signal privileged process. */
+	if (bprm->secureexec) {//如果是安全执行，重置堆栈限制并清除父死亡信号。确保父进程不能向特权进程发送信号
+		/* 确保父进程不能向特权进程发送信号 */
 		me->pdeath_signal = 0;
 
 		/*
-		 * For secureexec, reset the stack limit to sane default to
-		 * avoid bad behavior from the prior rlimits. This has to
-		 * happen before arch_pick_mmap_layout(), which examines
-		 * RLIMIT_STACK, but after the point of no return to avoid
-		 * needing to clean up the change on failure.
+		 * 对于 secureexec，重置堆栈限制为默认值，以避免之前的 rlimits 引发的问题。
+		 * 这必须在 arch_pick_mmap_layout() 之前发生，但在没有回头路点之后，
+		 * 以避免在失败时需要清理更改。
 		 */
 		if (bprm->rlim_stack.rlim_cur > _STK_LIM)
 			bprm->rlim_stack.rlim_cur = _STK_LIM;
 	}
 
-	me->sas_ss_sp = me->sas_ss_size = 0;
+	me->sas_ss_sp = me->sas_ss_size = 0;//重置进程的备用堆栈。
 
 	/*
-	 * Figure out dumpability. Note that this checking only of current
-	 * is wrong, but userspace depends on it. This should be testing
-	 * bprm->secureexec instead.
+	 * 确定进程的 dumpability。注意，这里只检查当前进程的状态是不正确的，
+	 * 但用户空间依赖于此。应该检查 bprm->secureexec。
 	 */
 	if (bprm->interp_flags & BINPRM_FLAGS_ENFORCE_NONDUMP ||
 	    !(uid_eq(current_euid(), current_uid()) &&
-	      gid_eq(current_egid(), current_gid())))
-		set_dumpable(current->mm, suid_dumpable);
+	      gid_eq(current_egid(), current_gid())))//确定进程的 dumpability
+		set_dumpable(current->mm, suid_dumpable);//设置进程为不可转储/
 	else
-		set_dumpable(current->mm, SUID_DUMP_USER);
+		set_dumpable(current->mm, SUID_DUMP_USER);//设置进程为可转储
 
 	perf_event_exec();
-	__set_task_comm(me, kbasename(bprm->filename), true);
+	__set_task_comm(me, kbasename(bprm->filename), true);//设置任务的命令名。
 
-	/* An exec changes our domain. We are no longer part of the thread
-	   group */
-	WRITE_ONCE(me->self_exec_id, me->self_exec_id + 1);
-	flush_signal_handlers(me, 0);
+	/* 执行更改了进程的域。我们不再是线程组的一部分 */
+	WRITE_ONCE(me->self_exec_id, me->self_exec_id + 1);//更新进程的自执行 ID。
+	flush_signal_handlers(me, 0);//刷新信号处理程序。
 
-	retval = set_cred_ucounts(bprm->cred);
+	retval = set_cred_ucounts(bprm->cred);//设置凭据的用户计数。如果失败，则跳转到解锁部分。
 	if (retval < 0)
 		goto out_unlock;
 
 	/*
-	 * install the new credentials for this executable
+	 * 安装新凭据
 	 */
-	security_bprm_committing_creds(bprm);
+	security_bprm_committing_creds(bprm);//通知安全模块正在提交凭据
 
-	commit_creds(bprm->cred);
-	bprm->cred = NULL;
+	commit_creds(bprm->cred);//提交新的凭据
+	bprm->cred = NULL;//清空 bprm 的凭据字段
 
 	/*
-	 * Disable monitoring for regular users
-	 * when executing setuid binaries. Must
-	 * wait until new credentials are committed
-	 * by commit_creds() above
+	 * 在执行 setuid 二进制文件时禁用常规用户的监控。
+	 * 必须等到 commit_creds() 提交新的凭据后再执行
 	 */
 	if (get_dumpable(me->mm) != SUID_DUMP_USER)
-		perf_event_exit_task(me);
+		perf_event_exit_task(me);//退出性能事件监控。
 	/*
-	 * cred_guard_mutex must be held at least to this point to prevent
-	 * ptrace_attach() from altering our determination of the task's
-	 * credentials; any time after this it may be unlocked.
+	 * cred_guard_mutex 必须至少保持到此点，以防止 ptrace_attach() 更改任务凭据；
+	 * 之后的任何时候都可以解锁。
 	 */
-	security_bprm_committed_creds(bprm);
+	security_bprm_committed_creds(bprm);//通知安全模块凭据已提交。
 
-	/* Pass the opened binary to the interpreter. */
+	/* 将打开的二进制文件传递给解释器 */
 	if (bprm->have_execfd) {
-		retval = get_unused_fd_flags(0);
+		retval = get_unused_fd_flags(0);//获取一个未使用的文件描述符
 		if (retval < 0)
-			goto out_unlock;
-		fd_install(retval, bprm->executable);
-		bprm->executable = NULL;
-		bprm->execfd = retval;
+			goto out_unlock;//如果获取失败，跳转到解锁部分
+		fd_install(retval, bprm->executable);//安装新的文件描述符
+		bprm->executable = NULL;//清空 bprm 的 executable 字段
+		bprm->execfd = retval;//设置 bprm 的 execfd 字段
 	}
-	return 0;
+	return 0;//返回 0 表示成功
 
 out_unlock:
-	up_write(&me->signal->exec_update_lock);
+	up_write(&me->signal->exec_update_lock);//释放写锁
 	if (!bprm->cred)
-		mutex_unlock(&me->signal->cred_guard_mutex);
+		mutex_unlock(&me->signal->cred_guard_mutex);//释放凭据保护互斥锁
 
 out:
-	return retval;
+	return retval;//返回错误代码
 }
 EXPORT_SYMBOL(begin_new_exec);
 

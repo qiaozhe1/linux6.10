@@ -312,74 +312,74 @@ struct folio {
 	union {
 		struct {
 	/* public: */
-			unsigned long flags;
+			unsigned long flags;//页面的标志位，用于表示页面的状态（例如是否被锁定、是否脏等）。
 			union {
-				struct list_head lru;
+				struct list_head lru;//用于页面回收的 LRU 链表。
 	/* private: avoid cluttering the output */
 				struct {
-					void *__filler;
+					void *__filler;//填充字段，避免结构体混乱
 	/* public: */
-					unsigned int mlock_count;
+					unsigned int mlock_count;//页面被锁定的计数。
 	/* private: */
 				};
 	/* public: */
 			};
-			struct address_space *mapping;
-			pgoff_t index;
+			struct address_space *mapping;//指向包含该页面的地址空间的指针.(文件页面所属的文件，或指向匿名内存的anon_vma。）
+			pgoff_t index;//文件内的偏移量，以页面为单位。对于匿名内存，这是从mmap开始的索引。
 			union {
-				void *private;
-				swp_entry_t swap;
+				void *private;//私有数据指针，文件系统的每个folio数据（参见folio_attach_private()）
+				swp_entry_t swap;//交换条目，如果folio_test_swapcache()为真，则用于swp_entry_t
 			};
-			atomic_t _mapcount;
-			atomic_t _refcount;
+			atomic_t _mapcount;//页面映射计数
+			atomic_t _refcount;//页面引用计数。
 #ifdef CONFIG_SLAB_OBJ_EXT
-			unsigned long memcg_data;
+			unsigned long memcg_data;//内存控制组数据（仅在配置启用时）
 #endif
 #if defined(WANT_PAGE_VIRTUAL)
-			void *virtual;
+			void *virtual;//页面的虚拟地址（仅在需要时）
 #endif
 #ifdef LAST_CPUPID_NOT_IN_PAGE_FLAGS
-			int _last_cpupid;
+			int _last_cpupid;//上次使用该filio的 CPU ID（仅在配置启用时）
 #endif
 	/* private: the union with struct page is transitional */
 		};
-		struct page page;
+		struct page page;//用于兼容单个页面结构。
 	};
-	union {
+	union {//备用字段
 		struct {
-			unsigned long _flags_1;
-			unsigned long _head_1;
+			unsigned long _flags_1;//备用标志位
+			unsigned long _head_1;//备用头部指针
 	/* public: */
-			atomic_t _large_mapcount;
-			atomic_t _entire_mapcount;
-			atomic_t _nr_pages_mapped;
-			atomic_t _pincount;
+			atomic_t _large_mapcount;//大页面映射计数。
+			atomic_t _entire_mapcount;//整个映射计数
+			atomic_t _nr_pages_mapped;//映射的页面数。
+			atomic_t _pincount;//页面固定计数。
 #ifdef CONFIG_64BIT
-			unsigned int _folio_nr_pages;
+			unsigned int _folio_nr_pages;//folio 包含的页面数（仅在 64 位系统上）
 #endif
 	/* private: the union with struct page is transitional */
 		};
-		struct page __page_1;
+		struct page __page_1;//用于兼容单个页面结构。
 	};
-	union {
+	union {//备用字段
 		struct {
-			unsigned long _flags_2;
-			unsigned long _head_2;
+			unsigned long _flags_2;//备用标志位
+			unsigned long _head_2;//备用头部指针
 	/* public: */
-			void *_hugetlb_subpool;
-			void *_hugetlb_cgroup;
-			void *_hugetlb_cgroup_rsvd;
-			void *_hugetlb_hwpoison;
+			void *_hugetlb_subpool;//大页子池
+			void *_hugetlb_cgroup;//大页控制组
+			void *_hugetlb_cgroup_rsvd;//大页控制组保留字段
+			void *_hugetlb_hwpoison;//大页硬件故障信息
 	/* private: the union with struct page is transitional */
 		};
 		struct {
-			unsigned long _flags_2a;
-			unsigned long _head_2a;
+			unsigned long _flags_2a;//备用标志位
+			unsigned long _head_2a;//备用头部指针
 	/* public: */
-			struct list_head _deferred_list;
+			struct list_head _deferred_list;//延迟处理列表
 	/* private: the union with struct page is transitional */
 		};
-		struct page __page_2;
+		struct page __page_2;//用于兼容单个页面结构。
 	};
 };
 

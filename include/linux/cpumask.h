@@ -565,9 +565,15 @@ static __always_inline void __cpumask_assign_cpu(int cpu, struct cpumask *dstp, 
  * @cpumask: the cpumask pointer
  *
  * Return: true if @cpu is set in @cpumask, else returns false
+ * 测试指定的 CPU 是否在给定的 CPU 掩码中被设置。
  */
 static __always_inline bool cpumask_test_cpu(int cpu, const struct cpumask *cpumask)
 {
+	/*
+	 * 检查位图 addr 中的第 nr 位是否被设置。
+	 * cpumask_check(cpu):确保 CPU 编号在有效范围内，返回 CPU 编号。
+	 * cpumask_bits(cpumask):返回指向 CPU 掩码位图的指针。
+	 * */
 	return test_bit(cpumask_check(cpu), cpumask_bits((cpumask)));
 }
 

@@ -163,6 +163,11 @@ static inline pmd_t *pud_pgtable(pud_t pud)
  * present before running the comparison.
  */
 #define __HAVE_ARCH_PTE_SAME
+/*
+ * 用于比较两个页表条目（PTE）是否相同
+ * pte_present():检查页表条目是否存在，如果存在，获取条目的值并忽略PTE_EXT_NG标志位，如果不存在，获取原始条目的值
+ *pte_val():获取条目的值，
+ * */
 #define pte_same(pte_a,pte_b)	((pte_present(pte_a) ? pte_val(pte_a) & ~PTE_EXT_NG	\
 					: pte_val(pte_a))				\
 				== (pte_present(pte_b) ? pte_val(pte_b) & ~PTE_EXT_NG	\

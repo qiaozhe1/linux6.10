@@ -133,42 +133,42 @@ static void tlb_entry_insert(unsigned int pd0, phys_addr_t pd1)
 
 noinline void local_flush_tlb_all(void)
 {
-	struct cpuinfo_arc_mmu *mmu = &mmuinfo;
-	unsigned long flags;
-	unsigned int entry;
-	int num_tlb = mmu->sets * mmu->ways;
+	struct cpuinfo_arc_mmu *mmu = &mmuinfo;//获取当前 CPU 的 MMU 信息
+	unsigned long flags;//用于保存中断标志
+	unsigned int entry;//用于遍历TLB条目
+	int num_tlb = mmu->sets * mmu->ways;//计算总TLB条目总数
 
-	local_irq_save(flags);
+	local_irq_save(flags);//保存当前的中断状态并禁用本地中断
 
 	/* Load PD0 and PD1 with template for a Blank Entry */
-	write_aux_reg(ARC_REG_TLBPD1, 0);
+	write_aux_reg(ARC_REG_TLBPD1, 0);//设置 PD1 寄存器为 0
 
-	if (is_pae40_enabled())
+	if (is_pae40_enabled())//如果启用了PAE40（物理地址扩展到40位），则将PD1HI寄存器也设置为0
 		write_aux_reg(ARC_REG_TLBPD1HI, 0);
 
-	write_aux_reg(ARC_REG_TLBPD0, 0);
+	write_aux_reg(ARC_REG_TLBPD0, 0);//设置PD0寄存器为0
 
-	for (entry = 0; entry < num_tlb; entry++) {
+	for (entry = 0; entry < num_tlb; entry++) {//遍历所有TLB条目并将其写入TLB中
 		/* write this entry to the TLB */
-		write_aux_reg(ARC_REG_TLBINDEX, entry);
-		write_aux_reg(ARC_REG_TLBCOMMAND, TLBWriteNI);
+		write_aux_reg(ARC_REG_TLBINDEX, entry);//设置 TLB 索引寄存器
+		write_aux_reg(ARC_REG_TLBCOMMAND, TLBWriteNI);//触发 TLB 写入命令
 	}
 
-	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE)) {
-		const int stlb_idx = 0x800;
+	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE)) {//如果启用了透明大页面功能，则还需要刷新 sTLB（二级 TLB）
+		const int stlb_idx = 0x800;//sTLB 的起始索引
 
-		/* Blank sTLB entry */
-		write_aux_reg(ARC_REG_TLBPD0, _PAGE_HW_SZ);
-
+		/* 设置sTLB的空白条目 */
+		write_aux_reg(ARC_REG_TLBPD0, _PAGE_HW_SZ);//设置PD0为页面大小
+		/*遍历sTLB条目并将其写入sTLB中*/
 		for (entry = stlb_idx; entry < stlb_idx + 16; entry++) {
-			write_aux_reg(ARC_REG_TLBINDEX, entry);
-			write_aux_reg(ARC_REG_TLBCOMMAND, TLBWriteNI);
+			write_aux_reg(ARC_REG_TLBINDEX, entry);//设置 TLB 索引寄存器
+			write_aux_reg(ARC_REG_TLBCOMMAND, TLBWriteNI);//触发 TLB 写入命令
 		}
 	}
 
-	utlb_invalidate();
+	utlb_invalidate();//无效化 uTLB（微型 TLB），确保所有条目都被清除
 
-	local_irq_restore(flags);
+	local_irq_restore(flags);//恢复之前的中断状态
 }
 
 /*

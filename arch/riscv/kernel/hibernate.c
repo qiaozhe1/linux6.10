@@ -144,25 +144,25 @@ EXPORT_SYMBOL_GPL(arch_hibernation_header_restore);
 
 int swsusp_arch_suspend(void)
 {
-	int ret = 0;
+	int ret = 0;//用于存储函数返回值，初始化为0
 
-	if (__cpu_suspend_enter(hibernate_cpu_context)) {
-		sleep_cpu = smp_processor_id();
-		suspend_save_csrs(hibernate_cpu_context);
-		ret = swsusp_save();
+	if (__cpu_suspend_enter(hibernate_cpu_context)) {//如果CPU进入休眠状态，
+		sleep_cpu = smp_processor_id();//获取当前CPU的ID
+		suspend_save_csrs(hibernate_cpu_context);//保存CPU特定寄存器的状态到hibernate_cpu_context中
+		ret = swsusp_save();//保存系统的内存状态
 	} else {
-		suspend_restore_csrs(hibernate_cpu_context);
-		flush_tlb_all();
-		flush_icache_all();
+		suspend_restore_csrs(hibernate_cpu_context);//恢复CPU特定寄存器的状态，从 hibernate_cpu_context 中读取
+		flush_tlb_all();//刷新所有TLB
+		flush_icache_all();//刷新所有指令缓存
 
 		/*
 		 * Tell the hibernation core that we've just restored the memory.
 		 */
-		in_suspend = 0;
-		sleep_cpu = -EINVAL;
+		in_suspend = 0;//设置in_suspend为0，表示系统已从休眠中恢复
+		sleep_cpu = -EINVAL;//设置sleep_cpu为-EINVAL，表示无效的 CPU ID
 	}
 
-	return ret;
+	return ret;//返回函数执行结果
 }
 
 static int temp_pgtable_map_pte(pmd_t *dst_pmdp, pmd_t *src_pmdp, unsigned long start,

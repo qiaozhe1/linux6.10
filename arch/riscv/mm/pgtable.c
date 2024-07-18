@@ -4,18 +4,18 @@
 #include <linux/gfp.h>
 #include <linux/kernel.h>
 #include <linux/pgtable.h>
-
+/*设置页表条目（PTE）的访问标志*/
 int ptep_set_access_flags(struct vm_area_struct *vma,
 			  unsigned long address, pte_t *ptep,
 			  pte_t entry, int dirty)
 {
-	if (!pte_same(ptep_get(ptep), entry))
-		__set_pte_at(vma->vm_mm, ptep, entry);
+	if (!pte_same(ptep_get(ptep), entry))//检查当前 PTE 是否与新的PTE条目相同.riscv体系在ptep_get(ptep)函数实现上是使用通用代码直接返回PTE的指针。
+		__set_pte_at(vma->vm_mm, ptep, entry);//如果不同，更新 PTE
 	/*
 	 * update_mmu_cache will unconditionally execute, handling both
 	 * the case that the PTE changed and the spurious fault case.
 	 */
-	return true;
+	return true;//返回成功
 }
 
 int ptep_test_and_clear_young(struct vm_area_struct *vma,
