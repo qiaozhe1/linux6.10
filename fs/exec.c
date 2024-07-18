@@ -1003,6 +1003,7 @@ EXPORT_SYMBOL(read_code);
  * Maps the mm_struct mm into the current task struct.
  * On success, this function returns with exec_update_lock
  * held for writing.
+ * 处理执行新程序时的内存管理切换
  */
 static int exec_mmap(struct mm_struct *mm)
 {
@@ -1011,35 +1012,34 @@ static int exec_mmap(struct mm_struct *mm)
 	int ret;
 
 	/* Notify parent that we're no longer interested in the old VM */
-	tsk = current;
-	old_mm = current->mm;
-	exec_mm_release(tsk, old_mm);
+	tsk = current;//获取当前任务的指针
+	old_mm = current->mm;//获取当前任务的内存管理结构(即旧的内存管理结构)
+	exec_mm_release(tsk, old_mm);//通知父进程当前任务不再使用旧的内存管理结构
 
-	ret = down_write_killable(&tsk->signal->exec_update_lock);
+	ret = down_write_killable(&tsk->signal->exec_update_lock);//尝试获取写锁，如果被信号中断则返回错误
 	if (ret)
 		return ret;
 
 	if (old_mm) {
 		/*
-		 * If there is a pending fatal signal perhaps a signal
-		 * whose default action is to create a coredump get
-		 * out and die instead of going through with the exec.
+		 * 如果有致命信号等待处理，可能是一个默认操作是创建
+		 *core dump 的信号，那么退出并且处理信号，而不是继续执行 exec。
 		 */
-		ret = mmap_read_lock_killable(old_mm);
-		if (ret) {
-			up_write(&tsk->signal->exec_update_lock);
+		ret = mmap_read_lock_killable(old_mm);//尝试获取旧内存管理结构的读锁，如果被信号中断则返回错误。
+		if (ret) {//如果获取读锁失败，释放写锁并返回错误代码。
+			up_write(&tsk->signal->exec_update_lock);// 释放写锁并返回错误
 			return ret;
 		}
 	}
 
-	task_lock(tsk);
-	membarrier_exec_mmap(mm);
+	task_lock(tsk);//获取任务锁,确保当前任务在修改过程中不会被其他任务修改。
+	membarrier_exec_mmap(mm);//执行内存屏障，确保内存映射的一致性
 
-	local_irq_disable();
-	active_mm = tsk->active_mm;
-	tsk->active_mm = mm;
-	tsk->mm = mm;
-	mm_init_cid(mm);
+	local_irq_disable();//禁用本地中断
+	active_mm = tsk->active_mm;//获取当前任务的 active_mm（活动内存管理）结构
+	tsk->active_mm = mm;//将新的内存管理结构 mm 设置为当前任务的 active_mm
+	tsk->mm = mm;// 将新的内存管理结构 mm 设置为当前任务的 mm
+	mm_init_cid(mm);//初始化新的内存管理结构的 CID（上下文标识符）
 	/*
 	 * This prevents preemption while active_mm is being loaded and
 	 * it and mm are being updated, which could cause problems for
@@ -1047,23 +1047,23 @@ static int exec_mmap(struct mm_struct *mm)
 	 * switches. Not all architectures can handle irqs off over
 	 * activate_mm yet.
 	 */
-	if (!IS_ENABLED(CONFIG_ARCH_WANT_IRQS_OFF_ACTIVATE_MM))
+	if (!IS_ENABLED(CONFIG_ARCH_WANT_IRQS_OFF_ACTIVATE_MM))//如果架构不要求在 activate_mm 操作期间禁用中断，则重新启用中断。
 		local_irq_enable();
-	activate_mm(active_mm, mm);
-	if (IS_ENABLED(CONFIG_ARCH_WANT_IRQS_OFF_ACTIVATE_MM))
+	activate_mm(active_mm, mm);//激活新的内存管理结构
+	if (IS_ENABLED(CONFIG_ARCH_WANT_IRQS_OFF_ACTIVATE_MM))//如果架构要求在 activate_mm 操作期间禁用中断，则重新启用中断。
 		local_irq_enable();
-	lru_gen_add_mm(mm);
-	task_unlock(tsk);
-	lru_gen_use_mm(mm);
-	if (old_mm) {
-		mmap_read_unlock(old_mm);
-		BUG_ON(active_mm != old_mm);
-		setmax_mm_hiwater_rss(&tsk->signal->maxrss, old_mm);
-		mm_update_next_owner(old_mm);
-		mmput(old_mm);
+	lru_gen_add_mm(mm);//添加新的内存管理结构到LRU生成器
+	task_unlock(tsk);//释放任务锁
+	lru_gen_use_mm(mm);//使用新的内存管理结构
+	if (old_mm) {//如果旧的内存管理结构存在
+		mmap_read_unlock(old_mm);// 释放旧的内存管理结构的读锁
+		BUG_ON(active_mm != old_mm);//确保 active_mm 和 old_mm 是相同的
+		setmax_mm_hiwater_rss(&tsk->signal->maxrss, old_mm);//更新任务的最大 RSS（驻留集大小）
+		mm_update_next_owner(old_mm);//更新下一个拥有者的内存管理结构
+		mmput(old_mm);//释放旧的内存管理结构
 		return 0;
 	}
-	mmdrop_lazy_tlb(active_mm);
+	mmdrop_lazy_tlb(active_mm);//惰性释放 TLB 的内存管理结构
 	return 0;
 }
 
@@ -1267,6 +1267,7 @@ void __set_task_comm(struct task_struct *tsk, const char *buf, bool exec)
  * seen by userspace since either the process is already taking a fatal
  * signal (via de_thread() or coredump), or will have SEGV raised
  * (after exec_mmap()) by search_binary_handler (see below).
+ * 清空进程的旧的可执行执行，加载新的可执行文件
  */
 int begin_new_exec(struct linux_binprm * bprm)
 {

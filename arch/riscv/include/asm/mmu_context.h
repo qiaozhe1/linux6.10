@@ -20,7 +20,7 @@ void switch_mm(struct mm_struct *prev, struct mm_struct *next,
 static inline void activate_mm(struct mm_struct *prev,
 			       struct mm_struct *next)
 {
-	switch_mm(prev, next, NULL);
+	switch_mm(prev, next, NULL);//切换内存管理上下文，从 prev 切换到 next
 }
 
 #define init_new_context init_new_context
