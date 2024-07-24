@@ -107,10 +107,10 @@ static void flush_context(void)
 	u64 asid;
 
 	/* Update the list of reserved ASIDs and the ASID bitmap. */
-	set_reserved_asid_bits();
+	set_reserved_asid_bits();//更新保留的 ASID 列表和 ASID 位图
 
-	for_each_possible_cpu(i) {
-		asid = atomic64_xchg_relaxed(&per_cpu(active_asids, i), 0);
+	for_each_possible_cpu(i) {//遍历系统中的每个可能的 CPU
+		asid = atomic64_xchg_relaxed(&per_cpu(active_asids, i), 0);//将每个 CPU 的 active_asids 原子地交换为 0，并返回原来的值
 		/*
 		 * If this CPU has already been through a
 		 * rollover, but hasn't run another task in
@@ -119,16 +119,16 @@ static void flush_context(void)
 		 * the process it is still running.
 		 */
 		if (asid == 0)
-			asid = per_cpu(reserved_asids, i);
-		__set_bit(ctxid2asid(asid), asid_map);
-		per_cpu(reserved_asids, i) = asid;
+			asid = per_cpu(reserved_asids, i);//如果 asid 为 0，表示此 CPU 尚未运行另一个任务，则使用保留的 reserved_asids
+		__set_bit(ctxid2asid(asid), asid_map);//将 asid 转换为 ASID 并在 asid_map 中设置相应的位
+		per_cpu(reserved_asids, i) = asid;//更新每个 CPU 的保留 ASID reserved_asids。
 	}
 
 	/*
 	 * Queue a TLB invalidation for each CPU to perform on next
 	 * context-switch
 	 */
-	cpumask_setall(&tlb_flush_pending);
+	cpumask_setall(&tlb_flush_pending);//设置 tlb_flush_pending 位图的所有位，以在下次上下文切换时为每个 CPU 队列一个 TLB 无效请求。
 }
 
 static bool check_update_reserved_asid(u64 asid, u64 newasid)
@@ -158,17 +158,17 @@ static bool check_update_reserved_asid(u64 asid, u64 newasid)
 static u64 new_context(struct mm_struct *mm)
 {
 	static u32 cur_idx = 1;
-	u64 asid = atomic64_read(&mm->context.id);
-	u64 generation = atomic64_read(&asid_generation);
+	u64 asid = atomic64_read(&mm->context.id);//读取内存管理结构 mm 的 ASID
+	u64 generation = atomic64_read(&asid_generation);//读取当前的 ASID 代号
 
-	if (asid != 0) {
-		u64 newasid = asid2ctxid(ctxid2asid(asid), generation);
+	if (asid != 0) {//如果ASID不为零
+		u64 newasid = asid2ctxid(ctxid2asid(asid), generation);//生成新的 ASID。将当前的 ASID 与代号组合在一起。
 
 		/*
 		 * If our current ASID was active during a rollover, we
 		 * can continue to use it and this was just a false alarm.
 		 */
-		if (check_update_reserved_asid(asid, newasid))
+		if (check_update_reserved_asid(asid, newasid))//检查所有CPU的ASID，如果存在旧的ASID，则更新这些ASID为新ASID
 			return newasid;
 
 		/*
@@ -176,14 +176,14 @@ static u64 new_context(struct mm_struct *mm)
 		 * takes priority, because even if it is also pinned, we need to
 		 * update the generation into the reserved_asids.
 		 */
-		if (refcount_read(&mm->context.pinned))
+		if (refcount_read(&mm->context.pinned))//如果 ASID 被固定，返回新的 ASID。
 			return newasid;
 
 		/*
 		 * We had a valid ASID in a previous life, so try to re-use
 		 * it if possible.
 		 */
-		if (!__test_and_set_bit(ctxid2asid(asid), asid_map))
+		if (!__test_and_set_bit(ctxid2asid(asid), asid_map))//尝试重新使用旧的 ASID，如果成功则返回新的 ASID。
 			return newasid;
 	}
 
@@ -194,22 +194,22 @@ static u64 new_context(struct mm_struct *mm)
 	 * a reserved TTBR0 for the init_mm and we allocate ASIDs in even/odd
 	 * pairs.
 	 */
-	asid = find_next_zero_bit(asid_map, NUM_USER_ASIDS, cur_idx);
-	if (asid != NUM_USER_ASIDS)
+	asid = find_next_zero_bit(asid_map, NUM_USER_ASIDS, cur_idx);//在 ASID 位图中查找下一个空闲的 ASID。
+	if (asid != NUM_USER_ASIDS)//如果找到空闲的 ASID，则跳转到 set_asid 标签。
 		goto set_asid;
 
 	/* We're out of ASIDs, so increment the global generation count */
 	generation = atomic64_add_return_relaxed(ASID_FIRST_VERSION,
-						 &asid_generation);
-	flush_context();
+						 &asid_generation);//如果没有空闲的 ASID，增加asid_generation。
+	flush_context();//刷新所有上下文，清除 TLB。
 
 	/* We have more ASIDs than CPUs, so this will always succeed */
-	asid = find_next_zero_bit(asid_map, NUM_USER_ASIDS, 1);
+	asid = find_next_zero_bit(asid_map, NUM_USER_ASIDS, 1);//在 ASID 位图中从头开始查找下一个空闲的 ASID。
 
 set_asid:
-	__set_bit(asid, asid_map);
-	cur_idx = asid;
-	return asid2ctxid(asid, generation);
+	__set_bit(asid, asid_map);//在 ASID 位图中设置这个 ASID。
+	cur_idx = asid;//更新当前 ASID 的索引。
+	return asid2ctxid(asid, generation);//返回新的上下文ID，将 ASID 和代号组合在一起。
 }
 
 void check_and_switch_context(struct mm_struct *mm)
@@ -218,10 +218,10 @@ void check_and_switch_context(struct mm_struct *mm)
 	unsigned int cpu;
 	u64 asid, old_active_asid;
 
-	if (system_supports_cnp())
+	if (system_supports_cnp())//如果系统支持 CNP（Common Not Private），则调用 cpu_set_reserved_ttbr0 设置保留的 TTBR0。
 		cpu_set_reserved_ttbr0();
 
-	asid = atomic64_read(&mm->context.id);
+	asid = atomic64_read(&mm->context.id);//读取内存管理结构 mm 的 ASID
 
 	/*
 	 * The memory ordering here is subtle.
@@ -237,36 +237,36 @@ void check_and_switch_context(struct mm_struct *mm)
 	 *   relaxed xchg in flush_context will treat us as reserved
 	 *   because atomic RmWs are totally ordered for a given location.
 	 */
-	old_active_asid = atomic64_read(this_cpu_ptr(&active_asids));
-	if (old_active_asid && asid_gen_match(asid) &&
-	    atomic64_cmpxchg_relaxed(this_cpu_ptr(&active_asids),
+	old_active_asid = atomic64_read(this_cpu_ptr(&active_asids));//读取当前 CPU 的 active_asids
+	if (old_active_asid && asid_gen_match(asid) &&		//如果当前CPU的 active_asids 非零且 ASID 与当前代匹配（ASID 代机制将 ASID 进行分代管理。每次所有 ASID 用完需要重新分配时，就增加一个 ASID 代数，表示进入了一个新的代。这样，即使是同一个 ASID，其对应的代不同，也可以区分开来，防止旧的 TLB 条目干扰新的地址翻译）
+	    atomic64_cmpxchg_relaxed(this_cpu_ptr(&active_asids),//并且使用放松的cmpxchg更新active_asids到CPU成功
 				     old_active_asid, asid))
-		goto switch_mm_fastpath;
+		goto switch_mm_fastpath;//跳转
 
-	raw_spin_lock_irqsave(&cpu_asid_lock, flags);
+	raw_spin_lock_irqsave(&cpu_asid_lock, flags);//获取cpu_asid_lock自旋锁并保存中断状态。
 	/* Check that our ASID belongs to the current generation. */
-	asid = atomic64_read(&mm->context.id);
-	if (!asid_gen_match(asid)) {
-		asid = new_context(mm);
-		atomic64_set(&mm->context.id, asid);
+	asid = atomic64_read(&mm->context.id);//再次读取内存管理结构mm的ASID。
+	if (!asid_gen_match(asid)) {//如果ASID不属于当前代
+		asid = new_context(mm);//分配新的ASID
+		atomic64_set(&mm->context.id, asid);//将新的ASID设置到mm->context.id中
 	}
 
-	cpu = smp_processor_id();
-	if (cpumask_test_and_clear_cpu(cpu, &tlb_flush_pending))
-		local_flush_tlb_all();
+	cpu = smp_processor_id();//获取当前处理器的ID
+	if (cpumask_test_and_clear_cpu(cpu, &tlb_flush_pending))//如果当前CPU的TLB刷新挂起标志被设置
+		local_flush_tlb_all();//执行本地TLB刷新
 
-	atomic64_set(this_cpu_ptr(&active_asids), asid);
-	raw_spin_unlock_irqrestore(&cpu_asid_lock, flags);
+	atomic64_set(this_cpu_ptr(&active_asids), asid);//将当前 CPU 的 active_asids 设置为新的 ASID
+	raw_spin_unlock_irqrestore(&cpu_asid_lock, flags);//释放自旋锁并恢复中断状态
 
 switch_mm_fastpath:
 
-	arm64_apply_bp_hardening();
+	arm64_apply_bp_hardening();//应用 ARM64 的分支预测硬化
 
 	/*
 	 * Defer TTBR0_EL1 setting for user threads to uaccess_enable() when
 	 * emulating PAN.
 	 */
-	if (!system_uses_ttbr0_pan())
+	if (!system_uses_ttbr0_pan())//如果不使用 TTBR0_PAN（Privileged Access Never），则切换 mm 的页全局目录 pgd。
 		cpu_switch_mm(mm->pgd, mm);
 }
 

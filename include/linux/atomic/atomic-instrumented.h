@@ -2831,8 +2831,8 @@ atomic64_cmpxchg_release(atomic64_t *v, s64 old, s64 new)
 static __always_inline s64
 atomic64_cmpxchg_relaxed(atomic64_t *v, s64 old, s64 new)
 {
-	instrument_atomic_read_write(v, sizeof(*v));
-	return raw_atomic64_cmpxchg_relaxed(v, old, new);
+	instrument_atomic_read_write(v, sizeof(*v));//记录原子读写操作
+	return raw_atomic64_cmpxchg_relaxed(v, old, new);//原子交换，如果 v 的当前值等于 old，则将 v 设置为 new。
 }
 
 /**

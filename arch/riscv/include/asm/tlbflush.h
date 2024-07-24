@@ -22,10 +22,10 @@ static inline void local_flush_tlb_all(void)
 
 static inline void local_flush_tlb_all_asid(unsigned long asid)
 {
-	if (asid != FLUSH_TLB_NO_ASID)
-		ALT_SFENCE_VMA_ASID(asid);
+	if (asid != FLUSH_TLB_NO_ASID)//如果 asid不等于 FLUSH_TLB_NO_ASID（表示不使用ASID来清除TLB）
+		ALT_SFENCE_VMA_ASID(asid);//通过指定的ASID来清除 TLB 条目。
 	else
-		local_flush_tlb_all();
+		local_flush_tlb_all();//清除所有TLB条目，而不考虑ASID
 }
 
 /* Flush one page from local TLB */

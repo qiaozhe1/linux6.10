@@ -218,12 +218,12 @@ static inline void __switch_mm(struct mm_struct *next)
 	 * init_mm.pgd does not contain any user mappings and it is always
 	 * active for kernel addresses in TTBR1. Just set the reserved TTBR0.
 	 */
-	if (next == &init_mm) {
-		cpu_set_reserved_ttbr0();
+	if (next == &init_mm) {//如果next是否指向init_mm。init_mm 是内核初始化时使用的内存管理结构，通常在系统启动时初始化并用于内核态的内存管理。
+		cpu_set_reserved_ttbr0();//设置TTBR0寄存器（在ARM架构中用于管理用户空间地址的页表基地址。）为保留值，以使用 init_mm 的地址空间。这意味着不需要更改当前的用户地址映射，因为 init_mm 不包含任何用户空间映射。
 		return;
 	}
 
-	check_and_switch_context(next);
+	check_and_switch_context(next);//检查当前的内存管理上下文，并切换到新的内存管理结构next及新的页表。
 }
 
 static inline void
@@ -231,15 +231,13 @@ switch_mm(struct mm_struct *prev, struct mm_struct *next,
 	  struct task_struct *tsk)
 {
 	if (prev != next)
-		__switch_mm(next);
+		__switch_mm(next);//如果前一个 mm 和下一个 mm 不相同，则执行 mm 切换
 
 	/*
-	 * Update the saved TTBR0_EL1 of the scheduled-in task as the previous
-	 * value may have not been initialised yet (activate_mm caller) or the
-	 * ASID has changed since the last run (following the context switch
-	 * of another thread of the same process).
+	 * 更新调度到的任务的 saved TTBR0_EL1，因为前一个值可能还没有被初始化（由 activate_mm 调用），
+	 * 或者由于 ASID 发生了变化（在同一进程的另一个线程的上下文切换之后）。
 	 */
-	update_saved_ttbr0(tsk, next);
+	update_saved_ttbr0(tsk, next);//更新到新进程的saved TTBR0_EL1，以确保在上下文切换之后使用正确的地址空间标识符
 }
 
 static inline const struct cpumask *
