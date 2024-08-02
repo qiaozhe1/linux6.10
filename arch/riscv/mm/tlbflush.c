@@ -70,12 +70,14 @@ struct flush_tlb_range_data {
 	unsigned long size;
 	unsigned long stride;
 };
-
+/*
+ * 定义函数用于处理 IPI TLB 刷新请求
+ * */
 static void __ipi_flush_tlb_range_asid(void *info)
 {
-	struct flush_tlb_range_data *d = info;
+	struct flush_tlb_range_data *d = info;//将传入的参数转换为 flush_tlb_range_data 结构体指针
 
-	local_flush_tlb_range_asid(d->start, d->size, d->stride, d->asid);
+	local_flush_tlb_range_asid(d->start, d->size, d->stride, d->asid);//调用本地函数进行 TLB 刷新
 }
 
 static void __flush_tlb_range(const struct cpumask *cmask, unsigned long asid,
@@ -84,24 +86,24 @@ static void __flush_tlb_range(const struct cpumask *cmask, unsigned long asid,
 {
 	unsigned int cpu;
 
-	if (cpumask_empty(cmask))
+	if (cpumask_empty(cmask))//如果 CPU 掩码为空，直接返回
 		return;
 
-	cpu = get_cpu();
+	cpu = get_cpu();//获取当前 CPU 编号
 
-	/* Check if the TLB flush needs to be sent to other CPUs. */
+	/* 检查是否需要将 TLB 刷新请求发送到其他 CPU */
 	if (cpumask_any_but(cmask, cpu) >= nr_cpu_ids) {
-		local_flush_tlb_range_asid(start, size, stride, asid);
-	} else if (riscv_use_sbi_for_rfence()) {
-		sbi_remote_sfence_vma_asid(cmask, start, size, asid);
+		local_flush_tlb_range_asid(start, size, stride, asid);//如果当前CPU是唯一目标，进行本地刷新
+	} else if (riscv_use_sbi_for_rfence()) {//如果支持SBI
+		sbi_remote_sfence_vma_asid(cmask, start, size, asid);//使用SBI进行远程TLB刷新
 	} else {
-		struct flush_tlb_range_data ftd;
+		struct flush_tlb_range_data ftd;//定义结构体保存刷新数据
 
-		ftd.asid = asid;
-		ftd.start = start;
-		ftd.size = size;
-		ftd.stride = stride;
-		on_each_cpu_mask(cmask, __ipi_flush_tlb_range_asid, &ftd, 1);
+		ftd.asid = asid;//设置地址空间标识符
+		ftd.start = start;//设置起始地址
+		ftd.size = size;//设置大小
+		ftd.stride = stride;//设置步长
+		on_each_cpu_mask(cmask, __ipi_flush_tlb_range_asid, &ftd, 1);//在掩码指定的每个 CPU 上调用刷新函数:__ipi_flush_tlb_range_asid
 	}
 
 	put_cpu();
@@ -131,37 +133,37 @@ void flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
 	__flush_tlb_range(mm_cpumask(vma->vm_mm), get_mm_asid(vma->vm_mm),
 			  addr, PAGE_SIZE, PAGE_SIZE);
 }
-
+/*
+ * 用于刷新特定虚拟内存区域的TLB范围
+ * */
 void flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
 		     unsigned long end)
 {
-	unsigned long stride_size;
+	unsigned long stride_size;//定义变量 stride_size 用于保存步长大小
 
-	if (!is_vm_hugetlb_page(vma)) {
-		stride_size = PAGE_SIZE;
+	if (!is_vm_hugetlb_page(vma)) {//检查vma是否是大页
+		stride_size = PAGE_SIZE;//如果不是大页，设置步长为普通页大小
 	} else {
-		stride_size = huge_page_size(hstate_vma(vma));
+		stride_size = huge_page_size(hstate_vma(vma));//如果是大页，获取大页大小
 
 		/*
-		 * As stated in the privileged specification, every PTE in a
-		 * NAPOT region must be invalidated, so reset the stride in that
-		 * case.
+		 * 根据特权规范，每个 NAPOT 区域中的 PTE 必须被无效化，因此在这种情况下重置步长。
 		 */
-		if (has_svnapot()) {
-			if (stride_size >= PGDIR_SIZE)
+		if (has_svnapot()) {//检查是否支持 NAPOT
+			if (stride_size >= PGDIR_SIZE)//如果大页大小大于等于 PGDIR_SIZE，设置步长为 PGDIR_SIZE
 				stride_size = PGDIR_SIZE;
-			else if (stride_size >= P4D_SIZE)
+			else if (stride_size >= P4D_SIZE)//如果大页大小大于等于 P4D_SIZE，设置步长为 P4D_SIZE
 				stride_size = P4D_SIZE;
-			else if (stride_size >= PUD_SIZE)
+			else if (stride_size >= PUD_SIZE)//如果大页大小大于等于 PUD_SIZE，设置步长为 PUD_SIZE
 				stride_size = PUD_SIZE;
-			else if (stride_size >= PMD_SIZE)
+			else if (stride_size >= PMD_SIZE)//如果大页大小大于等于 PMD_SIZE，设置步长为 PMD_SIZE
 				stride_size = PMD_SIZE;
 			else
-				stride_size = PAGE_SIZE;
+				stride_size = PAGE_SIZE;//否则，设置步长为普通页大小
 		}
 	}
 
-	__flush_tlb_range(mm_cpumask(vma->vm_mm), get_mm_asid(vma->vm_mm),
+	__flush_tlb_range(mm_cpumask(vma->vm_mm), get_mm_asid(vma->vm_mm),//调用内部函数刷新 TLB 范围
 			  start, end - start, stride_size);
 }
 

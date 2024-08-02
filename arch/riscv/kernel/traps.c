@@ -116,16 +116,16 @@ void do_trap(struct pt_regs *regs, int signo, int code, unsigned long addr)
 	struct task_struct *tsk = current;
 
 	if (show_unhandled_signals && unhandled_signal(tsk, signo)
-	    && printk_ratelimit()) {
+	    && printk_ratelimit()) {//检查是否启用了显示未处理信号标志，当前任务是否有未处理的信号，并且打印速率限制有效。
 		pr_info("%s[%d]: unhandled signal %d code 0x%x at 0x" REG_FMT,
-			tsk->comm, task_pid_nr(tsk), signo, code, addr);
-		print_vma_addr(KERN_CONT " in ", instruction_pointer(regs));
+			tsk->comm, task_pid_nr(tsk), signo, code, addr);//打印任务信息，包括任务名、任务 PID、信号编号、错误代码和地址。
+		print_vma_addr(KERN_CONT " in ", instruction_pointer(regs));//打印指令指针所在的虚拟内存区域地址。
 		pr_cont("\n");
-		__show_regs(regs);
-		dump_instr(KERN_INFO, regs);
+		__show_regs(regs);//显示寄存器状态。
+		dump_instr(KERN_INFO, regs);//转储指令信息。
 	}
 
-	force_sig_fault(signo, code, (void __user *)addr);
+	force_sig_fault(signo, code, (void __user *)addr);//强制发送指定信号和代码到用户空间的地址。
 }
 
 static void do_trap_error(struct pt_regs *regs, int signo, int code,

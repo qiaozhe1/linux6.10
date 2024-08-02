@@ -5833,39 +5833,39 @@ fail:
 struct vm_area_struct *lock_vma_under_rcu(struct mm_struct *mm,
 					  unsigned long address)
 {
-	MA_STATE(mas, &mm->mm_mt, address, address);
-	struct vm_area_struct *vma;
+	MA_STATE(mas, &mm->mm_mt, address, address);//声明多地址状态，初始化内存管理元数据树和地址范围
+	struct vm_area_struct *vma;//声明虚拟内存区域结构体指针
 
 	rcu_read_lock();
 retry:
-	vma = mas_walk(&mas);
+	vma = mas_walk(&mas);//在内存管理元数据树中查找地址对应的虚拟内存区域
 	if (!vma)
-		goto inval;
+		goto inval;//如果未找到虚拟内存区域，跳转到inval标签
 
-	if (!vma_start_read(vma))
+	if (!vma_start_read(vma))//尝试开始读取虚拟内存区域
 		goto inval;
 
 	/* Check since vm_start/vm_end might change before we lock the VMA */
-	if (unlikely(address < vma->vm_start || address >= vma->vm_end))
-		goto inval_end_read;
+	if (unlikely(address < vma->vm_start || address >= vma->vm_end))//检查地址是否在虚拟内存区域的起始和结束地址之间
+		goto inval_end_read;//如果不在，跳转到 inval_end_read 标签
 
 	/* Check if the VMA got isolated after we found it */
-	if (vma->detached) {
-		vma_end_read(vma);
-		count_vm_vma_lock_event(VMA_LOCK_MISS);
+	if (vma->detached) {//检查虚拟内存区域是否已被隔离
+		vma_end_read(vma);//结束虚拟内存区域读取
+		count_vm_vma_lock_event(VMA_LOCK_MISS);//记录虚拟内存区域锁定失败事件
 		/* The area was replaced with another one */
-		goto retry;
+		goto retry;//跳转到 retry 标签，重新尝试查找虚拟内存区域
 	}
 
 	rcu_read_unlock();
-	return vma;
+	return vma;//返回找到的虚拟内存区域
 
 inval_end_read:
-	vma_end_read(vma);
+	vma_end_read(vma);//结束虚拟内存区域读取
 inval:
 	rcu_read_unlock();
-	count_vm_vma_lock_event(VMA_LOCK_ABORT);
-	return NULL;
+	count_vm_vma_lock_event(VMA_LOCK_ABORT);//记录虚拟内存区域锁定中止事件
+	return NULL;//返回 NULL，表示未能找到有效的虚拟内存区域
 }
 #endif /* CONFIG_PER_VMA_LOCK */
 

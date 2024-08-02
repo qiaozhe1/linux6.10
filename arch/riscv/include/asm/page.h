@@ -75,7 +75,7 @@ typedef struct {
 
 typedef struct page *pgtable_t;
 
-#define pte_val(x)	((x).pte)
+#define pte_val(x)	((x).pte)//获取页表项的值
 #define pgd_val(x)	((x).pgd)
 #define pgprot_val(x)	((x).pgprot)
 

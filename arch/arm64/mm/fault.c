@@ -639,38 +639,38 @@ bad_area:
 	 * If we are in kernel mode at this point, we have no context to
 	 * handle this fault with.
 	 */
-	if (!user_mode(regs))
+	if (!user_mode(regs))//检查是否在用户模式下运行，如果不在（即在内核模式下），跳转到 no_context 标签进行处理。
 		goto no_context;
 
-	if (fault & VM_FAULT_OOM) {
+	if (fault & VM_FAULT_OOM) {//检查页面错误是否由于内存不足（OOM）。
 		/*
 		 * We ran out of memory, call the OOM killer, and return to
 		 * userspace (which will retry the fault, or kill us if we got
 		 * oom-killed).
 		 */
-		pagefault_out_of_memory();
+		pagefault_out_of_memory();//调用该函数处理 OOM 错误，并返回 0，表示处理完成。
 		return 0;
 	}
 
-	inf = esr_to_fault_info(esr);
-	set_thread_esr(addr, esr);
-	if (fault & VM_FAULT_SIGBUS) {
+	inf = esr_to_fault_info(esr);//从 ESR（异常状态寄存器）获取错误信息
+	set_thread_esr(addr, esr);//设置线程的 ESR 信息，将地址和 ESR 赋值给当前线程。
+	if (fault & VM_FAULT_SIGBUS) {//检查页面错误是否导致 SIGBUS 信号。
 		/*
 		 * We had some memory, but were unable to successfully fix up
 		 * this page fault.
 		 */
-		arm64_force_sig_fault(SIGBUS, BUS_ADRERR, far, inf->name);
-	} else if (fault & (VM_FAULT_HWPOISON_LARGE | VM_FAULT_HWPOISON)) {
+		arm64_force_sig_fault(SIGBUS, BUS_ADRERR, far, inf->name);//强制发送SIGBUS信号
+	} else if (fault & (VM_FAULT_HWPOISON_LARGE | VM_FAULT_HWPOISON)) {//检查页面错误是否由于页面损坏。VM_FAULT_HWPOISON_LARGE：大页面损坏，VM_FAULT_HWPOISON：普通损坏
 		unsigned int lsb;
 
-		lsb = PAGE_SHIFT;
-		if (fault & VM_FAULT_HWPOISON_LARGE)
-			lsb = hstate_index_to_shift(VM_FAULT_GET_HINDEX(fault));
+		lsb = PAGE_SHIFT;//页面大小的位移量
+		if (fault & VM_FAULT_HWPOISON_LARGE)//检查页面错误是否为大页面损坏
+			lsb = hstate_index_to_shift(VM_FAULT_GET_HINDEX(fault));//需要根据错误的具体大页面索引来获取页面大小的位移。
 
-		arm64_force_sig_mceerr(BUS_MCEERR_AR, far, lsb, inf->name);
-	} else {
+		arm64_force_sig_mceerr(BUS_MCEERR_AR, far, lsb, inf->name);//强制发送机器检查错误信号
+	} else {//如果不是 SIGBUS 或 HWPOISON 错误，则假设尝试访问不在内存映射中的内存。
 		/* Something tried to access memory that out of memory map */
-		arm64_force_sig_fault(SIGSEGV, si_code, far, inf->name);
+		arm64_force_sig_fault(SIGSEGV, si_code, far, inf->name);//强制发送SIGSEGV信号
 	}
 
 	return 0;

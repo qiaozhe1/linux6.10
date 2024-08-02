@@ -172,7 +172,7 @@ static void set_mm_asid(struct mm_struct *mm, unsigned int cpu)
 					old_active_cntx, cntx))//并且使用放松的cmpxchg更新cpu的ASID成功
 		goto switch_mm_fast;//跳转
 
-	raw_spin_lock_irqsave(&context_lock, flags);//获取 context_lock 自旋锁并保存中断状态
+	raw_spin_lock_irqsave(&context_lock, flags);//获取context_lock自旋锁并保存中断状态
 
 	/* Check that our ASID belongs to the current_version. */
 	cntx = atomic_long_read(&mm->context.id);//再次读取内存管理结构的上下文ASID

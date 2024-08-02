@@ -345,7 +345,7 @@ static inline pte_t pfn_pte(unsigned long pfn, pgprot_t prot)
 
 #define mk_pte(page, prot)       pfn_pte(page_to_pfn(page), prot)
 
-static inline int pte_present(pte_t pte)
+static inline int pte_present(pte_t pte)//检查页表项是否存在
 {
 	return (pte_val(pte) & (_PAGE_PRESENT | _PAGE_PROT_NONE));
 }
@@ -483,8 +483,8 @@ static inline void update_mmu_cache_range(struct vm_fault *vmf,
 	 * Relying on flush_tlb_fix_spurious_fault would suffice, but
 	 * the extra traps reduce performance.  So, eagerly SFENCE.VMA.
 	 */
-	while (nr--)
-		local_flush_tlb_page(address + nr * PAGE_SIZE);
+	while (nr--)// 遍历需要刷新的页数
+		local_flush_tlb_page(address + nr * PAGE_SIZE);//刷新每个页的TLB
 }
 #define update_mmu_cache(vma, addr, ptep) \
 	update_mmu_cache_range(NULL, vma, addr, ptep, 1)
@@ -531,14 +531,14 @@ static inline void __set_pte_at(struct mm_struct *mm, pte_t *ptep, pte_t pteval)
 static inline void set_ptes(struct mm_struct *mm, unsigned long addr,
 		pte_t *ptep, pte_t pteval, unsigned int nr)
 {
-	page_table_check_ptes_set(mm, ptep, pteval, nr);
+	page_table_check_ptes_set(mm, ptep, pteval, nr);//检查将要设置的页表项是否有效，以防止设置无效的页表项。
 
-	for (;;) {
-		__set_pte_at(mm, ptep, pteval);
-		if (--nr == 0)
+	for (;;) {//无限循环
+		__set_pte_at(mm, ptep, pteval);//设置单个页表项
+		if (--nr == 0)//如果nr减为0，说明所有页表项都设置完毕
 			break;
-		ptep++;
-		pte_val(pteval) += 1 << _PAGE_PFN_SHIFT;
+		ptep++;//移动到下一个页表项
+		pte_val(pteval) += 1 << _PAGE_PFN_SHIFT;//更新页表项的值到下一个页面帧
 	}
 }
 #define set_ptes set_ptes
@@ -560,9 +560,9 @@ extern int ptep_test_and_clear_young(struct vm_area_struct *vma, unsigned long a
 static inline pte_t ptep_get_and_clear(struct mm_struct *mm,
 				       unsigned long address, pte_t *ptep)
 {
-	pte_t pte = __pte(atomic_long_xchg((atomic_long_t *)ptep, 0));
+	pte_t pte = __pte(atomic_long_xchg((atomic_long_t *)ptep, 0));//原子交换页表项值，将其设置为0，返回原始值
 
-	page_table_check_pte_clear(mm, pte);
+	page_table_check_pte_clear(mm, pte);//检查清除的页表项，确保一致性和安全性
 
 	return pte;
 }

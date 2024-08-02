@@ -2,11 +2,11 @@
 #ifndef __ASM_ASM_EXTABLE_H
 #define __ASM_ASM_EXTABLE_H
 
-#define EX_TYPE_NONE			0
-#define EX_TYPE_FIXUP			1
-#define EX_TYPE_BPF			2
-#define EX_TYPE_UACCESS_ERR_ZERO	3
-#define EX_TYPE_LOAD_UNALIGNED_ZEROPAD	4
+#define EX_TYPE_NONE			0	//表示没有异常类型，通常用作默认值或占位符。
+#define EX_TYPE_FIXUP			1	//表示修复异常
+#define EX_TYPE_BPF			2	//表示 BPF（Berkeley Packet Filter）异常
+#define EX_TYPE_UACCESS_ERR_ZERO	3	//表示用户访问错误置零异常
+#define EX_TYPE_LOAD_UNALIGNED_ZEROPAD	4	//非对齐加载零填充异常
 
 #ifdef CONFIG_MMU
 

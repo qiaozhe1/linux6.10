@@ -1212,28 +1212,23 @@ struct vm_fault;
 typedef __bitwise unsigned int vm_fault_t;
 
 /**
- * enum vm_fault_reason - Page fault handlers return a bitmask of
- * these values to tell the core VM what happened when handling the
- * fault. Used to decide whether a process gets delivered SIGBUS or
- * just gets major/minor fault counters bumped up.
+ * enum vm_fault_reason - 页面错误处理程序返回这些值的位掩码，以告知核心虚拟内存在处理错误时发生了什么。
+ * 用于决定是向进程传递SIGBUS信号还是仅增加主要/次要错误计数器。
  *
- * @VM_FAULT_OOM:		Out Of Memory
- * @VM_FAULT_SIGBUS:		Bad access
- * @VM_FAULT_MAJOR:		Page read from storage
- * @VM_FAULT_HWPOISON:		Hit poisoned small page
- * @VM_FAULT_HWPOISON_LARGE:	Hit poisoned large page. Index encoded
- *				in upper bits
- * @VM_FAULT_SIGSEGV:		segmentation fault
- * @VM_FAULT_NOPAGE:		->fault installed the pte, not return page
- * @VM_FAULT_LOCKED:		->fault locked the returned page
- * @VM_FAULT_RETRY:		->fault blocked, must retry
- * @VM_FAULT_FALLBACK:		huge page fault failed, fall back to small
- * @VM_FAULT_DONE_COW:		->fault has fully handled COW
- * @VM_FAULT_NEEDDSYNC:		->fault did not modify page tables and needs
- *				fsync() to complete (for synchronous page faults
- *				in DAX)
- * @VM_FAULT_COMPLETED:		->fault completed, meanwhile mmap lock released
- * @VM_FAULT_HINDEX_MASK:	mask HINDEX value
+ * @VM_FAULT_OOM:		内存不足
+ * @VM_FAULT_SIGBUS:		错误访问
+ * @VM_FAULT_MAJOR:		从存储读取页面
+ * @VM_FAULT_HWPOISON:		命中损坏的小页面
+ * @VM_FAULT_HWPOISON_LARGE:	命中损坏的大页面。索引编码在高位中
+ * @VM_FAULT_SIGSEGV:		段错误
+ * @VM_FAULT_NOPAGE:		->fault 安装了pte，没有返回页面
+ * @VM_FAULT_LOCKED:		->fault 锁定了返回的页面
+ * @VM_FAULT_RETRY:		->fault 被阻塞，必须重试
+ * @VM_FAULT_FALLBACK:		大页面错误失败，回退到小页面
+ * @VM_FAULT_DONE_COW:		->fault 已完全处理写时复制（COW）
+ * @VM_FAULT_NEEDDSYNC:		->fault 没有修改页表，需要fsync()来完成（用于DAX中的同步页面错误）
+ * @VM_FAULT_COMPLETED:		->fault 完成，同时释放mmap锁
+ * @VM_FAULT_HINDEX_MASK:	掩码HINDEX值
  *
  */
 enum vm_fault_reason {

@@ -16,8 +16,8 @@
  */
 
 struct exception_table_entry {
-	int insn, fixup;
-	short type, data;
+	int insn, fixup;//异常指令的地址偏移;修复代码的地址偏移
+	short type, data;//异常类型;附加数据
 };
 
 #define ARCH_HAS_RELATIVE_EXTABLE

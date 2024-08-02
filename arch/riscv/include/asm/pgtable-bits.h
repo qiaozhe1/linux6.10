@@ -8,18 +8,18 @@
 
 #define _PAGE_ACCESSED_OFFSET 6
 
-#define _PAGE_PRESENT   (1 << 0)
-#define _PAGE_READ      (1 << 1)    /* Readable */
-#define _PAGE_WRITE     (1 << 2)    /* Writable */
-#define _PAGE_EXEC      (1 << 3)    /* Executable */
-#define _PAGE_USER      (1 << 4)    /* User */
-#define _PAGE_GLOBAL    (1 << 5)    /* Global */
-#define _PAGE_ACCESSED  (1 << 6)    /* Set by hardware on any access */
-#define _PAGE_DIRTY     (1 << 7)    /* Set by hardware on any write */
-#define _PAGE_SOFT      (3 << 8)    /* Reserved for software */
+#define _PAGE_PRESENT   (1 << 0)	//表示页表项存在，用于判断页表项是否有效。
+#define _PAGE_READ      (1 << 1)    /* Readable 表示页表项可读，用于控制页面的读权限 */
+#define _PAGE_WRITE     (1 << 2)    /* Writable 表示页表项可写，用于控制页面的写权限 */
+#define _PAGE_EXEC      (1 << 3)    /* Executable 表示页表项可执行，用于控制页面的执行权限 */
+#define _PAGE_USER      (1 << 4)    /* User 表示页表项为用户模式，用于区分用户模式和内核模式 */
+#define _PAGE_GLOBAL    (1 << 5)    /* Global 表示页表项为全局标志，在所有地址空间中共享 */
+#define _PAGE_ACCESSED  (1 << 6)    /* Set by hardware on any access 表示页表项被访问（由硬件设置），用于内存管理和页面替换算法 */
+#define _PAGE_DIRTY     (1 << 7)    /* Set by hardware on any write 表示页表项被写（由硬件设置），用于内存管理和页面替换算法 */
+#define _PAGE_SOFT      (3 << 8)    /* Reserved for software 表示页表项软件保留标志，预留给软件使用的位 */
 
-#define _PAGE_SPECIAL   (1 << 8)    /* RSW: 0x1 */
-#define _PAGE_TABLE     _PAGE_PRESENT
+#define _PAGE_SPECIAL   (1 << 8)    /* RSW: 0x1 表示页表项特殊标志，具体用途由实现决定 */
+#define _PAGE_TABLE     _PAGE_PRESENT //表示页表项为页表标志，通常等同于页表项存在标志
 
 /*
  * _PAGE_PROT_NONE is set on not-present pages (and ignored by the hardware) to

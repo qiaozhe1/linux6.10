@@ -7270,23 +7270,23 @@ static unsigned long page_table_shareable(struct vm_area_struct *svma,
 
 bool want_pmd_share(struct vm_area_struct *vma, unsigned long addr)
 {
-	unsigned long start = addr & PUD_MASK;
-	unsigned long end = start + PUD_SIZE;
+	unsigned long start = addr & PUD_MASK;//获取PUD对齐的起始地址
+	unsigned long end = start + PUD_SIZE;//计算PUD区域的结束地址
 
 #ifdef CONFIG_USERFAULTFD
-	if (uffd_disable_huge_pmd_share(vma))
-		return false;
+	if (uffd_disable_huge_pmd_share(vma))//如果用户故障禁用了巨页PMD共享
+		return false;//不共享PMD
 #endif
 	/*
-	 * check on proper vm_flags and page table alignment
+	 * 检查VM区域的标志和页表对齐
 	 */
-	if (!(vma->vm_flags & VM_MAYSHARE))
-		return false;
-	if (!vma->vm_private_data)	/* vma lock required for sharing */
-		return false;
-	if (!range_in_vma(vma, start, end))
-		return false;
-	return true;
+	if (!(vma->vm_flags & VM_MAYSHARE))//如果VM区域不允许共享
+		return false;//不共享PMD
+	if (!vma->vm_private_data)//如果VM区域没有私有数据（需要共享的锁）
+		return false;//不共享PMD
+	if (!range_in_vma(vma, start, end))//如果地址范围不在VM区域内
+		return false;//不共享PMD
+	return true;//允许共享PMD
 }
 
 /*

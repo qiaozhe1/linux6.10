@@ -55,11 +55,11 @@ const struct exception_table_entry *search_exception_tables(unsigned long addr)
 {
 	const struct exception_table_entry *e;
 
-	e = search_kernel_exception_table(addr);
-	if (!e)
-		e = search_module_extables(addr);
-	if (!e)
-		e = search_bpf_extables(addr);
+	e = search_kernel_exception_table(addr);//在内核异常表中搜索地址对应的条目
+	if (!e)//如果未找到异常表条目
+		e = search_module_extables(addr);//在模块异常表中搜索地址对应的条目
+	if (!e)//如果仍未找到异常表条目
+		e = search_bpf_extables(addr);//在 BPF 异常表中搜索地址对应的条目
 	return e;
 }
 
