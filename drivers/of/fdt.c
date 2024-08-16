@@ -865,32 +865,32 @@ static unsigned long chosen_node_offset = -FDT_ERR_NOTFOUND;
  */
 void __init early_init_dt_check_for_usable_mem_range(void)
 {
-	struct memblock_region rgn[MAX_USABLE_RANGES] = {0};
-	const __be32 *prop, *endp;
+	struct memblock_region rgn[MAX_USABLE_RANGES] = {0};//用于存储可用内存范围的数组
+	const __be32 *prop, *endp;//指向设备树属性的指针
 	int len, i;
-	unsigned long node = chosen_node_offset;
+	unsigned long node = chosen_node_offset;//指向设备树中 "chosen" 节点的偏移量
 
-	if ((long)node < 0)
+	if ((long)node < 0)//如果 "chosen" 节点不存在
 		return;
 
-	pr_debug("Looking for usable-memory-range property... ");
+	pr_debug("Looking for usable-memory-range property... ");//打印调试信息
 
-	prop = of_get_flat_dt_prop(node, "linux,usable-memory-range", &len);
-	if (!prop || (len % (dt_root_addr_cells + dt_root_size_cells)))
+	prop = of_get_flat_dt_prop(node, "linux,usable-memory-range", &len);//获取 "linux,usable-memory-range" 属性
+	if (!prop || (len % (dt_root_addr_cells + dt_root_size_cells)))//如果属性不存在或长度不符合预期
 		return;
 
-	endp = prop + (len / sizeof(__be32));
-	for (i = 0; i < MAX_USABLE_RANGES && prop < endp; i++) {
-		rgn[i].base = dt_mem_next_cell(dt_root_addr_cells, &prop);
-		rgn[i].size = dt_mem_next_cell(dt_root_size_cells, &prop);
+	endp = prop + (len / sizeof(__be32));//计算属性数据的结束指针
+	for (i = 0; i < MAX_USABLE_RANGES && prop < endp; i++) {//遍历属性值并提取内存区域（DTS文件中一个reg可能存在多个内存区域）
+		rgn[i].base = dt_mem_next_cell(dt_root_addr_cells, &prop);//获取内存区域的基地址
+		rgn[i].size = dt_mem_next_cell(dt_root_size_cells, &prop);//获取内存区域的大小
 
 		pr_debug("cap_mem_regions[%d]: base=%pa, size=%pa\n",
-			 i, &rgn[i].base, &rgn[i].size);
+			 i, &rgn[i].base, &rgn[i].size);//打印提取的内存区域
 	}
 
-	memblock_cap_memory_range(rgn[0].base, rgn[0].size);
-	for (i = 1; i < MAX_USABLE_RANGES && rgn[i].size; i++)
-		memblock_add(rgn[i].base, rgn[i].size);
+	memblock_cap_memory_range(rgn[0].base, rgn[0].size);//限制系统使用第一个可用内存范围
+	for (i = 1; i < MAX_USABLE_RANGES && rgn[i].size; i++)//如果有多个可用内存范围
+		memblock_add(rgn[i].base, rgn[i].size);//将剩余的可用内存范围添加到memblock管理中
 }
 
 #ifdef CONFIG_SERIAL_EARLYCON
@@ -981,60 +981,61 @@ u64 __init dt_mem_next_cell(int s, const __be32 **cellp)
 
 /*
  * early_init_dt_scan_memory - Look for and parse memory nodes
+ * 扫描设备树中的内存节点，并将其添加到memblock子系统中
  */
 int __init early_init_dt_scan_memory(void)
 {
-	int node, found_memory = 0;
-	const void *fdt = initial_boot_params;
+	int node, found_memory = 0;//node 用于迭代节点，found_memory 标记是否找到内存节点
+	const void *fdt = initial_boot_params;//获取设备树的初始引导参数
 
-	fdt_for_each_subnode(node, fdt, 0) {
-		const char *type = of_get_flat_dt_prop(node, "device_type", NULL);
-		const __be32 *reg, *endp;
+	fdt_for_each_subnode(node, fdt, 0) {//遍历设备树的所有子节点
+		const char *type = of_get_flat_dt_prop(node, "device_type", NULL);//获取节点的 "device_type" 属性
+		const __be32 *reg, *endp;//reg 指向节点的 "reg" 属性，endp 用于指向 "reg" 属性的末尾
 		int l;
-		bool hotpluggable;
+		bool hotpluggable;//标记内存是否支持热插拔
 
 		/* We are scanning "memory" nodes only */
-		if (type == NULL || strcmp(type, "memory") != 0)
+		if (type == NULL || strcmp(type, "memory") != 0)//仅处理 "memory" 类型的节点
 			continue;
 
-		if (!of_fdt_device_is_available(fdt, node))
-			continue;
+		if (!of_fdt_device_is_available(fdt, node))//检查节点是否可用
+			continue;//如果不可用，继续下一个节点
 
-		reg = of_get_flat_dt_prop(node, "linux,usable-memory", &l);
+		reg = of_get_flat_dt_prop(node, "linux,usable-memory", &l);//尝试获取 "linux,usable-memory" 属性
 		if (reg == NULL)
-			reg = of_get_flat_dt_prop(node, "reg", &l);
+			reg = of_get_flat_dt_prop(node, "reg", &l);//如果 "linux,usable-memory" 不存在，获取 "reg" 属性
 		if (reg == NULL)
-			continue;
+			continue;//如果没有 "reg" 属性，跳过此节点
 
-		endp = reg + (l / sizeof(__be32));
-		hotpluggable = of_get_flat_dt_prop(node, "hotpluggable", NULL);
+		endp = reg + (l / sizeof(__be32));//计算 "reg" 属性的结束位置
+		hotpluggable = of_get_flat_dt_prop(node, "hotpluggable", NULL);//检查节点是否支持热插拔
 
 		pr_debug("memory scan node %s, reg size %d,\n",
-			 fdt_get_name(fdt, node, NULL), l);
+			 fdt_get_name(fdt, node, NULL), l);//打印节点信息和 "reg" 属性大小
 
-		while ((endp - reg) >= (dt_root_addr_cells + dt_root_size_cells)) {
+		while ((endp - reg) >= (dt_root_addr_cells + dt_root_size_cells)) {//遍历 "reg" 属性中的地址和大小对
 			u64 base, size;
 
-			base = dt_mem_next_cell(dt_root_addr_cells, &reg);
-			size = dt_mem_next_cell(dt_root_size_cells, &reg);
+			base = dt_mem_next_cell(dt_root_addr_cells, &reg);//获取内存块基地址
+			size = dt_mem_next_cell(dt_root_size_cells, &reg);//获取内存大小
 
-			if (size == 0)
+			if (size == 0)//如果内存大小为 0，跳过该内存块
 				continue;
-			pr_debug(" - %llx, %llx\n", base, size);
+			pr_debug(" - %llx, %llx\n", base, size);//打印内存块的基地址和大小
 
-			early_init_dt_add_memory_arch(base, size);
+			early_init_dt_add_memory_arch(base, size);//将内存块添加到系统的memblock中
 
-			found_memory = 1;
+			found_memory = 1;//标记为找到内存节点
 
-			if (!hotpluggable)
+			if (!hotpluggable)//如果不支持热插拔，跳过热插拔处理
 				continue;
 
-			if (memblock_mark_hotplug(base, size))
+			if (memblock_mark_hotplug(base, size))//如果支持热插拔，标记内存块为热插拔内存
 				pr_warn("failed to mark hotplug range 0x%llx - 0x%llx\n",
-					base, base + size);
+					base, base + size);//如果标记失败，打印警告信息
 		}
 	}
-	return found_memory;
+	return found_memory;//返回是否找到内存节点的标志
 }
 
 int __init early_init_dt_scan_chosen(char *cmdline)
@@ -1106,44 +1107,44 @@ handle_cmdline:
 
 void __init __weak early_init_dt_add_memory_arch(u64 base, u64 size)
 {
-	const u64 phys_offset = MIN_MEMBLOCK_ADDR;
+	const u64 phys_offset = MIN_MEMBLOCK_ADDR;//系统支持的最小物理地址
 
-	if (size < PAGE_SIZE - (base & ~PAGE_MASK)) {
+	if (size < PAGE_SIZE - (base & ~PAGE_MASK)) {//如果内存块的大小不足以映射一页
 		pr_warn("Ignoring memory block 0x%llx - 0x%llx\n",
-			base, base + size);
+			base, base + size);//打印警告信息并忽略该内存块
 		return;
 	}
 
-	if (!PAGE_ALIGNED(base)) {
-		size -= PAGE_SIZE - (base & ~PAGE_MASK);
-		base = PAGE_ALIGN(base);
+	if (!PAGE_ALIGNED(base)) {//如果内存块起始地址未对齐到页边界
+		size -= PAGE_SIZE - (base & ~PAGE_MASK);//调整内存块大小以对齐到页边界
+		base = PAGE_ALIGN(base);//调整内存块的起始地址到最近的页边界
 	}
-	size &= PAGE_MASK;
+	size &= PAGE_MASK;//确保内存块大小也是页对齐的
 
-	if (base > MAX_MEMBLOCK_ADDR) {
+	if (base > MAX_MEMBLOCK_ADDR) {// 如果内存块起始地址超出系统支持的最大物理地址
 		pr_warn("Ignoring memory block 0x%llx - 0x%llx\n",
-			base, base + size);
+			base, base + size);//打印警告信息并忽略该内存块
 		return;
 	}
 
-	if (base + size - 1 > MAX_MEMBLOCK_ADDR) {
+	if (base + size - 1 > MAX_MEMBLOCK_ADDR) {//如果内存块的结束地址超出系统支持的最大物理地址
 		pr_warn("Ignoring memory range 0x%llx - 0x%llx\n",
-			((u64)MAX_MEMBLOCK_ADDR) + 1, base + size);
-		size = MAX_MEMBLOCK_ADDR - base + 1;
+			((u64)MAX_MEMBLOCK_ADDR) + 1, base + size);//打印警告信息并调整内存块大小
+		size = MAX_MEMBLOCK_ADDR - base + 1;//调整内存块的大小以适应系统的最大物理地址范围
 	}
 
-	if (base + size < phys_offset) {
+	if (base + size < phys_offset) {//如果内存块的结束地址小于系统支持的最小物理地址
 		pr_warn("Ignoring memory block 0x%llx - 0x%llx\n",
-			base, base + size);
+			base, base + size);//打印警告信息并忽略该内存块
 		return;
 	}
-	if (base < phys_offset) {
+	if (base < phys_offset) {//如果内存块的起始地址小于系统支持的最小物理地址
 		pr_warn("Ignoring memory range 0x%llx - 0x%llx\n",
-			base, phys_offset);
-		size -= phys_offset - base;
-		base = phys_offset;
+			base, phys_offset);//打印警告信息并调整内存块的起始地址
+		size -= phys_offset - base;//调整内存块大小以适应系统的最小物理地址范围
+		base = phys_offset;//将内存块的起始地址设置为系统支持的最小物理地址
 	}
-	memblock_add(base, size);
+	memblock_add(base, size);//将调整后的内存块添加到内存块管理系统中
 }
 
 static void * __init early_init_dt_alloc_memory_arch(u64 size, u64 align)
@@ -1179,29 +1180,29 @@ void __init early_init_dt_scan_nodes(void)
 	int rc;
 
 	/* Initialize {size,address}-cells info */
-	early_init_dt_scan_root();
+	early_init_dt_scan_root();//扫描设备树根节点，初始化 size-cells 和 address-cells 信息
 
 	/* Retrieve various information from the /chosen node */
-	rc = early_init_dt_scan_chosen(boot_command_line);
-	if (rc)
-		pr_warn("No chosen node found, continuing without\n");
+	rc = early_init_dt_scan_chosen(boot_command_line);//从设备树的 /chosen 节点中获取启动相关信息，如命令行参数
+	if (rc)//如果未能找到 /chosen 节点
+		pr_warn("No chosen node found, continuing without\n");//打印警告信息，但继续初始化过程
 
 	/* Setup memory, calling early_init_dt_add_memory_arch */
-	early_init_dt_scan_memory();
+	early_init_dt_scan_memory();//扫描设备树中的内存节点，设置系统内存布局
 
 	/* Handle linux,usable-memory-range property */
-	early_init_dt_check_for_usable_mem_range();
+	early_init_dt_check_for_usable_mem_range();//检查和处理可用内存范围的属性
 }
 
 bool __init early_init_dt_scan(void *params)
 {
 	bool status;
 
-	status = early_init_dt_verify(params);
+	status = early_init_dt_verify(params);//调用验证函数验证传入的设备树
 	if (!status)
-		return false;
+		return false;//表示验证失败
 
-	early_init_dt_scan_nodes();
+	early_init_dt_scan_nodes();//验证成功后，扫描设备树中的各个节点
 	return true;
 }
 

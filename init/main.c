@@ -961,7 +961,7 @@ void start_kernel(void)
 	vfs_caches_init_early();//早期初始化虚拟文件系统缓存
 	sort_main_extable();//排序主异常表，设置异常处理
 	trap_init();//初始化陷阱处理，设置陷阱和异常处理函数
-	mm_core_init();//初始化内存管理核心，设置内存管理结构
+	mm_core_init();//初始化内存管理核心。设置内存管理结构
 	poking_init();//初始化内核代码修改机制
 	ftrace_init();//初始化内核函数跟踪
 
@@ -989,7 +989,7 @@ void start_kernel(void)
 	 * workqueue to take non-housekeeping into account.
 	 *
 	 */
-	housekeeping_init();//初始化家务管理，用于处理系统后台任务
+	housekeeping_init();//初始化后台管理，用于处理系统后台任务
 
 	/*
 	 * Allow workqueue creation and work item queueing/cancelling

@@ -44,12 +44,12 @@ extern unsigned long long max_possible_pfn;
  * not initialized (only for reserved regions).
  */
 enum memblock_flags {
-	MEMBLOCK_NONE		= 0x0,	/* No special request */
-	MEMBLOCK_HOTPLUG	= 0x1,	/* hotpluggable region */
-	MEMBLOCK_MIRROR		= 0x2,	/* mirrored region */
-	MEMBLOCK_NOMAP		= 0x4,	/* don't add to kernel direct mapping */
-	MEMBLOCK_DRIVER_MANAGED = 0x8,	/* always detected via a driver */
-	MEMBLOCK_RSRV_NOINIT	= 0x10,	/* don't initialize struct pages */
+	MEMBLOCK_NONE		= 0x0,	/* No special request 无特殊请求。表示该内存块没有任何特殊属性，是默认状态 */
+	MEMBLOCK_HOTPLUG	= 0x1,	/* hotpluggable region 热插拔区域。表示该内存块属于支持热插拔的内存区域，可能会在系统运行时被添加或移除 */
+	MEMBLOCK_MIRROR		= 0x2,	/* mirrored region 镜像区域。表示该内存块是一个镜像区域，通常用于系统具有内存镜像功能，以提高数据可靠性。 */
+	MEMBLOCK_NOMAP		= 0x4,	/* don't add to kernel direct mapping 不加入内核直接映射。表示该内存块不应该被添加到内核的直接映射区域中，并在内存映射中将其视为保留区域。 */
+	MEMBLOCK_DRIVER_MANAGED = 0x8,	/* always detected via a driver 由驱动程序管理。表示该内存块由特定的驱动程序管理，通常这种内存块是通过硬件检测到的，而不是由系统内存探测机制检测到的 */
+	MEMBLOCK_RSRV_NOINIT	= 0x10,	/* don't initialize struct pages 未初始化的内存区域（仅适用于保留区域） */
 };
 
 /**
@@ -59,12 +59,12 @@ enum memblock_flags {
  * @flags: memory region attributes
  * @nid: NUMA node id
  */
-struct memblock_region {
-	phys_addr_t base;
-	phys_addr_t size;
-	enum memblock_flags flags;
+struct memblock_region {//一个内存区域
+	phys_addr_t base;//区域基地址
+	phys_addr_t size;//区域大小
+	enum memblock_flags flags;//内存区域属性
 #ifdef CONFIG_NUMA
-	int nid;
+	int nid;//节点ID
 #endif
 };
 
@@ -76,12 +76,12 @@ struct memblock_region {
  * @regions: array of regions
  * @name: the memory type symbolic name
  */
-struct memblock_type {
-	unsigned long cnt;
-	unsigned long max;
-	phys_addr_t total_size;
-	struct memblock_region *regions;
-	char *name;
+struct memblock_type {//特定类型内存区域的集合
+	unsigned long cnt;//表示该类型内存区域的数量，帮助系统跟踪管理多少个内存块
+	unsigned long max;//该类型内存区域的最大数量，确保不会超出数组容量。
+	phys_addr_t total_size;//保存所有内存区域的总物理大小
+	struct memblock_region *regions;//指向具体内存区域的指针
+	char *name;//该类型的名称
 };
 
 /**
@@ -92,10 +92,10 @@ struct memblock_type {
  * @reserved: reserved memory regions
  */
 struct memblock {
-	bool bottom_up;  /* is bottom up direction? */
-	phys_addr_t current_limit;
-	struct memblock_type memory;
-	struct memblock_type reserved;
+	bool bottom_up;  /* is bottom up direction? 内存分配的方向标志。如果为 true，表示从低地址向高地址分配内存；否则从高地址向低地址分配。 */
+	phys_addr_t current_limit;//定义了内存分配的上限，确保分配器不会超出某个物理地址
+	struct memblock_type memory;//表示系统中所有可用内存区域的集合
+	struct memblock_type reserved;//表示系统中已保留的内存区域的集合，这些区域不应被分配器使用
 };
 
 extern struct memblock memblock;
@@ -397,8 +397,23 @@ static inline int memblock_get_region_node(const struct memblock_region *r)
 #endif /* CONFIG_NUMA */
 
 /* Flags for memblock allocation APIs */
+/*
+ * 这个宏定义为所有位都为1的值，表示可以在物理地址空间的任何地方分配内存。
+ * 在内存分配时，如果使用这个标志，就意味着不限制分配的物理内存地址，
+ * 即内存可以分配在任何可用的物理地址上。
+ * */
 #define MEMBLOCK_ALLOC_ANYWHERE	(~(phys_addr_t)0)
+/*
+ * 这个宏定义为0，表示分配的内存必须是可访问的（即位于当前可用的物理内存范围内）。
+ * 使用这个标志的分配请求会确保分配到的内存是系统可直接访问的物理内存。
+ * */
 #define MEMBLOCK_ALLOC_ACCESSIBLE	0
+/*
+ * 这个宏定义为1，表示分配的内存块不应被追踪内存泄漏。
+ * 通常在内存分配时，内存块会被注册到内存泄漏检测工具（如 kmemleak）中，
+ * 但使用这个标志可以避免内存泄漏追踪，适用于不需要追踪的内存块（例如，
+ * 在非常早期的初始化阶段分配的内存）。
+ */
 #define MEMBLOCK_ALLOC_NOLEAKTRACE	1
 
 /* We are using top down, so it is safe to use 0 here */

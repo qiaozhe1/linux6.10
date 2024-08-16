@@ -3395,44 +3395,47 @@ static void __init prep_and_add_bootmem_folios(struct hstate *h,
 /*
  * Put bootmem huge pages into the standard lists after mem_map is up.
  * Note: This only applies to gigantic (order > MAX_PAGE_ORDER) pages.
+ * 在 mem_map 启动后，将引导内存的大页面放入标准列表中。
+ * 注意：这仅适用于巨大的（order > MAX_PAGE_ORDER）页面。
  */
 static void __init gather_bootmem_prealloc_node(unsigned long nid)
 {
-	LIST_HEAD(folio_list);
-	struct huge_bootmem_page *m;
-	struct hstate *h = NULL, *prev_h = NULL;
+	LIST_HEAD(folio_list);//初始化一个空的链表头，用于存储 folio（大型内存块）的链表
+	struct huge_bootmem_page *m;//定义一个指向 huge_bootmem_page 结构体的指针
+	struct hstate *h = NULL, *prev_h = NULL;//用于存储当前和之前处理的巨页状态（hstate）
 
-	list_for_each_entry(m, &huge_boot_pages[nid], list) {
-		struct page *page = virt_to_page(m);
-		struct folio *folio = (void *)page;
+	list_for_each_entry(m, &huge_boot_pages[nid], list) {//遍历指定内存节点 (nid) 下的所有预分配的巨页
+		struct page *page = virt_to_page(m);//将虚拟地址转换为 page 结构体的指针
+		struct folio *folio = (void *)page;//将 page 转换为 folio
 
-		h = m->hstate;
+		h = m->hstate;//获取当前巨页的hstate
 		/*
 		 * It is possible to have multiple huge page sizes (hstates)
 		 * in this list.  If so, process each size separately.
+		 * 如果列表中有多个巨页大小（不同的 hstate），则分别处理每种大小
 		 */
 		if (h != prev_h && prev_h != NULL)
-			prep_and_add_bootmem_folios(prev_h, &folio_list);
-		prev_h = h;
+			prep_and_add_bootmem_folios(prev_h, &folio_list);//准备并添加前一个 hstate 对应的 folio 列表到系统中
+		prev_h = h;//更新前一个 hstate 为当前 hstate
 
-		VM_BUG_ON(!hstate_is_gigantic(h));
-		WARN_ON(folio_ref_count(folio) != 1);
+		VM_BUG_ON(!hstate_is_gigantic(h));//确保当前 hstate 是巨页，如果不是则触发调试断言
+		WARN_ON(folio_ref_count(folio) != 1);// 如果 folio 的引用计数不是 1，则发出警告
 
 		hugetlb_folio_init_vmemmap(folio, h,
-					   HUGETLB_VMEMMAP_RESERVE_PAGES);
-		init_new_hugetlb_folio(h, folio);
-		list_add(&folio->lru, &folio_list);
+					   HUGETLB_VMEMMAP_RESERVE_PAGES);//初始化folio的vmemmap（虚拟内存映射）
+		init_new_hugetlb_folio(h, folio);//初始化一个新的巨页 folio
+		list_add(&folio->lru, &folio_list);//将 folio 添加到 folio_list 链表中
 
 		/*
 		 * We need to restore the 'stolen' pages to totalram_pages
 		 * in order to fix confusing memory reports from free(1) and
 		 * other side-effects, like CommitLimit going negative.
 		 */
-		adjust_managed_page_count(page, pages_per_huge_page(h));
-		cond_resched();
+		adjust_managed_page_count(page, pages_per_huge_page(h));//调整 managed_page_count，以修复内存统计问题
+		cond_resched();//检查是否需要调度其他任务
 	}
 
-	prep_and_add_bootmem_folios(h, &folio_list);
+	prep_and_add_bootmem_folios(h, &folio_list);//处理并添加最后一个 hstate 的 folio 列表到系统中
 }
 
 static void __init gather_bootmem_prealloc_parallel(unsigned long start,
@@ -3636,15 +3639,17 @@ static void __init hugetlb_hstate_alloc_pages(struct hstate *h)
 
 	hugetlb_hstate_alloc_pages_errcheck(allocated, h);
 }
-
+/*
+ *  初始化所有 hstate
+ * */
 static void __init hugetlb_init_hstates(void)
 {
 	struct hstate *h, *h2;
 
-	for_each_hstate(h) {
+	for_each_hstate(h) {//遍历所有定义的hstate
 		/* oversize hugepages were init'ed in early boot */
-		if (!hstate_is_gigantic(h))
-			hugetlb_hstate_alloc_pages(h);
+		if (!hstate_is_gigantic(h))//检查是否为gigantic巨页，如果不是，进行初始化
+			hugetlb_hstate_alloc_pages(h);//为当前hstate分配初始巨页
 
 		/*
 		 * Set demote order for each hstate.  Note that
@@ -3653,17 +3658,20 @@ static void __init hugetlb_init_hstates(void)
 		 *   is not supported, so skip this.
 		 * - If CMA allocation is possible, we can not demote
 		 *   HUGETLB_PAGE_ORDER or smaller size pages.
+		 *   为每个 hstate 设置降级顺序。注意 h->demote_order 最初为0。
+		 *   如果不支持运行时释放巨大的巨页，则无法降级，跳过此步骤.
+		 *   如果可能进行 CMA（连续内存分配），则不能降级为HUGETLB_PAGE_ORDER或更小的页。
 		 */
-		if (hstate_is_gigantic(h) && !gigantic_page_runtime_supported())
+		if (hstate_is_gigantic(h) && !gigantic_page_runtime_supported())// 如果当前hstate是gigantic，并且不支持运行时释放，跳过该hstate
 			continue;
-		if (hugetlb_cma_size && h->order <= HUGETLB_PAGE_ORDER)
+		if (hugetlb_cma_size && h->order <= HUGETLB_PAGE_ORDER)// 如果启用了CMA且巨页大小小于或等于HUGETLB_PAGE_ORDER，跳过
 			continue;
-		for_each_hstate(h2) {
-			if (h2 == h)
+		for_each_hstate(h2) {//再次遍历所有hstate
+			if (h2 == h)//跳过与当前 hstate 相同的 hstate，避免自身比较
 				continue;
 			if (h2->order < h->order &&
-			    h2->order > h->demote_order)
-				h->demote_order = h2->order;
+			    h2->order > h->demote_order)//如果h2的order小于h的order，并且大于当前h的demote_order
+				h->demote_order = h2->order;//设置h的demote_order为h2的order
 		}
 	}
 }
@@ -4562,26 +4570,29 @@ static void hugetlb_sysctl_init(void);
 #else
 static inline void hugetlb_sysctl_init(void) { }
 #endif
-
+/*
+ * 巨页子系统初始化
+ * */
 static int __init hugetlb_init(void)
 {
 	int i;
 
 	BUILD_BUG_ON(sizeof_field(struct page, private) * BITS_PER_BYTE <
-			__NR_HPAGEFLAGS);
+			__NR_HPAGEFLAGS);//编译时检查，确保页结构中的 private 字段足够大以容纳巨页标志
 
-	if (!hugepages_supported()) {
+	if (!hugepages_supported()) {//检查当前架构是否支持巨页
 		if (hugetlb_max_hstate || default_hstate_max_huge_pages)
-			pr_warn("HugeTLB: huge pages not supported, ignoring associated command-line parameters\n");
-		return 0;
+			pr_warn("HugeTLB: huge pages not supported, ignoring associated command-line parameters\n");//如果不支持巨页且命令行中有巨页相关参数，打印警告
+		return 0;// 不支持巨页，直接返回
 	}
 
 	/*
 	 * Make sure HPAGE_SIZE (HUGETLB_PAGE_ORDER) hstate exists.  Some
 	 * architectures depend on setup being done here.
+	 * 确保存在 HUGETLB_PAGE_ORDER 对应的 hstate。一些架构依赖于此处的设置。
 	 */
-	hugetlb_add_hstate(HUGETLB_PAGE_ORDER);
-	if (!parsed_default_hugepagesz) {
+	hugetlb_add_hstate(HUGETLB_PAGE_ORDER);//添加巨页大小对应的 hstate，确保系统支持默认巨页大小。
+	if (!parsed_default_hugepagesz) {//如果没有解析默认巨页大小
 		/*
 		 * If we did not parse a default huge page size, set
 		 * default_hstate_idx to HPAGE_SIZE hstate. And, if the
@@ -4589,49 +4600,52 @@ static int __init hugetlb_init(void)
 		 * specified, set that here as well.
 		 * Note that the implicit setting will overwrite an explicit
 		 * setting.  A warning will be printed in this case.
+		 * 如果没有解析默认巨页大小，设置默认 hstate 为 HPAGE_SIZE 对应的 hstate。
+		 * 如果为该默认大小隐式指定了巨页数，则在此处设置。注意，隐式设置将覆盖显式设置，
+		 * 并会打印警告。
 		 */
-		default_hstate_idx = hstate_index(size_to_hstate(HPAGE_SIZE));
-		if (default_hstate_max_huge_pages) {
-			if (default_hstate.max_huge_pages) {
+		default_hstate_idx = hstate_index(size_to_hstate(HPAGE_SIZE));//设置默认hstate索引为HPAGE_SIZE的hstate
+		if (default_hstate_max_huge_pages) {//如果命令行中指定了默认最大巨页数
+			if (default_hstate.max_huge_pages) {//如果已经有了默认最大巨页数的设置
 				char buf[32];
 
 				string_get_size(huge_page_size(&default_hstate),
-					1, STRING_UNITS_2, buf, 32);
+					1, STRING_UNITS_2, buf, 32);//获取巨页大小的字符串表示
 				pr_warn("HugeTLB: Ignoring hugepages=%lu associated with %s page size\n",
-					default_hstate.max_huge_pages, buf);
+					default_hstate.max_huge_pages, buf);//打印警告，忽略先前的设置
 				pr_warn("HugeTLB: Using hugepages=%lu for number of default huge pages\n",
-					default_hstate_max_huge_pages);
+					default_hstate_max_huge_pages);//打印警告，使用命令行中指定的巨页数
 			}
 			default_hstate.max_huge_pages =
-				default_hstate_max_huge_pages;
+				default_hstate_max_huge_pages;//设置默认 hstate 的最大巨页数
 
-			for_each_online_node(i)
+			for_each_online_node(i)//遍历每一个在线节点
 				default_hstate.max_huge_pages_node[i] =
-					default_hugepages_in_node[i];
+					default_hugepages_in_node[i];//设置每个节点的默认最大巨页数
 		}
 	}
 
-	hugetlb_cma_check();
-	hugetlb_init_hstates();
-	gather_bootmem_prealloc();
-	report_hugepages();
+	hugetlb_cma_check();// 检查是否启用了CMA
+	hugetlb_init_hstates();//初始化所有hstate
+	gather_bootmem_prealloc();//收集并预分配启动内存中的巨页
+	report_hugepages();//打印当前巨页配置信息
 
-	hugetlb_sysfs_init();
-	hugetlb_cgroup_file_init();
-	hugetlb_sysctl_init();
+	hugetlb_sysfs_init();//初始化巨页的 sysfs 接口
+	hugetlb_cgroup_file_init();//初始化 cgroup 控制文件
+	hugetlb_sysctl_init();//初始化巨页相关的 sysctl 接口
 
 #ifdef CONFIG_SMP
-	num_fault_mutexes = roundup_pow_of_two(8 * num_possible_cpus());
+	num_fault_mutexes = roundup_pow_of_two(8 * num_possible_cpus());//计算用于处理巨页缺页故障的互斥体数量，SMP（对称多处理）下可能为的 CPU 数的 8倍，并取近的2的幂
 #else
-	num_fault_mutexes = 1;
+	num_fault_mutexes = 1;//非 SMP 环境下，只需一个互斥体
 #endif
 	hugetlb_fault_mutex_table =
 		kmalloc_array(num_fault_mutexes, sizeof(struct mutex),
-			      GFP_KERNEL);
-	BUG_ON(!hugetlb_fault_mutex_table);
+			      GFP_KERNEL);//为互斥体数组分配内存
+	BUG_ON(!hugetlb_fault_mutex_table);//如果分配失败，触发内核错误
 
 	for (i = 0; i < num_fault_mutexes; i++)
-		mutex_init(&hugetlb_fault_mutex_table[i]);
+		mutex_init(&hugetlb_fault_mutex_table[i]);//初始化每个互斥体
 	return 0;
 }
 subsys_initcall(hugetlb_init);
@@ -4647,24 +4661,24 @@ void __init hugetlb_add_hstate(unsigned int order)
 	struct hstate *h;
 	unsigned long i;
 
-	if (size_to_hstate(PAGE_SIZE << order)) {
+	if (size_to_hstate(PAGE_SIZE << order)) {//如果给定的order计算得出的巨页大小已经存在对应的hstate,直接返回
 		return;
 	}
-	BUG_ON(hugetlb_max_hstate >= HUGE_MAX_HSTATE);
-	BUG_ON(order < order_base_2(__NR_USED_SUBPAGE));
-	h = &hstates[hugetlb_max_hstate++];
-	mutex_init(&h->resize_lock);
-	h->order = order;
-	h->mask = ~(huge_page_size(h) - 1);
-	for (i = 0; i < MAX_NUMNODES; ++i)
-		INIT_LIST_HEAD(&h->hugepage_freelists[i]);
-	INIT_LIST_HEAD(&h->hugepage_activelist);
-	h->next_nid_to_alloc = first_memory_node;
-	h->next_nid_to_free = first_memory_node;
+	BUG_ON(hugetlb_max_hstate >= HUGE_MAX_HSTATE);//hstate数量超过最大允许数量发出错误
+	BUG_ON(order < order_base_2(__NR_USED_SUBPAGE));//给定的order小于内核定义的最小order,发出错误
+	h = &hstates[hugetlb_max_hstate++];//获取一个新的hstate结构并更新全局hstate数量
+	mutex_init(&h->resize_lock);//初始化互斥锁
+	h->order = order;//设置hstate结构中的order
+	h->mask = ~(huge_page_size(h) - 1);//设置hstate中的掩码，用于对齐
+	for (i = 0; i < MAX_NUMNODES; ++i)//遍历所有节点
+		INIT_LIST_HEAD(&h->hugepage_freelists[i]);//初始化每个节点上的巨页空闲链表
+	INIT_LIST_HEAD(&h->hugepage_activelist);//初始化活动巨页链表
+	h->next_nid_to_alloc = first_memory_node;//设置下一个用于分配的节点ID
+	h->next_nid_to_free = first_memory_node;//设置下一个用于释放的节点ID
 	snprintf(h->name, HSTATE_NAME_LEN, "hugepages-%lukB",
-					huge_page_size(h)/SZ_1K);
+					huge_page_size(h)/SZ_1K);//设置hstate的名称
 
-	parsed_hstate = h;
+	parsed_hstate = h;//将当前hstate设置为以解析hsatte
 }
 
 bool __init __weak hugetlb_node_alloc_supported(void)

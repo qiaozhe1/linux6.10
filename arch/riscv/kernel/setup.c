@@ -227,20 +227,20 @@ static void __init init_resources(void)
 static void __init parse_dtb(void)
 {
 	/* Early scan of device tree from init memory */
-	if (early_init_dt_scan(dtb_early_va)) {
-		const char *name = of_flat_dt_get_machine_name();
+	if (early_init_dt_scan(dtb_early_va)) {//一个早期的设备树扫描函数，dtb_early_va 是设备树在内存中的早期虚拟地址。此函数尝试从该地址读取并解析设备树。解析成功则返回 true，否则返回 false。
+		const char *name = of_flat_dt_get_machine_name();//设备树中查找机器模型名称，如果成功找到则返回指向该名称的指针。
 
 		if (name) {
-			pr_info("Machine model: %s\n", name);
-			dump_stack_set_arch_desc("%s (DT)", name);
+			pr_info("Machine model: %s\n", name);//输出机器模型名称
+			dump_stack_set_arch_desc("%s (DT)", name);//设置堆栈转储的架构描述
 		}
 	} else {
-		pr_err("No DTB passed to the kernel\n");
+		pr_err("No DTB passed to the kernel\n");//输出错误信息，表示未传递DTB给内核
 	}
 
 #ifdef CONFIG_CMDLINE_FORCE
-	strscpy(boot_command_line, CONFIG_CMDLINE, COMMAND_LINE_SIZE);
-	pr_info("Forcing kernel command line to: %s\n", boot_command_line);
+	strscpy(boot_command_line, CONFIG_CMDLINE, COMMAND_LINE_SIZE);//强制将内核命令行设置为 `CONFIG_CMDLINE`
+	pr_info("Forcing kernel command line to: %s\n", boot_command_line);//输出信息，显示被强制设置的内核命令行
 #endif
 }
 
@@ -248,7 +248,7 @@ extern void __init init_rt_signal_env(void);
 
 void __init setup_arch(char **cmdline_p)
 {
-	parse_dtb();//解析设备树二进制（DTB）
+	parse_dtb();//解析设备树（DTB）
 	setup_initial_init_mm(_stext, _etext, _edata, _end);//设置初始内存管理，传入内核文本段和数据段的起始和结束地址
 
 	*cmdline_p = boot_command_line;//将引导命令行参数指针指向全局的引导命令行

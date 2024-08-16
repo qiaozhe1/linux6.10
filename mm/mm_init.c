@@ -2707,7 +2707,7 @@ void __init mm_core_init(void)
 	report_meminit();//报告内存初始化信息
 	kmsan_init_shadow();//初始化 KMSAN（Kernel Memory Sanitizer）的影子内存
 	stack_depot_early_init();//早期初始化栈存储（stack depot）
-	mem_init();//初始化内存管理子系统
+	mem_init();//初始化内存管理子系统(处理设备无法访问4G以上空间的问题)
 	mem_init_print_info();//打印内存初始化信息
 	kmem_cache_init();//初始化内存缓存（kmem cache）
 	/*

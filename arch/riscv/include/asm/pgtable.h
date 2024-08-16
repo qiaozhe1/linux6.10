@@ -534,7 +534,7 @@ static inline void set_ptes(struct mm_struct *mm, unsigned long addr,
 	page_table_check_ptes_set(mm, ptep, pteval, nr);//检查将要设置的页表项是否有效，以防止设置无效的页表项。
 
 	for (;;) {//无限循环
-		__set_pte_at(mm, ptep, pteval);//设置单个页表项
+		__set_pte_at(mm, ptep, pteval);//设置单个页表项(将pteval写到ptep地址处)
 		if (--nr == 0)//如果nr减为0，说明所有页表项都设置完毕
 			break;
 		ptep++;//移动到下一个页表项
@@ -571,7 +571,7 @@ static inline pte_t ptep_get_and_clear(struct mm_struct *mm,
 static inline void ptep_set_wrprotect(struct mm_struct *mm,
 				      unsigned long address, pte_t *ptep)
 {
-	atomic_long_and(~(unsigned long)_PAGE_WRITE, (atomic_long_t *)ptep);
+	atomic_long_and(~(unsigned long)_PAGE_WRITE, (atomic_long_t *)ptep);//清除页表项中的写位
 }
 
 #define __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH

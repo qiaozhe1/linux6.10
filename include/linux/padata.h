@@ -139,15 +139,15 @@ struct padata_shell {
  *               depending on task size and minimum chunk size.
  * @numa_aware: Distribute jobs to different nodes with CPU in a round robin fashion.
  */
-struct padata_mt_job {
-	void (*thread_fn)(unsigned long start, unsigned long end, void *arg);
-	void			*fn_arg;
-	unsigned long		start;
-	unsigned long		size;
-	unsigned long		align;
-	unsigned long		min_chunk;
-	int			max_threads;
-	bool			numa_aware;
+struct padata_mt_job {//一个多线程任务结构体
+	void (*thread_fn)(unsigned long start, unsigned long end, void *arg);//线程函数指针
+	void			*fn_arg;//传递给线程函数的参数
+	unsigned long		start;//数据块的起始地址
+	unsigned long		size;//数据块的总大小
+	unsigned long		align;//数据块的对齐要求，通常用于优化内存访问
+	unsigned long		min_chunk;//每个线程处理的最小数据块大小
+	int			max_threads;//最大允许的线程数，用于并行处理
+	bool			numa_aware;//是否考虑 NUMA（非一致性内存访问）拓扑结构
 };
 
 /**

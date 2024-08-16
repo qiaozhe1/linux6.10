@@ -223,14 +223,15 @@ __memblock_find_range_bottom_up(phys_addr_t start, phys_addr_t end,
 {
 	phys_addr_t this_start, this_end, cand;
 	u64 i;
-
+	/*遍历所有空闲的内存区域，依次从低地址到高地址进行检查*/
 	for_each_free_mem_range(i, nid, flags, &this_start, &this_end, NULL) {
+		/*将当前检查的内存区域的起始地址和结束地址限制在[start, end]范围内*/
 		this_start = clamp(this_start, start, end);
 		this_end = clamp(this_end, start, end);
 
-		cand = round_up(this_start, align);
-		if (cand < this_end && this_end - cand >= size)
-			return cand;
+		cand = round_up(this_start, align);// 计算符合对齐要求的候选起始地址(align:对齐要求)
+		if (cand < this_end && this_end - cand >= size)//检查候选地址是否在有效范围内且能够容纳所需的内存大小
+			return cand;//成功返回起始地址
 	}
 
 	return 0;
@@ -298,18 +299,18 @@ static phys_addr_t __init_memblock memblock_find_in_range_node(phys_addr_t size,
 	/* pump up @end */
 	if (end == MEMBLOCK_ALLOC_ACCESSIBLE ||
 	    end == MEMBLOCK_ALLOC_NOLEAKTRACE)
-		end = memblock.current_limit;
+		end = memblock.current_limit;//将end设为当前的内存限制（即可访问的内存上限）
 
 	/* avoid allocating the first page */
-	start = max_t(phys_addr_t, start, PAGE_SIZE);
+	start = max_t(phys_addr_t, start, PAGE_SIZE);// 确保起始地址至少为一个页面大小，以避免分配第一个页面
 	end = max(start, end);
 
-	if (memblock_bottom_up())
+	if (memblock_bottom_up())//检查是否采用从底部向上的分配策略
 		return __memblock_find_range_bottom_up(start, end, size, align,
-						       nid, flags);
+						       nid, flags);//从底部向上查找内存块
 	else
 		return __memblock_find_range_top_down(start, end, size, align,
-						      nid, flags);
+						      nid, flags);//从顶部向下查找内存块
 }
 
 /**
@@ -1438,51 +1439,51 @@ phys_addr_t __init memblock_alloc_range_nid(phys_addr_t size,
 					phys_addr_t end, int nid,
 					bool exact_nid)
 {
-	enum memblock_flags flags = choose_memblock_flags();
+	enum memblock_flags flags = choose_memblock_flags();// 选择内存块标志位（如是否镜像）
 	phys_addr_t found;
 
-	if (!align) {
+	if (!align) {//如果对齐大小为0，表示错误情况
 		/* Can't use WARNs this early in boot on powerpc */
-		dump_stack();
-		align = SMP_CACHE_BYTES;
+		dump_stack();//打印调用栈进行调试
+		align = SMP_CACHE_BYTES;//设置默认对齐大小为SMP缓存行大小
 	}
 
 again:
 	found = memblock_find_in_range_node(size, align, start, end, nid,
-					    flags);
-	if (found && !memblock_reserve(found, size))
+					    flags);//在指定范围和节点上查找合适的内存块
+	if (found && !memblock_reserve(found, size))//如果找到合适的内存块并成功保留
 		goto done;
 
-	if (numa_valid_node(nid) && !exact_nid) {
+	if (numa_valid_node(nid) && !exact_nid) {//如果指定的NUMA节点有效且不要求严格匹配节点
 		found = memblock_find_in_range_node(size, align, start,
 						    end, NUMA_NO_NODE,
-						    flags);
-		if (found && !memblock_reserve(found, size))
+						    flags);// 尝试在任何节点上查找内存块
+		if (found && !memblock_reserve(found, size))//如果找到并成功保留
 			goto done;
 	}
 
-	if (flags & MEMBLOCK_MIRROR) {
-		flags &= ~MEMBLOCK_MIRROR;
+	if (flags & MEMBLOCK_MIRROR) {//如果当前标志位要求镜像内存
+		flags &= ~MEMBLOCK_MIRROR;//移除镜像标志位
 		pr_warn_ratelimited("Could not allocate %pap bytes of mirrored memory\n",
-			&size);
+			&size);//重试分配
 		goto again;
 	}
 
-	return 0;
+	return 0;//如果未能找到合适的内存块，返回0表示失败
 
 done:
 	/*
 	 * Skip kmemleak for those places like kasan_init() and
 	 * early_pgtable_alloc() due to high volume.
 	 */
-	if (end != MEMBLOCK_ALLOC_NOLEAKTRACE)
+	if (end != MEMBLOCK_ALLOC_NOLEAKTRACE)//如果 end 不是特殊标志 MEMBLOCK_ALLOC_NOLEAKTRACE
 		/*
 		 * Memblock allocated blocks are never reported as
 		 * leaks. This is because many of these blocks are
 		 * only referred via the physical address which is
 		 * not looked up by kmemleak.
 		 */
-		kmemleak_alloc_phys(found, size, 0);
+		kmemleak_alloc_phys(found, size, 0);//将已分配的物理内存块注册到内存泄漏检测工具中
 
 	/*
 	 * Some Virtual Machine platforms, such as Intel TDX or AMD SEV-SNP,
@@ -1491,9 +1492,9 @@ done:
 	 *
 	 * Accept the memory of the allocated buffer.
 	 */
-	accept_memory(found, found + size);
+	accept_memory(found, found + size);//如果平台需要，接受已分配的内存
 
-	return found;
+	return found;// 返回找到的物理地址
 }
 
 /**

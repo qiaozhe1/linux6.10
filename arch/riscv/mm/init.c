@@ -159,22 +159,27 @@ static void __init print_vm_layout(void)
 #else
 static void print_vm_layout(void) { }
 #endif /* CONFIG_DEBUG_VM */
-
+/*
+ * swiotlb (Software I/O Translation Lookaside Buffer): 是Linux内核用于
+ * 处理设备无法直接访问高位内存（超过4GB）的问题的一种机制。它通过在低
+ * 位内存中分配缓冲区，将高位内存的数据传输到该缓冲区，以便设备能够访问。
+ */
 void __init mem_init(void)
 {
 	bool swiotlb = max_pfn > PFN_DOWN(dma32_phys_limit);//用于表示是否需要启用 swiotlb（Software I/O Translation Lookaside Buffer）。max_pfn 是系统中最大页面帧号，PFN_DOWN(dma32_phys_limit) 将 dma32_phys_limit 转换为页框号。如果 max_pfn 大于 dma32_phys_limit 对应的页框号，则表示系统内存超过 4GB，需要启用 swiotlb。
 #ifdef CONFIG_FLATMEM
 	BUG_ON(!mem_map);
 #endif /* CONFIG_FLATMEM */
-
+	/*如果系统启用了非对齐的kmalloc反弹（CONFIG_DMA_BOUNCE_UNALIGNED_KMALLOC），且不需要swiotlb，但是缓存对齐不为1字节,则为每1GB内存分配1MB的swiotlb缓冲区。这是为了处理非一致性内存平台上的kmalloc反弹问题。*/
 	if (IS_ENABLED(CONFIG_DMA_BOUNCE_UNALIGNED_KMALLOC) && !swiotlb &&
 	    dma_cache_alignment != 1) {
 		/*
 		 * If no bouncing needed for ZONE_DMA, allocate 1MB swiotlb
 		 * buffer per 1GB of RAM for kmalloc() bouncing on
 		 * non-coherent platforms.
-		 * 如果不需要为 ZONE_DMA 进行反弹操作，则为每 1GB RAM 分配 1MB swiotlb
-		 * 缓冲区，用于在非一致性平台上进行 kmalloc() 反弹操作。
+		 * 如果系统不需要为ZONE_DMA（DMA内存区域）启用swiotlb，但是
+		 * kmalloc分配的内存不一致（非一致性缓存），则为每1GB的RAM分
+		 * 配1MB的swiotlb缓冲区，用于处理kmalloc内存的反弹操作
 		 */
 		unsigned long size =
 			DIV_ROUND_UP(memblock_phys_mem_size(), 1024);//计算需要的swiotlb大小，memblock_phys_mem_size()返回物理内存大小，除以1024得到MB为单位的内存大小。
@@ -209,79 +214,93 @@ static int __init early_mem(char *p)
 	return 0;
 }
 early_param("mem", early_mem);
-
+/*
+ * 内核引导阶段的内存初始化函数(设置一些保留内存,避免之后使用到这些内存)
+ * */
 static void __init setup_bootmem(void)
 {
-	phys_addr_t vmlinux_end = __pa_symbol(&_end);
+	phys_addr_t vmlinux_end = __pa_symbol(&_end);//获取内核映像结束地址
 	phys_addr_t max_mapped_addr;
 	phys_addr_t phys_ram_end, vmlinux_start;
 
-	if (IS_ENABLED(CONFIG_XIP_KERNEL))
-		vmlinux_start = __pa_symbol(&_sdata);
+	if (IS_ENABLED(CONFIG_XIP_KERNEL))//如果启用了内核的执行时映射配置
+		vmlinux_start = __pa_symbol(&_sdata);//获取内核数据段的起始物理地址
 	else
-		vmlinux_start = __pa_symbol(&_start);
+		vmlinux_start = __pa_symbol(&_start);//获取内核代码段的起始物理地址
 
-	memblock_enforce_memory_limit(memory_limit);
+	memblock_enforce_memory_limit(memory_limit);//强制将内存使用限制在指定的范围内
 
 	/*
 	 * Make sure we align the reservation on PMD_SIZE since we will
 	 * map the kernel in the linear mapping as read-only: we do not want
 	 * any allocation to happen between _end and the next pmd aligned page.
+	 * 确保我们在 PMD_SIZE 边界上对齐保留的内存，因为我们将内核作为只读映射
+	 * 到线性映射中：我们不希望在 _end 和下一个 pmd 对齐页之间发生任何分配。
 	 */
 	if (IS_ENABLED(CONFIG_64BIT) && IS_ENABLED(CONFIG_STRICT_KERNEL_RWX))
-		vmlinux_end = (vmlinux_end + PMD_SIZE - 1) & PMD_MASK;
+		vmlinux_end = (vmlinux_end + PMD_SIZE - 1) & PMD_MASK;//将vmlinux_end对齐到PMD边界
 	/*
 	 * Reserve from the start of the kernel to the end of the kernel
+	 * 保留内核从起始地址到内核的结束地址所占有的内存
 	 */
-	memblock_reserve(vmlinux_start, vmlinux_end - vmlinux_start);
+	memblock_reserve(vmlinux_start, vmlinux_end - vmlinux_start);//保留内核映像在物理内存中的区域，防止其他部分使用该区域内存
 
-	phys_ram_end = memblock_end_of_DRAM();
+	phys_ram_end = memblock_end_of_DRAM();//获取物理内存的结束地址
 
 	/*
 	 * Make sure we align the start of the memory on a PMD boundary so that
 	 * at worst, we map the linear mapping with PMD mappings.
+	 * 确保我们在 PMD 边界上对齐内存的起始地址，以便在最坏的情况下，
+	 * 我们用 PMD 映射来映射线性映射。
 	 */
-	if (!IS_ENABLED(CONFIG_XIP_KERNEL))
-		phys_ram_base = memblock_start_of_DRAM() & PMD_MASK;
+	if (!IS_ENABLED(CONFIG_XIP_KERNEL))// 如果内核未启用 XIP(XIP是一种将代码直接从只读存储器（ROM）或闪存（Flash）执行，而不将其复制到RAM的技术)
+		phys_ram_base = memblock_start_of_DRAM() & PMD_MASK;//对齐物理内存的起始地址到PMD边界
 
 	/*
 	 * In 64-bit, any use of __va/__pa before this point is wrong as we
 	 * did not know the start of DRAM before.
+	 * 在64位系统中，任何在此之前使用__va/__pa的操作都是错误的，
+	 * 因为我们之前不知道 DRAM 的起始地址
 	 */
-	if (IS_ENABLED(CONFIG_64BIT) && IS_ENABLED(CONFIG_MMU))
-		kernel_map.va_pa_offset = PAGE_OFFSET - phys_ram_base;
+	if (IS_ENABLED(CONFIG_64BIT) && IS_ENABLED(CONFIG_MMU))//如果启用了64位架构并且启用了MMU
+		kernel_map.va_pa_offset = PAGE_OFFSET - phys_ram_base;//设置内核虚拟地址和物理地址的偏移量
 
 	/*
 	 * Reserve physical address space that would be mapped to virtual
 	 * addresses greater than (void *)(-PAGE_SIZE) because:
 	 *  - This memory would overlap with ERR_PTR
 	 *  - This memory belongs to high memory, which is not supported
-	 *
+	 * 保留大于 (void *)(-PAGE_SIZE) 的虚拟地址映射物理地址空间，因为：
+	 * - 这部分内存将与 ERR_PTR 重叠
+	 * - 这部分内存属于高内存区域，而高内存不被支持  
 	 * This is not applicable to 64-bit kernel, because virtual addresses
 	 * after (void *)(-PAGE_SIZE) are not linearly mapped: they are
 	 * occupied by kernel mapping. Also it is unrealistic for high memory
 	 * to exist on 64-bit platforms.
+	 * 这不适用于64位内核，因为 (void *)(-PAGE_SIZE) 之后的虚拟地址不是线性映射的：
+	 * 它们被内核映射占用。此外，高内存存在于64位平台上也是不现实的。
 	 */
-	if (!IS_ENABLED(CONFIG_64BIT)) {
-		max_mapped_addr = __va_to_pa_nodebug(-PAGE_SIZE);
-		memblock_reserve(max_mapped_addr, (phys_addr_t)-max_mapped_addr);
+	if (!IS_ENABLED(CONFIG_64BIT)) {//如果不是64位架构
+		max_mapped_addr = __va_to_pa_nodebug(-PAGE_SIZE);//计算最大映射地址(虚拟地址 -PAGE_SIZE 对应的物理地址)
+		memblock_reserve(max_mapped_addr, (phys_addr_t)-max_mapped_addr);//保留从 max_mapped_addr 到物理地址空间上限的地址区域(高端内存不被使用，因此保留)
 	}
 
-	min_low_pfn = PFN_UP(phys_ram_base);
-	max_low_pfn = max_pfn = PFN_DOWN(phys_ram_end);
-	high_memory = (void *)(__va(PFN_PHYS(max_low_pfn)));
+	min_low_pfn = PFN_UP(phys_ram_base);//设置最小的低端物理页帧号
+	max_low_pfn = max_pfn = PFN_DOWN(phys_ram_end);//设置最大的低端物理页帧号
+	high_memory = (void *)(__va(PFN_PHYS(max_low_pfn)));//设置高端内存的起始虚拟地址
 
-	dma32_phys_limit = min(4UL * SZ_1G, (unsigned long)PFN_PHYS(max_low_pfn));
-	set_max_mapnr(max_low_pfn - ARCH_PFN_OFFSET);
+	dma32_phys_limit = min(4UL * SZ_1G, (unsigned long)PFN_PHYS(max_low_pfn));//设置DMA32物理地址限制
+	set_max_mapnr(max_low_pfn - ARCH_PFN_OFFSET);//设置最大物理页帧号
 
-	reserve_initrd_mem();
+	reserve_initrd_mem();//保留初始RAM磁盘的内存区域,防止其他部分使用这块内存。
 
 	/*
 	 * No allocation should be done before reserving the memory as defined
 	 * in the device tree, otherwise the allocation could end up in a
 	 * reserved region.
+	 * 在根据设备树保留内存之前，不应进行任何分配，否则分配可能会落入保留区域
 	 */
-	early_init_fdt_scan_reserved_mem();
+	early_init_fdt_scan_reserved_mem();//初始化并扫描设备树中定义的保留内存区域
 
 	/*
 	 * If DTB is built in, no need to reserve its memblock.
@@ -290,11 +309,11 @@ static void __init setup_bootmem(void)
 	 * not work for DTB pointers that are fixmap addresses
 	 */
 	if (!IS_ENABLED(CONFIG_BUILTIN_DTB))
-		memblock_reserve(dtb_early_pa, fdt_totalsize(dtb_early_va));
+		memblock_reserve(dtb_early_pa, fdt_totalsize(dtb_early_va));//如果 DTB 不是内置的，则保留其内存区域
 
-	dma_contiguous_reserve(dma32_phys_limit);
+	dma_contiguous_reserve(dma32_phys_limit);//保留用于 DMA 的连续内存区域
 	if (IS_ENABLED(CONFIG_64BIT))
-		hugetlb_cma_reserve(PUD_SHIFT - PAGE_SHIFT);
+		hugetlb_cma_reserve(PUD_SHIFT - PAGE_SHIFT);//如果是 64 位系统，保留巨页相关的 CMA 区域
 }
 
 #ifdef CONFIG_MMU
@@ -332,21 +351,23 @@ static const pgprot_t protection_map[16] = {
 	[VM_SHARED | VM_EXEC | VM_WRITE | VM_READ]	= PAGE_SHARED_EXEC
 };
 DECLARE_VM_GET_PAGE_PROT
-
+/*
+ * 设置或清除内核固定映射表(fixmap区域)
+ * */
 void __set_fixmap(enum fixed_addresses idx, phys_addr_t phys, pgprot_t prot)
 {
-	unsigned long addr = __fix_to_virt(idx);
-	pte_t *ptep;
+	unsigned long addr = __fix_to_virt(idx);//将固定地址索引转换为虚拟地址(idx索引值越大，虚拟地址越小)
+	pte_t *ptep;//定义页表项指针，用于指向目标页表项。
 
-	BUG_ON(idx <= FIX_HOLE || idx >= __end_of_fixed_addresses);
+	BUG_ON(idx <= FIX_HOLE || idx >= __end_of_fixed_addresses);//确保传入的固定地址索引是有效的，不能小于或等于 FIX_HOLE，也不能超过固定地址的范围。
 
-	ptep = &fixmap_pte[pte_index(addr)];
+	ptep = &fixmap_pte[pte_index(addr)];//计算目标页表项的地址，该地址位于固定映射的页表区域。
 
-	if (pgprot_val(prot))
+	if (pgprot_val(prot))//如果给定的页保护标志有效，设置页表项，将物理地址映射到固定的虚拟地址。
 		set_pte(ptep, pfn_pte(phys >> PAGE_SHIFT, prot));
 	else
-		pte_clear(&init_mm, addr, ptep);
-	local_flush_tlb_page(addr);
+		pte_clear(&init_mm, addr, ptep);//如果给定的页保护标志无效，清除页表项，从而取消该映射。
+	local_flush_tlb_page(addr);//刷新 TLB，以确保新设置或清除的映射立即生效。
 }
 
 static inline pte_t *__init get_pte_virt_early(phys_addr_t pa)
@@ -682,26 +703,26 @@ void __init create_pgd_mapping(pgd_t *pgdp,
 
 	create_pgd_next_mapping(nextp, va, pa, sz, prot);
 }
-
+/*根据物理地址、虚拟地址和大小，确定最佳映射大小*/
 static uintptr_t __init best_map_size(phys_addr_t pa, uintptr_t va,
 				      phys_addr_t size)
 {
-	if (debug_pagealloc_enabled())
+	if (debug_pagealloc_enabled())//如果启用了调试页分配，则使用页大小进行映射
 		return PAGE_SIZE;
 
 	if (pgtable_l5_enabled &&
-	    !(pa & (P4D_SIZE - 1)) && !(va & (P4D_SIZE - 1)) && size >= P4D_SIZE)
-		return P4D_SIZE;
+	    !(pa & (P4D_SIZE - 1)) && !(va & (P4D_SIZE - 1)) && size >= P4D_SIZE)//如果启用了5级页表，并且物理地址和虚拟地址都对齐到P4D_SIZE，并且大小大于或等于P4D_SIZE
+		return P4D_SIZE;//返回P4D_SIZE作为映射大小
 
 	if (pgtable_l4_enabled &&
-	    !(pa & (PUD_SIZE - 1)) && !(va & (PUD_SIZE - 1)) && size >= PUD_SIZE)
-		return PUD_SIZE;
+	    !(pa & (PUD_SIZE - 1)) && !(va & (PUD_SIZE - 1)) && size >= PUD_SIZE)// 如果启用了4级页表，并且物理地址和虚拟地址都对齐到PUD_SIZE，并且大小大于或等于PUD_SIZE
+		return PUD_SIZE;//返回PUD_SIZE作为映射大小
 
 	if (IS_ENABLED(CONFIG_64BIT) &&
-	    !(pa & (PMD_SIZE - 1)) && !(va & (PMD_SIZE - 1)) && size >= PMD_SIZE)
-		return PMD_SIZE;
+	    !(pa & (PMD_SIZE - 1)) && !(va & (PMD_SIZE - 1)) && size >= PMD_SIZE)//如果启用了64位架构，并且物理地址和虚拟地址都对齐到PMD_SIZE，并且大小大于或等于PMD_SIZE
+		return PMD_SIZE;//返回PMD_SIZE作为映射大小
 
-	return PAGE_SIZE;
+	return PAGE_SIZE;//默认情况下，返回页大小作为映射大小
 }
 
 #ifdef CONFIG_XIP_KERNEL
@@ -936,7 +957,7 @@ static void __init create_kernel_page_table(pgd_t *pgdir, bool early)
 	uintptr_t va, end_va;
 
 	end_va = kernel_map.virt_addr + kernel_map.size;
-	for (va = kernel_map.virt_addr; va < end_va; va += PMD_SIZE)
+	for (va = kernel_map.virt_adbest_map_sizedr; va < end_va; va += PMD_SIZE)
 		create_pgd_mapping(pgdir, va,
 				   kernel_map.phys_addr + (va - kernel_map.virt_addr),
 				   PMD_SIZE,
@@ -1244,29 +1265,31 @@ static void __init create_linear_mapping_range(phys_addr_t start,
 	phys_addr_t pa;
 	uintptr_t va, map_size;
 
-	for (pa = start; pa < end; pa += map_size) {
-		va = (uintptr_t)__va(pa);
+	for (pa = start; pa < end; pa += map_size) {//遍历物理地址范围，从start到end，步长为map_size
+		va = (uintptr_t)__va(pa);//将物理地址转换为虚拟地址
 		map_size = fixed_map_size ? fixed_map_size :
-					    best_map_size(pa, va, end - pa);
+					    best_map_size(pa, va, end - pa);//确定映射的大小，如果提供了固定大小则使用，否则根据地址计算最佳映射大小
 
 		create_pgd_mapping(swapper_pg_dir, va, pa, map_size,
-				   pgprot_from_va(va));
+				   pgprot_from_va(va));//创建页全局目录(PGD)映射.(pgprot_from_va(va) 用于获取该虚拟地址所需的保护标志（如只读、可执行等）。)
 	}
 }
-
+/*
+ * 创建线性映射的页表
+ */
 static void __init create_linear_mapping_page_table(void)
 {
-	phys_addr_t start, end;
-	phys_addr_t kfence_pool __maybe_unused;
+	phys_addr_t start, end;//定义物理地址范围的起始和结束地址
+	phys_addr_t kfence_pool __maybe_unused;//定义 KFENCE 内存池的物理地址
 	u64 i;
 
 #ifdef CONFIG_STRICT_KERNEL_RWX
-	phys_addr_t ktext_start = __pa_symbol(_start);
-	phys_addr_t ktext_size = __init_data_begin - _start;
-	phys_addr_t krodata_start = __pa_symbol(__start_rodata);
-	phys_addr_t krodata_size = _data - __start_rodata;
+	phys_addr_t ktext_start = __pa_symbol(_start);//获取内核文本段起始的物理地址
+	phys_addr_t ktext_size = __init_data_begin - _start;//计算内核文本段的大小
+	phys_addr_t krodata_start = __pa_symbol(__start_rodata);//获取只读数据段起始的物理地址
+	phys_addr_t krodata_size = _data - __start_rodata;//计算只读数据段的大小
 
-	/* Isolate kernel text and rodata so they don't get mapped with a PUD */
+	/* 将内核文本段和只读数据段标记为不映射，以避免与PUD一起映射 */
 	memblock_mark_nomap(ktext_start,  ktext_size);
 	memblock_mark_nomap(krodata_start, krodata_size);
 #endif
@@ -1276,42 +1299,44 @@ static void __init create_linear_mapping_page_table(void)
 	 *  kfence pool must be backed by PAGE_SIZE mappings, so allocate it
 	 *  before we setup the linear mapping so that we avoid using hugepages
 	 *  for this region.
+	 *  KFENCE 内存池必须由 PAGE_SIZE 映射支持，因此在线性映射之前分配它
+	 *  以避免对该区域使用巨页映射。
 	 */
-	kfence_pool = memblock_phys_alloc(KFENCE_POOL_SIZE, PAGE_SIZE);
+	kfence_pool = memblock_phys_alloc(KFENCE_POOL_SIZE, PAGE_SIZE);//分配 KFENCE 内存池
 	BUG_ON(!kfence_pool);
 
-	memblock_mark_nomap(kfence_pool, KFENCE_POOL_SIZE);
-	__kfence_pool = __va(kfence_pool);
+	memblock_mark_nomap(kfence_pool, KFENCE_POOL_SIZE);//将KFENCE内存池标记为不映射
+	__kfence_pool = __va(kfence_pool);//将物理地址转换为虚拟地址
 #endif
 
-	/* Map all memory banks in the linear mapping */
+	/* 映射所有内存块到线性映射中 */
 	for_each_mem_range(i, &start, &end) {
 		if (start >= end)
 			break;
-		if (start <= __pa(PAGE_OFFSET) &&
-		    __pa(PAGE_OFFSET) < end)
-			start = __pa(PAGE_OFFSET);
-		if (end >= __pa(PAGE_OFFSET) + memory_limit)
-			end = __pa(PAGE_OFFSET) + memory_limit;
+		if (start <= __pa(PAGE_OFFSET) &&//如果起始地址小于或等于线性映射的起始物理地址
+		    __pa(PAGE_OFFSET) < end)//且线性映射的起始物理地址小于结束地址
+			start = __pa(PAGE_OFFSET);//调整起始地址
+		if (end >= __pa(PAGE_OFFSET) + memory_limit)//如果结束地址超出线性映射限制
+			end = __pa(PAGE_OFFSET) + memory_limit;//调整结束地址
 
-		create_linear_mapping_range(start, end, 0);
+		create_linear_mapping_range(start, end, 0);//创建指定范围的线性映射
 	}
 
 #ifdef CONFIG_STRICT_KERNEL_RWX
-	create_linear_mapping_range(ktext_start, ktext_start + ktext_size, 0);
+	create_linear_mapping_range(ktext_start, ktext_start + ktext_size, 0);//创建内核文本段的线性映射
 	create_linear_mapping_range(krodata_start,
-				    krodata_start + krodata_size, 0);
+				    krodata_start + krodata_size, 0);// 创建只读数据段的线性映射
 
-	memblock_clear_nomap(ktext_start,  ktext_size);
-	memblock_clear_nomap(krodata_start, krodata_size);
+	memblock_clear_nomap(ktext_start,  ktext_size);//清除内核文本段的不映射标记
+	memblock_clear_nomap(krodata_start, krodata_size);//清除只读数据段的不映射标记
 #endif
 
 #ifdef CONFIG_KFENCE
 	create_linear_mapping_range(kfence_pool,
 				    kfence_pool + KFENCE_POOL_SIZE,
-				    PAGE_SIZE);
+				    PAGE_SIZE);// 为 KFENCE 内存池创建线性映射
 
-	memblock_clear_nomap(kfence_pool, KFENCE_POOL_SIZE);
+	memblock_clear_nomap(kfence_pool, KFENCE_POOL_SIZE);//清除 KFENCE 内存池的不映射标记
 #endif
 }
 
@@ -1324,36 +1349,36 @@ static void __init setup_vm_final(void)
 	 * directly in swapper_pg_dir in addition to the pgd entry that points
 	 * to fixmap_pte.
 	 */
-	unsigned long idx = pgd_index(__fix_to_virt(FIX_FDT));
+	unsigned long idx = pgd_index(__fix_to_virt(FIX_FDT));//计算设备树所在的 PGD 条目索引
 
-	set_pgd(&swapper_pg_dir[idx], early_pg_dir[idx]);
+	set_pgd(&swapper_pg_dir[idx], early_pg_dir[idx]);//将早期PGD条目复制到交换PGD中
 #endif
 	create_pgd_mapping(swapper_pg_dir, FIXADDR_START,
 			   __pa_symbol(fixmap_pgd_next),
-			   PGDIR_SIZE, PAGE_TABLE);
+			   PGDIR_SIZE, PAGE_TABLE);//为固定映射区域（fixmap）创建PGD（页全局目录）映射。固定映射区域是内核中用于映射硬件资源或其他特定内存区域的地址区间，通常用于全局只读映射。
 
 	/* Map the linear mapping */
-	create_linear_mapping_page_table();
+	create_linear_mapping_page_table();//创建用于线性映射的页表
 
 	/* Map the kernel */
-	if (IS_ENABLED(CONFIG_64BIT))
-		create_kernel_page_table(swapper_pg_dir, false);
+	if (IS_ENABLED(CONFIG_64BIT))//如果是64位系统
+		create_kernel_page_table(swapper_pg_dir, false);//创建内核页表
 
 #ifdef CONFIG_KASAN
-	kasan_swapper_init();
+	kasan_swapper_init();//初始化 KASAN页表
 #endif
 
 	/* Clear fixmap PTE and PMD mappings */
-	clear_fixmap(FIX_PTE);
-	clear_fixmap(FIX_PMD);
-	clear_fixmap(FIX_PUD);
-	clear_fixmap(FIX_P4D);
+	clear_fixmap(FIX_PTE);//清除固定映射的 PTE 条目
+	clear_fixmap(FIX_PMD);//清除固定映射的 PMD 条目
+	clear_fixmap(FIX_PUD);//清除固定映射的 PUD 条目
+	clear_fixmap(FIX_P4D);//清除固定映射的 P4D 条目
 
 	/* Move to swapper page table */
-	csr_write(CSR_SATP, PFN_DOWN(__pa_symbol(swapper_pg_dir)) | satp_mode);
-	local_flush_tlb_all();
+	csr_write(CSR_SATP, PFN_DOWN(__pa_symbol(swapper_pg_dir)) | satp_mode);//设置 SATP 寄存器，切换到新的页表
+	local_flush_tlb_all();//刷新所有本地 TLB
 
-	pt_ops_set_late();
+	pt_ops_set_late();//设置页表操作函数，准备好后期操作
 }
 #else
 asmlinkage void __init setup_vm(uintptr_t dtb_pa)
@@ -1397,25 +1422,25 @@ static void __init arch_reserve_crashkernel(void)
 
 void __init paging_init(void)
 {
-	setup_bootmem();
-	setup_vm_final();
+	setup_bootmem();//设置引导内存管理
+	setup_vm_final();//完成虚拟内存系统的初始化(页表创建与操作函数初始化)
 
 	/* Depend on that Linear Mapping is ready */
-	memblock_allow_resize();
+	memblock_allow_resize();//允许对 memblock进行调整，通常在引导阶段初始化结束后调用,在完成内存分页系统初始化后，调用此函数允许进一步调整内存块，如添加或移除内存区域。
 }
 
 void __init misc_mem_init(void)
 {
-	early_memtest(min_low_pfn << PAGE_SHIFT, max_low_pfn << PAGE_SHIFT);
-	arch_numa_init();
-	sparse_init();
+	early_memtest(min_low_pfn << PAGE_SHIFT, max_low_pfn << PAGE_SHIFT);//提前进行内存测试，测试范围是从 `min_low_pfn` 到 `max_low_pfn`，将页帧号左移 PAGE_SHIFT 以转换为物理地址。
+	arch_numa_init();//初始化架构相关的 NUMA（非一致性内存访问）设置
+	sparse_init();//初始化稀疏内存管理，稀疏内存管理允许系统更有效地管理非连续的物理内存。
 #ifdef CONFIG_SPARSEMEM_VMEMMAP
 	/* The entire VMEMMAP region has been populated. Flush TLB for this region */
-	local_flush_tlb_kernel_range(VMEMMAP_START, VMEMMAP_END);
+	local_flush_tlb_kernel_range(VMEMMAP_START, VMEMMAP_END);//如果启用了 CONFIG_SPARSEMEM_VMEMMAP，则刷新内核中 VMEMMAP 区域的 TLB，以确保更新后的映射生效。
 #endif
-	zone_sizes_init();
-	arch_reserve_crashkernel();
-	memblock_dump_all();
+	zone_sizes_init();//初始化内存区域的大小，设置各个内存区域（如 DMA 区、普通区、高端内存区）的大小和边界。
+	arch_reserve_crashkernel();//保留崩溃内核（crash kernel）的内存区域，确保在内核崩溃时可以成功启动 kdump 来捕获崩溃信息。
+	memblock_dump_all();//打印所有已保留的内存块信息，有助于调试和确认内存预留的情况。
 }
 
 #ifdef CONFIG_SPARSEMEM_VMEMMAP

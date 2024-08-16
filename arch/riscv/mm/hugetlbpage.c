@@ -132,25 +132,35 @@ pte_t *huge_pte_offset(struct mm_struct *mm,
 	}
 	return pte;//返回找到的pte
 }
-
+/*
+ * 计算巨页映射中页表项中剩余部分的大小
+ *
+ * 当一个巨页被映射时，它可能不会完全填满上一级页表项的地址范围。
+ * 例如，PUD 可以映射一个 1GB 的区域，而 PMD 通常映射 2MB 的区域。
+ * 因此，假设一个 PUD 中只填充了一个 PMD 巨页，剩余的部分就是 PUD_SIZE - PMD_SIZE。
+ *
+ * 在这种情况下，代码中的计算将这个剩余部分记录下来，以便在需要时
+ * 能够快速跳过这些未映射的区域。这可以优化内存管理器在遍历页表时
+ * 的性能，避免不必要的检查和操作。
+ * */
 unsigned long hugetlb_mask_last_page(struct hstate *h)
 {
-	unsigned long hp_size = huge_page_size(h);
+	unsigned long hp_size = huge_page_size(h);//获取巨页大小
 
 	switch (hp_size) {
 #ifndef __PAGETABLE_PMD_FOLDED
-	case PUD_SIZE:
-		return P4D_SIZE - PUD_SIZE;
+	case PUD_SIZE://巨页大小等于PUD_SIZE
+		return P4D_SIZE - PUD_SIZE;//计算在P4D表上剩余部分的大小
 #endif
-	case PMD_SIZE:
-		return PUD_SIZE - PMD_SIZE;
-	case napot_cont_size(NAPOT_CONT64KB_ORDER):
-		return PMD_SIZE - napot_cont_size(NAPOT_CONT64KB_ORDER);
-	default:
+	case PMD_SIZE://巨页大小等于PMD_SIZE
+		return PUD_SIZE - PMD_SIZE;//计算在PUD表中剩余部分的大小
+	case napot_cont_size(NAPOT_CONT64KB_ORDER)://巨页大小等于NAPOT_CONT64KB_ORDER指定的大小
+		return PMD_SIZE - napot_cont_size(NAPOT_CONT64KB_ORDER);//计算在PMD表中剩余部分大小
+	default://不是以上类型巨页大小
 		break;
 	}
 
-	return 0UL;
+	return 0UL;//没有匹配到合适大小，返回0
 }
 /*
  * 获取并清除连续的页表项
@@ -176,7 +186,7 @@ static pte_t get_clear_contig(struct mm_struct *mm,
 	return orig_pte;//返回修改后的 orig_pte
 }
 /*
- * 获取并清除连续的页表项，并刷新TLB
+ * 获取并清除连续的页表项，并刷新TLB(在巨页处理上，通常需判断是否属于NAPOT类型)
  * */
 static pte_t get_clear_contig_flush(struct mm_struct *mm,
 				    unsigned long addr,
@@ -192,36 +202,40 @@ static pte_t get_clear_contig_flush(struct mm_struct *mm,
 
 	return orig_pte;//返回原始页表项
 }
-
+/*
+ * 设置巨页的页表项
+ * */
 pte_t arch_make_huge_pte(pte_t entry, unsigned int shift, vm_flags_t flags)
 {
 	unsigned long order;
 
-	for_each_napot_order(order) {
-		if (shift == napot_cont_shift(order)) {
-			entry = pte_mknapot(entry, order);
+	for_each_napot_order(order) {//遍历所有可能的NAPOT页大小
+		if (shift == napot_cont_shift(order)) {//检查当前页位移（shift）是否与order对于的NAPOT页大小匹配
+			entry = pte_mknapot(entry, order);//如果匹配设置页表项为NAPOT类型
 			break;
 		}
 	}
-	if (order == NAPOT_ORDER_MAX)
-		entry = pte_mkhuge(entry);
+	if (order == NAPOT_ORDER_MAX)//检查order是否达到了NAPOT_ORDER_MAX,这意味这没有找到合适的NAPOT页大小
+		entry = pte_mkhuge(entry);//设置页表项为普通巨页类型
 
 	return entry;
 }
-
+/*
+ * 清除页表项并刷新TLB，确保页表项被修改后，系统残留的旧的TLB条目被刷新
+ * */
 static void clear_flush(struct mm_struct *mm,
 			unsigned long addr,
 			pte_t *ptep,
 			unsigned long pgsize,
 			unsigned long ncontig)
 {
-	struct vm_area_struct vma = TLB_FLUSH_VMA(mm, 0);
+	struct vm_area_struct vma = TLB_FLUSH_VMA(mm, 0);//创建一个虚拟内核区域VMA,来标识需要进行TLB刷新的内存区域
 	unsigned long i, saddr = addr;
 
 	for (i = 0; i < ncontig; i++, addr += pgsize, ptep++)
-		ptep_get_and_clear(mm, addr, ptep);
+		ptep_get_and_clear(mm, addr, ptep);//清除指定地址处的页表项
 
-	flush_tlb_range(&vma, saddr, addr);
+	flush_tlb_range(&vma, saddr, addr);//刷新从saddr到addr范围内的TLB条目
 }
 
 /*
@@ -311,59 +325,67 @@ int huge_ptep_set_access_flags(struct vm_area_struct *vma,
 	return true;// 返回成功
 }
 
+/*
+ * 获取并且清除巨页页表项
+ *
+ * 扩展标准页表操作来支持NAPOT类型的巨页映射。
+ * */
 pte_t huge_ptep_get_and_clear(struct mm_struct *mm,
 			      unsigned long addr,
 			      pte_t *ptep)
 {
-	pte_t orig_pte = ptep_get(ptep);
-	int pte_num;
+	pte_t orig_pte = ptep_get(ptep);//获取当前页表项的值
+	int pte_num;//用来存储NAPOT连续映射的页表项的值
 
-	if (!pte_napot(orig_pte))
-		return ptep_get_and_clear(mm, addr, ptep);
+	if (!pte_napot(orig_pte))//如果页表项不是NAPOT类型
+		return ptep_get_and_clear(mm, addr, ptep);//使用常规方法获取并清除页表项
 
-	pte_num = napot_pte_num(napot_cont_order(orig_pte));
+	pte_num = napot_pte_num(napot_cont_order(orig_pte));//计算NAPOT连续映射的页表项数量
 
-	return get_clear_contig(mm, addr, ptep, pte_num);
+	return get_clear_contig(mm, addr, ptep, pte_num);//清除NAPOT连续映射的所有页表项并返回原始页表项值
 }
 
+/*
+ * 将特定巨页设置为只读状态
+ * */
 void huge_ptep_set_wrprotect(struct mm_struct *mm,
 			     unsigned long addr,
 			     pte_t *ptep)
 {
-	pte_t pte = ptep_get(ptep);
+	pte_t pte = ptep_get(ptep);//获取页表项的值
 	unsigned long order;
 	pte_t orig_pte;
 	int i, pte_num;
 
-	if (!pte_napot(pte)) {
-		ptep_set_wrprotect(mm, addr, ptep);
+	if (!pte_napot(pte)) {//判断是否属于NAPOT类型巨页
+		ptep_set_wrprotect(mm, addr, ptep);//不是，调用该函数设置为只读状态
 		return;
 	}
 
-	order = napot_cont_order(pte);
-	pte_num = napot_pte_num(order);
-	ptep = huge_pte_offset(mm, addr, napot_cont_size(order));
-	orig_pte = get_clear_contig_flush(mm, addr, ptep, pte_num);
+	order = napot_cont_order(pte);//获取NAPOT类型页的order大小
+	pte_num = napot_pte_num(order);//计算NAPOT连续页的数量
+	ptep = huge_pte_offset(mm, addr, napot_cont_size(order));//获取NAPOT页的起始页表项指针
+	orig_pte = get_clear_contig_flush(mm, addr, ptep, pte_num);//清除指定范围内的页表项，并刷新TLB。返回原始页表项
 
-	orig_pte = pte_wrprotect(orig_pte);
+	orig_pte = pte_wrprotect(orig_pte);//将原始页表项设置为只读
 
 	for (i = 0; i < pte_num; i++, addr += PAGE_SIZE, ptep++)
-		set_pte_at(mm, addr, ptep, orig_pte);
+		set_pte_at(mm, addr, ptep, orig_pte);//将处理后的页表项重新设置到页表，完成对每一个页表项的更新
 }
 
 pte_t huge_ptep_clear_flush(struct vm_area_struct *vma,
 			    unsigned long addr,
 			    pte_t *ptep)
 {
-	pte_t pte = ptep_get(ptep);
+	pte_t pte = ptep_get(ptep);//获取页表项值
 	int pte_num;
 
-	if (!pte_napot(pte))
-		return ptep_clear_flush(vma, addr, ptep);
+	if (!pte_napot(pte))//判断是否属于NAPOT页
+		return ptep_clear_flush(vma, addr, ptep);//不是，使用常规处理
 
-	pte_num = napot_pte_num(napot_cont_order(pte));
+	pte_num = napot_pte_num(napot_cont_order(pte));//计算连续NAPOT页的数量
 
-	return get_clear_contig_flush(vma->vm_mm, addr, ptep, pte_num);
+	return get_clear_contig_flush(vma->vm_mm, addr, ptep, pte_num);//清除页表项并刷新TLB
 }
 
 void huge_pte_clear(struct mm_struct *mm,
@@ -381,30 +403,32 @@ void huge_pte_clear(struct mm_struct *mm,
 
 	pte_num = napot_pte_num(napot_cont_order(pte));
 	for (i = 0; i < pte_num; i++, addr += PAGE_SIZE, ptep++)
-		pte_clear(mm, addr, ptep);
+		pte_clear(mm, addr, ptep);//页表项清零
 }
-
+/*
+ * 用来判断给定的内存大小是否为NAPOT支持的大小
+ * */
 static bool is_napot_size(unsigned long size)
 {
 	unsigned long order;
 
-	if (!has_svnapot())
+	if (!has_svnapot())//检查当前系统是否支持SVNAPOT
 		return false;
 
-	for_each_napot_order(order) {
-		if (size == napot_cont_size(order))
-			return true;
+	for_each_napot_order(order) {//遍历所有支持的NAPOT阶数
+		if (size == napot_cont_size(order))//检查给定大小是否等于当前NAPOT阶数对应的大小
+			return true;//如果等于返回true
 	}
-	return false;
+	return false;//遍历所有支持阶数后没有匹配大小，返回false说明该大小不是NAPOT支持的大小
 }
 
-static __init int napot_hugetlbpages_init(void)
+static __init int napot_hugetlbpages_init(void)//初始化NAPOT支持的巨页
 {
-	if (has_svnapot()) {
+	if (has_svnapot()) {//检查当前系统是否支持SVNAPOT
 		unsigned long order;
 
-		for_each_napot_order(order)
-			hugetlb_add_hstate(order);
+		for_each_napot_order(order)//遍历所有支持的NAPOPT阶数
+			hugetlb_add_hstate(order);//为每个NAPOT阶数注册相应的巨页状态。会将该阶数的NAPOT页添加到巨页管理系统中，允许系统支持相应大小的页
 	}
 	return 0;
 }

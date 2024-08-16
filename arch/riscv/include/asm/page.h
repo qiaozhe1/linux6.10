@@ -103,20 +103,20 @@ typedef struct page *pgtable_t;
 #define ARCH_PFN_OFFSET		(PAGE_OFFSET >> PAGE_SHIFT)
 #endif /* CONFIG_MMU */
 
-struct kernel_mapping {
-	unsigned long page_offset;
-	unsigned long virt_addr;
-	unsigned long virt_offset;
-	uintptr_t phys_addr;
-	uintptr_t size;
-	/* Offset between linear mapping virtual address and kernel load address */
+struct kernel_mapping {//定义用于描述内核映射的结构体
+	unsigned long page_offset;//页偏移量，通常用于计算内存映射的起始地址
+	unsigned long virt_addr;//虚拟地址，内核映射的起始虚拟地址
+	unsigned long virt_offset;//虚拟偏移量，用于虚拟地址的进一步偏移
+	uintptr_t phys_addr;//物理地址，内核映射的起始物理地址
+	uintptr_t size;//映射的大小，表示映射覆盖的内存区域大小
+	/* 线性映射的虚拟地址与内核加载地址之间的偏移量 */
 	unsigned long va_pa_offset;
-	/* Offset between kernel mapping virtual address and kernel load address */
+	/* 内核映射的虚拟地址与内核加载地址之间的偏移量 */
 	unsigned long va_kernel_pa_offset;
-	unsigned long va_kernel_xip_pa_offset;
+	unsigned long va_kernel_xip_pa_offset;//用于XIP（执行在原地）的内核映射偏移量
 #ifdef CONFIG_XIP_KERNEL
-	uintptr_t xiprom;
-	uintptr_t xiprom_sz;
+	uintptr_t xiprom;//XIP 内存只读段的物理地址
+	uintptr_t xiprom_sz;//XIP 内存只读段的大小
 #endif
 };
 

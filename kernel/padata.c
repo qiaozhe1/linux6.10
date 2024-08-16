@@ -35,13 +35,13 @@ static DEFINE_SPINLOCK(padata_works_lock);
 static struct padata_work *padata_works;
 static LIST_HEAD(padata_free_works);
 
-struct padata_mt_job_state {
-	spinlock_t		lock;
-	struct completion	completion;
-	struct padata_mt_job	*job;
-	int			nworks;
-	int			nworks_fini;
-	unsigned long		chunk_size;
+struct padata_mt_job_state {//状态管理器，用于协调和管理多线程任务的执行
+	spinlock_t		lock;// 自旋锁，用于同步对任务状态的并发访问
+	struct completion	completion;//完成量，用于协调所有线程的执行完成
+	struct padata_mt_job	*job;//指向描述多线程任务的结构体指针
+	int			nworks;//需要执行的工作单元数
+	int			nworks_fini;//已经完成的工作单元数
+	unsigned long		chunk_size;//每个线程处理的任务块大小
 };
 
 static void padata_free_pd(struct parallel_data *pd);
@@ -478,34 +478,35 @@ static void __init padata_mt_helper(struct work_struct *w)
  *
  * See the definition of struct padata_mt_job for more details.
  */
-void __init padata_do_multithreaded(struct padata_mt_job *job)
+void __init padata_do_multithreaded(struct padata_mt_job *job)//执行多线程任务的函数
 {
 	/* In case threads finish at different times. */
-	static const unsigned long load_balance_factor = 4;
-	struct padata_work my_work, *pw;
-	struct padata_mt_job_state ps;
-	LIST_HEAD(works);
-	int nworks, nid;
-	static atomic_t last_used_nid __initdata;
+	static const unsigned long load_balance_factor = 4;//负载平衡因子，用于调整任务分配
+	struct padata_work my_work, *pw;//padata_work 结构体，表示一个工作单元
+	struct padata_mt_job_state ps;//用于管理多线程任务的状态
+	LIST_HEAD(works);//初始化一个链表头，用于存储所有的工作单元
+	int nworks, nid;//nworks 是线程数，nid 是 NUMA 节点 ID
+	static atomic_t last_used_nid __initdata;//上次使用的 NUMA 节点 ID，使用原子变量存储
 
-	if (job->size == 0)
+	if (job->size == 0)//如果任务的大小为 0，则直接返回
 		return;
 
 	/* Ensure at least one thread when size < min_chunk. */
-	nworks = max(job->size / max(job->min_chunk, job->align), 1ul);
-	nworks = min(nworks, job->max_threads);
+	nworks = max(job->size / max(job->min_chunk, job->align), 1ul);//计算需要多少个线程来处理任务
+	nworks = min(nworks, job->max_threads);// 确保线程数不超过最大允许的线程
 
-	if (nworks == 1) {
+	if (nworks == 1) {//如果只需要一个线程
 		/* Single thread, no coordination needed, cut to the chase. */
-		job->thread_fn(job->start, job->start + job->size, job->fn_arg);
+		job->thread_fn(job->start, job->start + job->size, job->fn_arg);//直接在当前线程中执行任务
 		return;
 	}
 
-	spin_lock_init(&ps.lock);
-	init_completion(&ps.completion);
-	ps.job	       = job;
-	ps.nworks      = padata_work_alloc_mt(nworks, &ps, &works);
-	ps.nworks_fini = 0;
+	spin_lock_init(&ps.lock);//初始化自旋锁，用于线程同步
+	init_completion(&ps.completion);//初始化完成量，用于等待所有线程完成
+	ps.job	       = job;//设置多线程任务状态的job指针
+	ps.nworks      = padata_work_alloc_mt(nworks, &ps, &works);//分配工作单元
+	ps.nworks_fini = 0;//初始化已完成的工作单元计数
+
 
 	/*
 	 * Chunk size is the amount of work a helper does per call to the
@@ -513,31 +514,31 @@ void __init padata_do_multithreaded(struct padata_mt_job *job)
 	 * increasing the number of chunks, guarantee at least the minimum
 	 * chunk size from the caller, and honor the caller's alignment.
 	 */
-	ps.chunk_size = job->size / (ps.nworks * load_balance_factor);
-	ps.chunk_size = max(ps.chunk_size, job->min_chunk);
-	ps.chunk_size = roundup(ps.chunk_size, job->align);
+	ps.chunk_size = job->size / (ps.nworks * load_balance_factor);//计算每个线程的数据块大小
+	ps.chunk_size = max(ps.chunk_size, job->min_chunk);//确保块大小不小于最小块大小
+	ps.chunk_size = roundup(ps.chunk_size, job->align);//确保块大小符合对齐要求
 
-	list_for_each_entry(pw, &works, pw_list)
-		if (job->numa_aware) {
-			int old_node = atomic_read(&last_used_nid);
+	list_for_each_entry(pw, &works, pw_list)//遍历所有工作单元
+		if (job->numa_aware) {//如果任务需要考虑NUMA
+			int old_node = atomic_read(&last_used_nid);//读取上次使用的NUMA节点
 
 			do {
-				nid = next_node_in(old_node, node_states[N_CPU]);
-			} while (!atomic_try_cmpxchg(&last_used_nid, &old_node, nid));
-			queue_work_node(nid, system_unbound_wq, &pw->pw_work);
+				nid = next_node_in(old_node, node_states[N_CPU]);//获取下一个NUMA节点
+			} while (!atomic_try_cmpxchg(&last_used_nid, &old_node, nid));//尝试更新last_used_nid
+			queue_work_node(nid, system_unbound_wq, &pw->pw_work);//将工作单元分配到指定的NUMA 节点上执行
 		} else {
-			queue_work(system_unbound_wq, &pw->pw_work);
+			queue_work(system_unbound_wq, &pw->pw_work);//将工作单元提交到默认的工作队列中执行
 		}
 
 	/* Use the current thread, which saves starting a workqueue worker. */
-	padata_work_init(&my_work, padata_mt_helper, &ps, PADATA_WORK_ONSTACK);
-	padata_mt_helper(&my_work.pw_work);
+	padata_work_init(&my_work, padata_mt_helper, &ps, PADATA_WORK_ONSTACK);//初始化当前线程的工作单元
+	padata_mt_helper(&my_work.pw_work);//使用当前线程处理任务的一部分
 
 	/* Wait for all the helpers to finish. */
-	wait_for_completion(&ps.completion);
+	wait_for_completion(&ps.completion);//等待所有线程完成任务
 
-	destroy_work_on_stack(&my_work.pw_work);
-	padata_works_free(&works);
+	destroy_work_on_stack(&my_work.pw_work);//销毁当前线程的工作单元
+	padata_works_free(&works);//释放所有工作单元
 }
 
 static void __padata_list_init(struct padata_list *pd_list)

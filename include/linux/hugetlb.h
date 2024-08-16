@@ -680,35 +680,35 @@ HPAGEFLAG(RawHwpUnreliable, raw_hwp_unreliable)
 #define HSTATE_NAME_LEN 32
 /* Defines one hugetlb page size */
 struct hstate {
-	struct mutex resize_lock;
-	int next_nid_to_alloc;
-	int next_nid_to_free;
-	unsigned int order;
-	unsigned int demote_order;
-	unsigned long mask;
-	unsigned long max_huge_pages;
-	unsigned long nr_huge_pages;
-	unsigned long free_huge_pages;
-	unsigned long resv_huge_pages;
-	unsigned long surplus_huge_pages;
-	unsigned long nr_overcommit_huge_pages;
-	struct list_head hugepage_activelist;
-	struct list_head hugepage_freelists[MAX_NUMNODES];
-	unsigned int max_huge_pages_node[MAX_NUMNODES];
-	unsigned int nr_huge_pages_node[MAX_NUMNODES];
-	unsigned int free_huge_pages_node[MAX_NUMNODES];
-	unsigned int surplus_huge_pages_node[MAX_NUMNODES];
+	struct mutex resize_lock;//互斥锁
+	int next_nid_to_alloc;//下一个分配巨页的节点ID
+	int next_nid_to_free;//下一个释放巨页的节点ID
+	unsigned int order;//巨页的阶数，表示巨页的大小
+	unsigned int demote_order;//如果启用了降级，表示降级后的巨页阶数
+	unsigned long mask;//页对齐掩码，基于巨页的大小
+	unsigned long max_huge_pages;//系统中允许的最大巨页数
+	unsigned long nr_huge_pages;//当前分配的巨页总数
+	unsigned long free_huge_pages;//当前系统中的空闲巨页数
+	unsigned long resv_huge_pages;//预留给特定用途的巨页数
+	unsigned long surplus_huge_pages;//超过预定数量的额外巨页数
+	unsigned long nr_overcommit_huge_pages;//用于超额分配的巨页数
+	struct list_head hugepage_activelist;//活动巨页的链表头
+	struct list_head hugepage_freelists[MAX_NUMNODES];//每个内存节点的空闲巨页链表
+	unsigned int max_huge_pages_node[MAX_NUMNODES];//每个节点允许的最大巨页数
+	unsigned int nr_huge_pages_node[MAX_NUMNODES];//每个节点分配的巨页数
+	unsigned int free_huge_pages_node[MAX_NUMNODES];//每个节点的空闲巨页数
+	unsigned int surplus_huge_pages_node[MAX_NUMNODES];//每个节点的额外巨页数
 #ifdef CONFIG_CGROUP_HUGETLB
 	/* cgroup control files */
-	struct cftype cgroup_files_dfl[8];
-	struct cftype cgroup_files_legacy[10];
+	struct cftype cgroup_files_dfl[8];// 默认 cgroup 的控制文件
+	struct cftype cgroup_files_legacy[10];//旧版 cgroup 的控制文件
 #endif
-	char name[HSTATE_NAME_LEN];
+	char name[HSTATE_NAME_LEN];// hstate 的名称
 };
 
-struct huge_bootmem_page {
-	struct list_head list;
-	struct hstate *hstate;
+struct huge_bootmem_page {//跟踪在系统启动期间从引导内存（boot memory）中预分配的巨页（huge pages）
+	struct list_head list;//用于将多个 huge_bootmem_page 结构体链接在一起，形成一个链表结构。
+	struct hstate *hstate;//指向 hstate 结构体的指针
 };
 
 int isolate_or_dissolve_huge_page(struct page *page, struct list_head *list);
