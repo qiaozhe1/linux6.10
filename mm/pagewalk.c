@@ -265,37 +265,37 @@ static int walk_pgd_range(unsigned long addr, unsigned long end,
 			  struct mm_walk *walk)
 {
 	pgd_t *pgd;
-	unsigned long next;
-	const struct mm_walk_ops *ops = walk->ops;
+	unsigned long next;//用于存储下一个地址边界。
+	const struct mm_walk_ops *ops = walk->ops;//获取页表遍历操作的回调函数集合。
 	int err = 0;
 
-	if (walk->pgd)
-		pgd = walk->pgd + pgd_index(addr);
+	if (walk->pgd)// 如果 walk 结构体中已指定了 PGD（通常用于内核空间）。
+		pgd = walk->pgd + pgd_index(addr);//根据地址计算 PGD 索引，获得对应的 PGD 表项。
 	else
-		pgd = pgd_offset(walk->mm, addr);
+		pgd = pgd_offset(walk->mm, addr);//否则，根据内存描述符和地址计算 PGD 表项位置。
 	do {
-		next = pgd_addr_end(addr, end);
-		if (pgd_none_or_clear_bad(pgd)) {
-			if (ops->pte_hole)
-				err = ops->pte_hole(addr, next, 0, walk);
+		next = pgd_addr_end(addr, end);//计算当前 PGD 表项地址范围的结束地址。
+		if (pgd_none_or_clear_bad(pgd)) {//如果 PGD 表项为空或无效。
+			if (ops->pte_hole)//如果定义了 pte_hole 回调函数。
+				err = ops->pte_hole(addr, next, 0, walk);//调用回调处理空洞页表项。
 			if (err)
-				break;
-			continue;
+				break;//如果回调返回错误，退出循环。
+			continue;//继续处理下一个 PGD 表项。
 		}
-		if (ops->pgd_entry) {
-			err = ops->pgd_entry(pgd, addr, next, walk);
+		if (ops->pgd_entry) {//如果定义了 pgd_entry 回调函数。
+			err = ops->pgd_entry(pgd, addr, next, walk);//调用回调处理当前 PGD 表项。
 			if (err)
-				break;
+				break;//如果回调返回错误，退出循环
 		}
-		if (is_hugepd(__hugepd(pgd_val(*pgd))))
-			err = walk_hugepd_range((hugepd_t *)pgd, addr, next, walk, PGDIR_SHIFT);
-		else if (ops->p4d_entry || ops->pud_entry || ops->pmd_entry || ops->pte_entry)
-			err = walk_p4d_range(pgd, addr, next, walk);
+		if (is_hugepd(__hugepd(pgd_val(*pgd))))//检查当前 PGD 是否为巨页映射。
+			err = walk_hugepd_range((hugepd_t *)pgd, addr, next, walk, PGDIR_SHIFT);//处理巨页映射。
+		else if (ops->p4d_entry || ops->pud_entry || ops->pmd_entry || ops->pte_entry)//如果有下一级页表的回调函数
+			err = walk_p4d_range(pgd, addr, next, walk);//递归处理下一级页表（P4D）
 		if (err)
-			break;
-	} while (pgd++, addr = next, addr != end);
+			break;//如果下一级处理返回错误，退出循环。
+	} while (pgd++, addr = next, addr != end);//更新 PGD 指针和地址，继续处理下一个地址范围。
 
-	return err;
+	return err;//返回错误状态，如果没有错误则返回 0。
 }
 
 #ifdef CONFIG_HUGETLB_PAGE
@@ -550,15 +550,15 @@ int walk_page_range_novma(struct mm_struct *mm, unsigned long start,
 			  pgd_t *pgd,
 			  void *private)
 {
-	struct mm_walk walk = {
-		.ops		= ops,
-		.mm		= mm,
-		.pgd		= pgd,
-		.private	= private,
-		.no_vma		= true
+	struct mm_walk walk = {//定义并初始化 mm_walk 结构体，用于存储当前的相关信息。
+		.ops		= ops,//设置页表遍历操作的回调函数集合。
+		.mm		= mm,//设置目标进程的内存描述符。
+		.pgd		= pgd,//设置指向页全局目录的指针
+		.private	= private,//设置传递给回调函数的私有数据。(这块是要设置页面的属性)
+		.no_vma		= true//设置 no_vma 标志，表示不需要关联具体的 VMA
 	};
 
-	if (start >= end || !walk.mm)
+	if (start >= end || !walk.mm)//检查参数是否合法：起始地址应小于结束地址，且 mm 不应为空。
 		return -EINVAL;
 
 	/*
@@ -580,12 +580,12 @@ int walk_page_range_novma(struct mm_struct *mm, unsigned long start,
 	 * specified address range from being freed. The caller should take
 	 * other actions to prevent this race.
 	 */
-	if (mm == &init_mm)
-		mmap_assert_locked(walk.mm);
+	if (mm == &init_mm)//如果当前内存描述符是 init_mm（内核的全局内存描述符），意味着处理的是内核空间。
+		mmap_assert_locked(walk.mm);//确保 mmap 锁已经被持有，适用于内核地址空间。
 	else
-		mmap_assert_write_locked(walk.mm);
+		mmap_assert_write_locked(walk.mm);//对于用户空间，确保 mmap 写锁已被持有，以防止并发修改。
 
-	return walk_pgd_range(start, end, &walk);
+	return walk_pgd_range(start, end, &walk);//遍历给定范围内的页全局目录（PGD），根据提供的回调函数执行操作。
 }
 
 int walk_page_range_vma(struct vm_area_struct *vma, unsigned long start,

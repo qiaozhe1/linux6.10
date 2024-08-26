@@ -68,17 +68,20 @@ void *_dtb_early_va __initdata;
 uintptr_t _dtb_early_pa __initdata;
 
 phys_addr_t dma32_phys_limit __initdata;
-
+/*
+ * 用于初始化系统中各个内存区域的大小。根据系统配置和内存的实际情况，确定
+ * 不同内存区域的最大页面帧号，并调用 free_area_init 函数进行内存区域的初始化。
+ * */
 static void __init zone_sizes_init(void)
 {
-	unsigned long max_zone_pfns[MAX_NR_ZONES] = { 0, };
+	unsigned long max_zone_pfns[MAX_NR_ZONES] = { 0, };//初始化数组，用于存储每个内存区域的最大页面帧号
 
 #ifdef CONFIG_ZONE_DMA32
-	max_zone_pfns[ZONE_DMA32] = PFN_DOWN(dma32_phys_limit);
+	max_zone_pfns[ZONE_DMA32] = PFN_DOWN(dma32_phys_limit);//如果系统支持 ZONE_DMA32 区域，将 dma32_phys_limit 转换为页面帧号并存储在对应的位置
 #endif
-	max_zone_pfns[ZONE_NORMAL] = max_low_pfn;
+	max_zone_pfns[ZONE_NORMAL] = max_low_pfn;//将普通内存区域的最大页面帧号存储在 max_zone_pfns[ZONE_NORMAL] 中
 
-	free_area_init(max_zone_pfns);
+	free_area_init(max_zone_pfns);//初始化内存管理子系统，基于 max_zone_pfns 中的值设置每个内存区域的大小
 }
 
 #if defined(CONFIG_MMU) && defined(CONFIG_DEBUG_VM)
@@ -292,7 +295,7 @@ static void __init setup_bootmem(void)
 	dma32_phys_limit = min(4UL * SZ_1G, (unsigned long)PFN_PHYS(max_low_pfn));//设置DMA32物理地址限制
 	set_max_mapnr(max_low_pfn - ARCH_PFN_OFFSET);//设置最大物理页帧号
 
-	reserve_initrd_mem();//保留初始RAM磁盘的内存区域,防止其他部分使用这块内存。
+	reserve_initrd_mem();//保留初始RAM的内存区域,防止其他部分使用这块内存。
 
 	/*
 	 * No allocation should be done before reserving the memory as defined
@@ -1422,8 +1425,8 @@ static void __init arch_reserve_crashkernel(void)
 
 void __init paging_init(void)
 {
-	setup_bootmem();//设置引导内存管理
-	setup_vm_final();//完成虚拟内存系统的初始化(页表创建与操作函数初始化)
+	setup_bootmem();//设置保留的内存区域
+	setup_vm_final();//完成虚拟内存系统的初始化(页表创建与页表操作函数初始化)
 
 	/* Depend on that Linear Mapping is ready */
 	memblock_allow_resize();//允许对 memblock进行调整，通常在引导阶段初始化结束后调用,在完成内存分页系统初始化后，调用此函数允许进一步调整内存块，如添加或移除内存区域。

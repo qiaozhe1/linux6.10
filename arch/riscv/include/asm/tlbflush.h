@@ -22,7 +22,7 @@ static inline void local_flush_tlb_all(void)
 
 static inline void local_flush_tlb_all_asid(unsigned long asid)
 {
-	if (asid != FLUSH_TLB_NO_ASID)//如果 asid不等于 FLUSH_TLB_NO_ASID（表示不使用ASID来清除TLB）
+	if (asid != FLUSH_TLB_NO_ASID)//如果 asid不等于 FLUSH_TLB_NO_ASID（表示使用ASID来清除TLB）
 		ALT_SFENCE_VMA_ASID(asid);//通过指定的ASID来清除 TLB 条目。
 	else
 		local_flush_tlb_all();//清除所有TLB条目，而不考虑ASID
@@ -38,9 +38,9 @@ static inline void local_flush_tlb_page_asid(unsigned long addr,
 					     unsigned long asid)
 {
 	if (asid != FLUSH_TLB_NO_ASID)
-		ALT_SFENCE_VMA_ADDR_ASID(addr, asid);
+		ALT_SFENCE_VMA_ADDR_ASID(addr, asid);//如果提供了有效的 ASID，调用 SFENCE.VMA 指令刷新指定地址和与ASID关联的TLB条目
 	else
-		local_flush_tlb_page(addr);
+		local_flush_tlb_page(addr);//如果没有提供 ASID，则仅刷新指定地址的TLB条目，而不考虑ASID
 }
 
 void flush_tlb_all(void);

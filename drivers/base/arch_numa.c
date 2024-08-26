@@ -466,12 +466,12 @@ static int __init arch_acpi_numa_init(void)
  */
 void __init arch_numa_init(void)
 {
-	if (!numa_off) {
-		if (!acpi_disabled && !numa_init(arch_acpi_numa_init))
+	if (!numa_off) {// 如果 NUMA 功能未被禁用
+		if (!acpi_disabled && !numa_init(arch_acpi_numa_init))//如果 ACPI 没有被禁用，并且通过 ACPI 成功初始化 NUMA，直接返回。
 			return;
-		if (acpi_disabled && !numa_init(of_numa_init))
+		if (acpi_disabled && !numa_init(of_numa_init))//如果 ACPI 被禁用，并且通过设备树成功初始化 NUMA，直接返回
 			return;
 	}
 
-	numa_init(dummy_numa_init);
+	numa_init(dummy_numa_init);//如果 NUMA 被禁用，或者前面的初始化失败，则调用 dummy NUMA 初始化。
 }

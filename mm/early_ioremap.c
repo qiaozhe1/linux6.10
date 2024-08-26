@@ -72,9 +72,9 @@ void __init early_ioremap_setup(void)
 {
 	int i;
 
-	for (i = 0; i < FIX_BTMAPS_SLOTS; i++) {
-		WARN_ON_ONCE(prev_map[i]);
-		slot_virt[i] = __fix_to_virt(FIX_BTMAP_BEGIN - NR_FIX_BTMAPS*i);
+	for (i = 0; i < FIX_BTMAPS_SLOTS; i++) {//遍历所有的固定映射槽位（由 FIX_BTMAPS_SLOTS 决定），逐个初始化这些槽位的虚拟地址。
+		WARN_ON_ONCE(prev_map[i]);//检查在初始化过程中，每个槽位之前是否已经被映射。如果 prev_map[i] 非空，表示该槽位已经存在映射关系，那么会发出警告。这主要是为了防止多次初始化导致的内存映射冲突或错误。
+		slot_virt[i] = __fix_to_virt(FIX_BTMAP_BEGIN - NR_FIX_BTMAPS*i);//将固定的索引转换为对应的虚拟地址。这里的 FIX_BTMAP_BEGIN 是固定映射的起始点，NR_FIX_BTMAPS 是每个映射的步长，通过这个计算出每个槽位对应的虚拟地址。并存储到slot_virt数组中
 	}
 }
 

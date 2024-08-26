@@ -631,56 +631,60 @@ int sbi_debug_console_read(char *bytes, unsigned int num_bytes)
 		return -EIO;
 	return ret.error ? sbi_err_map_linux_errno(ret.error) : ret.value;
 }
-
+/*
+ * 用于初始化 SBI（Supervisor Binary Interface），通过检测当前 SBI 规范版本和可用扩展来设置相应的函数指针。
+ * 这些函数指针将用于处理定时器、IPI（中断处理）、RFENCE（远程内存屏障）等操作。该函数在系统初始化阶段执行，
+ * 确保系统能够与底层固件正确交互。
+ */
 void __init sbi_init(void)
 {
 	int ret;
 
-	sbi_set_power_off();
-	ret = sbi_get_spec_version();
+	sbi_set_power_off();//设置系统电源关闭的回调函数。
+	ret = sbi_get_spec_version();//获取当前 SBI 规范版本。
 	if (ret > 0)
-		sbi_spec_version = ret;
+		sbi_spec_version = ret;//如果获取成功，则将版本号保存在全局变量 `sbi_spec_version` 中。
 
 	pr_info("SBI specification v%lu.%lu detected\n",
-		sbi_major_version(), sbi_minor_version());
+		sbi_major_version(), sbi_minor_version());//打印检测到的 SBI 规范版本。
 
-	if (!sbi_spec_is_0_1()) {
+	if (!sbi_spec_is_0_1()) {//如果 SBI 规范版本不是 0.1
 		pr_info("SBI implementation ID=0x%lx Version=0x%lx\n",
-			sbi_get_firmware_id(), sbi_get_firmware_version());
-		if (sbi_probe_extension(SBI_EXT_TIME)) {
-			__sbi_set_timer = __sbi_set_timer_v02;
+			sbi_get_firmware_id(), sbi_get_firmware_version());// 打印 SBI 实现 ID 和版本。
+		if (sbi_probe_extension(SBI_EXT_TIME)) {// 检查是否支持 TIME 扩展
+			__sbi_set_timer = __sbi_set_timer_v02;//如果支持，则使用 v0.2 的 set_timer 函数
 			pr_info("SBI TIME extension detected\n");
 		} else {
-			__sbi_set_timer = __sbi_set_timer_v01;
+			__sbi_set_timer = __sbi_set_timer_v01;//否则使用 v0.1 的 set_timer 函数
 		}
-		if (sbi_probe_extension(SBI_EXT_IPI)) {
-			__sbi_send_ipi	= __sbi_send_ipi_v02;
+		if (sbi_probe_extension(SBI_EXT_IPI)) {//检查是否支持 IPI 扩展
+			__sbi_send_ipi	= __sbi_send_ipi_v02;//如果支持，则使用 v0.2 的 send_ipi 函数
 			pr_info("SBI IPI extension detected\n");
 		} else {
-			__sbi_send_ipi	= __sbi_send_ipi_v01;
+			__sbi_send_ipi	= __sbi_send_ipi_v01;//否则使用v0.1的send_ipi函数
 		}
-		if (sbi_probe_extension(SBI_EXT_RFENCE)) {
-			__sbi_rfence	= __sbi_rfence_v02;
+		if (sbi_probe_extension(SBI_EXT_RFENCE)) {//检查是否支持 RFENCE 扩展
+			__sbi_rfence	= __sbi_rfence_v02;//如果支持，则使用 v0.2 的 rfence 函数
 			pr_info("SBI RFENCE extension detected\n");
 		} else {
-			__sbi_rfence	= __sbi_rfence_v01;
+			__sbi_rfence	= __sbi_rfence_v01;//否则使用 v0.1 的 rfence 函数
 		}
-		if ((sbi_spec_version >= sbi_mk_version(0, 3)) &&
-		    sbi_probe_extension(SBI_EXT_SRST)) {
+		if ((sbi_spec_version >= sbi_mk_version(0, 3)) &&//检查规范版本是否至少为 0.3
+		    sbi_probe_extension(SBI_EXT_SRST)) {//并且支持 SRST 扩展
 			pr_info("SBI SRST extension detected\n");
-			pm_power_off = sbi_srst_power_off;
-			sbi_srst_reboot_nb.notifier_call = sbi_srst_reboot;
-			sbi_srst_reboot_nb.priority = 192;
-			register_restart_handler(&sbi_srst_reboot_nb);
+			pm_power_off = sbi_srst_power_off;//设置电源关闭回调为 SRST 扩展中的 power_off 函数
+			sbi_srst_reboot_nb.notifier_call = sbi_srst_reboot;//设置重启通知回调
+			sbi_srst_reboot_nb.priority = 192;//设置通知优先级
+			register_restart_handler(&sbi_srst_reboot_nb);//注册重启处理函数
 		}
-		if ((sbi_spec_version >= sbi_mk_version(2, 0)) &&
-		    (sbi_probe_extension(SBI_EXT_DBCN) > 0)) {
+		if ((sbi_spec_version >= sbi_mk_version(2, 0)) &&//检查规范版本是否至少为 2.0
+		    (sbi_probe_extension(SBI_EXT_DBCN) > 0)) {//并且支持 DBCN 扩展
 			pr_info("SBI DBCN extension detected\n");
-			sbi_debug_console_available = true;
+			sbi_debug_console_available = true;//表示 SBI 支持调试控制台
 		}
 	} else {
-		__sbi_set_timer = __sbi_set_timer_v01;
-		__sbi_send_ipi	= __sbi_send_ipi_v01;
-		__sbi_rfence	= __sbi_rfence_v01;
+		__sbi_set_timer = __sbi_set_timer_v01;//使用 v0.1 的 set_timer 函数
+		__sbi_send_ipi	= __sbi_send_ipi_v01;//使用 v0.1 的 send_ipi 函数
+		__sbi_rfence	= __sbi_rfence_v01;//使用 v0.1 的 rfence 函数
 	}
 }

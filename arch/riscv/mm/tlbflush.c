@@ -12,35 +12,35 @@
  * than the threshold below.
  */
 unsigned long tlb_flush_all_threshold __read_mostly = 64;
-
+/*用于刷新处理器中一段特定范围内的 TLB 条目*/
 static void local_flush_tlb_range_threshold_asid(unsigned long start,
 						 unsigned long size,
 						 unsigned long stride,
 						 unsigned long asid)
 {
-	unsigned long nr_ptes_in_range = DIV_ROUND_UP(size, stride);
+	unsigned long nr_ptes_in_range = DIV_ROUND_UP(size, stride);//计算需要刷新的页表条目数量
 	int i;
 
-	if (nr_ptes_in_range > tlb_flush_all_threshold) {
-		local_flush_tlb_all_asid(asid);
+	if (nr_ptes_in_range > tlb_flush_all_threshold) {//如果需要刷新的页表条目数量超过阈值
+		local_flush_tlb_all_asid(asid);// 刷新整个 TLB（基于指定的 ASID）
 		return;
 	}
 
-	for (i = 0; i < nr_ptes_in_range; ++i) {
-		local_flush_tlb_page_asid(start, asid);
-		start += stride;
+	for (i = 0; i < nr_ptes_in_range; ++i) {//遍历所有需要刷新的页表条目
+		local_flush_tlb_page_asid(start, asid);//刷新当前页表条目
+		start += stride;//更新地址，指向下一个页表条目
 	}
 }
-
+/*根据输入的地址范围和 ASID（Address Space Identifier）决定如何刷新 TLB*/
 static inline void local_flush_tlb_range_asid(unsigned long start,
 		unsigned long size, unsigned long stride, unsigned long asid)
 {
-	if (size <= stride)
+	if (size <= stride)//如果范围小于或等于 stride，只需刷新单个页面
 		local_flush_tlb_page_asid(start, asid);
-	else if (size == FLUSH_TLB_MAX_SIZE)
+	else if (size == FLUSH_TLB_MAX_SIZE)//如果范围等于最大刷新大小，刷新整个地址空间
 		local_flush_tlb_all_asid(asid);
 	else
-		local_flush_tlb_range_threshold_asid(start, size, stride, asid);
+		local_flush_tlb_range_threshold_asid(start, size, stride, asid);//否则，逐步刷新地址范围
 }
 
 /* Flush a range of kernel pages without broadcasting */

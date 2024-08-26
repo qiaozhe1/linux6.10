@@ -1750,49 +1750,49 @@ static bool arch_has_descending_max_zone_pfns(void)
  */
 void __init free_area_init(unsigned long *max_zone_pfn)
 {
-	unsigned long start_pfn, end_pfn;
+	unsigned long start_pfn, end_pfn;//定义两个变量用于存储起始和结束的页框号
 	int i, nid, zone;
-	bool descending;
+	bool descending;//用于指示区域的页框号是否按降序排列
 
 	/* Record where the zone boundaries are */
 	memset(arch_zone_lowest_possible_pfn, 0,
-				sizeof(arch_zone_lowest_possible_pfn));
+				sizeof(arch_zone_lowest_possible_pfn));//初始化区域最低可能的页框号数组为0
 	memset(arch_zone_highest_possible_pfn, 0,
-				sizeof(arch_zone_highest_possible_pfn));
+				sizeof(arch_zone_highest_possible_pfn));//初始化区域最高可能的页框号数组为0
 
-	start_pfn = PHYS_PFN(memblock_start_of_DRAM());
-	descending = arch_has_descending_max_zone_pfns();
+	start_pfn = PHYS_PFN(memblock_start_of_DRAM());//获取 DRAM 的起始物理地址对应的页框号
+	descending = arch_has_descending_max_zone_pfns();//检查系统架构是否使用降序排列的最大区域页框号
 
-	for (i = 0; i < MAX_NR_ZONES; i++) {
-		if (descending)
+	for (i = 0; i < MAX_NR_ZONES; i++) {//遍历所有内存区域，MAX_NR_ZONES 是系统支持的最大内存区域数量
+		if (descending)//如果区域按降序排列，则从最后一个区域开始处理
 			zone = MAX_NR_ZONES - i - 1;
-		else
+		else//否则从第一个区域开始处理
 			zone = i;
 
-		if (zone == ZONE_MOVABLE)
+		if (zone == ZONE_MOVABLE)//跳过 ZONE_MOVABLE 区域
 			continue;
 
-		end_pfn = max(max_zone_pfn[zone], start_pfn);
-		arch_zone_lowest_possible_pfn[zone] = start_pfn;
-		arch_zone_highest_possible_pfn[zone] = end_pfn;
+		end_pfn = max(max_zone_pfn[zone], start_pfn);//计算当前区域的结束页框号，取最大值，以确保区域覆盖所有可能的页框
+		arch_zone_lowest_possible_pfn[zone] = start_pfn;//将当前区域的起始页框号存储到 arch_zone_lowest_possible_pfn 数组中
+		arch_zone_highest_possible_pfn[zone] = end_pfn;//将当前区域的结束页框号存储到 arch_zone_highest_possible_pfn 数组中
 
-		start_pfn = end_pfn;
+		start_pfn = end_pfn;//更新下一个区域的起始页框号为当前区域的结束页框号
 	}
 
 	/* Find the PFNs that ZONE_MOVABLE begins at in each node */
-	memset(zone_movable_pfn, 0, sizeof(zone_movable_pfn));
-	find_zone_movable_pfns_for_nodes();
+	memset(zone_movable_pfn, 0, sizeof(zone_movable_pfn));//清空zone_movable_pfn数组，用于存储ZONE_MOVABLE区域的起始页框号
+	find_zone_movable_pfns_for_nodes();//查找并记录每个节点中ZONE_MOVABLE区域的起始页框号
 
 	/* Print out the zone ranges */
-	pr_info("Zone ranges:\n");
-	for (i = 0; i < MAX_NR_ZONES; i++) {
-		if (i == ZONE_MOVABLE)
+	pr_info("Zone ranges:\n");//打印出各个内存区域的范围信息
+	for (i = 0; i < MAX_NR_ZONES; i++) {//再次遍历所有内存区域，打印每个区域的范围
+		if (i == ZONE_MOVABLE)//跳过 ZONE_MOVABLE 区域
 			continue;
-		pr_info("  %-8s ", zone_names[i]);
+		pr_info("  %-8s ", zone_names[i]);//打印区域的名称
 		if (arch_zone_lowest_possible_pfn[i] ==
-				arch_zone_highest_possible_pfn[i])
+				arch_zone_highest_possible_pfn[i])//如果区域为空（即起始和结束页框号相同），打印 "empty"
 			pr_cont("empty\n");
-		else
+		else//否则打印区域的内存范围
 			pr_cont("[mem %#018Lx-%#018Lx]\n",
 				(u64)arch_zone_lowest_possible_pfn[i]
 					<< PAGE_SHIFT,
@@ -1801,9 +1801,9 @@ void __init free_area_init(unsigned long *max_zone_pfn)
 	}
 
 	/* Print out the PFNs ZONE_MOVABLE begins at in each node */
-	pr_info("Movable zone start for each node\n");
-	for (i = 0; i < MAX_NUMNODES; i++) {
-		if (zone_movable_pfn[i])
+	pr_info("Movable zone start for each node\n");//打印出每个节点中ZONE_MOVABLE区域的起始页框号
+	for (i = 0; i < MAX_NUMNODES; i++) {//遍历所有可能的节点
+		if (zone_movable_pfn[i])//如果该节点有定义ZONE_MOVABLE起始页框号，打印其地址
 			pr_info("  Node %d: %#018Lx\n", i,
 			       (u64)zone_movable_pfn[i] << PAGE_SHIFT);
 	}
@@ -1813,33 +1813,33 @@ void __init free_area_init(unsigned long *max_zone_pfn)
 	 * subsection-map relative to active online memory ranges to
 	 * enable future "sub-section" extensions of the memory map.
 	 */
-	pr_info("Early memory node ranges\n");
-	for_each_mem_pfn_range(i, MAX_NUMNODES, &start_pfn, &end_pfn, &nid) {
+	pr_info("Early memory node ranges\n");//打印出早期节点的内存范围，并初始化子节映射，以支持未来的内存扩展
+	for_each_mem_pfn_range(i, MAX_NUMNODES, &start_pfn, &end_pfn, &nid) {//遍历系统中每个内存页框号范围，获取对应的节点ID
 		pr_info("  node %3d: [mem %#018Lx-%#018Lx]\n", nid,
 			(u64)start_pfn << PAGE_SHIFT,
-			((u64)end_pfn << PAGE_SHIFT) - 1);
-		subsection_map_init(start_pfn, end_pfn - start_pfn);
+			((u64)end_pfn << PAGE_SHIFT) - 1);//打印每个节点的内存范围
+		subsection_map_init(start_pfn, end_pfn - start_pfn);//初始化子节映射，以支持内存的子节扩展
 	}
 
-	/* Initialise every node */
-	mminit_verify_pageflags_layout();
-	setup_nr_node_ids();
-	set_pageblock_order();
+	/* 初始化每个节点的内存管理数据结构 */
+	mminit_verify_pageflags_layout();// 验证页面标志的布局
+	setup_nr_node_ids();// 设置节点 ID 的数量
+	set_pageblock_order();//设置页面块的顺序
 
-	for_each_node(nid) {
+	for_each_node(nid) {//遍历所有节点，初始化每个节点的内存管理数据
 		pg_data_t *pgdat;
 
-		if (!node_online(nid)) {
+		if (!node_online(nid)) {//如果内存节点还没有在线，则分配内存节点的数据结构
 			/* Allocator not initialized yet */
-			pgdat = arch_alloc_nodedata(nid);
-			if (!pgdat)
+			pgdat = arch_alloc_nodedata(nid);//为内存节点分配内存管理数据结构
+			if (!pgdat)//如果分配失败，打印错误信息并触发 panic
 				panic("Cannot allocate %zuB for node %d.\n",
 				       sizeof(*pgdat), nid);
-			arch_refresh_nodedata(nid, pgdat);
+			arch_refresh_nodedata(nid, pgdat);//刷新内存节点的数据结构
 		}
 
-		pgdat = NODE_DATA(nid);
-		free_area_init_node(nid);
+		pgdat = NODE_DATA(nid);//获取节点的数据结构
+		free_area_init_node(nid);//初始化节点的空闲内存区域
 
 		/*
 		 * No sysfs hierarcy will be created via register_one_node()
@@ -1849,17 +1849,17 @@ void __init free_area_init(unsigned long *max_zone_pfn)
 		 *memory-less node. The pgdat will get fully initialized by
 		 *hotadd_init_pgdat() when memory is hotplugged into this node.
 		 */
-		if (pgdat->node_present_pages) {
+		if (pgdat->node_present_pages) {//如果节点有物理内存页，设置节点状态为 N_MEMORY
 			node_set_state(nid, N_MEMORY);
-			check_for_memory(pgdat);
+			check_for_memory(pgdat);//检查节点的内存
 		}
 	}
 
-	calc_nr_kernel_pages();
-	memmap_init();
+	calc_nr_kernel_pages();//计算内核页的数量
+	memmap_init();//初始化内存映射
 
-	/* disable hash distribution for systems with a single node */
-	fixup_hashdist();
+	/* 如果系统只有一个节点，禁用内存哈希分布 */
+	fixup_hashdist();//修复哈希分布
 }
 
 /**

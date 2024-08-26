@@ -135,47 +135,47 @@ static int __init add_kernel_resources(void)
 
 static void __init init_resources(void)
 {
-	struct memblock_region *region = NULL;
-	struct resource *res = NULL;
-	struct resource *mem_res = NULL;
-	size_t mem_res_sz = 0;
-	int num_resources = 0, res_idx = 0;
-	int ret = 0;
+	struct memblock_region *region = NULL;//声明指向内存块区域的指针
+	struct resource *res = NULL;//声明指向资源结构的指针
+	struct resource *mem_res = NULL;//声明指向内存资源结构的指针
+	size_t mem_res_sz = 0;//声明内存资源大小变量
+	int num_resources = 0, res_idx = 0;//声明资源数量和资源索引变量
+	int ret = 0;//声明返回值变量
 
-	/* + 1 as memblock_alloc() might increase memblock.reserved.cnt */
-	num_resources = memblock.memory.cnt + memblock.reserved.cnt + 1;
-	res_idx = num_resources - 1;
+	/* +1是因为 memblock_alloc() 可能会增加 memblock.reserved.cnt */
+	num_resources = memblock.memory.cnt + memblock.reserved.cnt + 1;//计算内存资源总数
+	res_idx = num_resources - 1;//初始化资源索引为最后一个内存资源
 
-	mem_res_sz = num_resources * sizeof(*mem_res);
-	mem_res = memblock_alloc(mem_res_sz, SMP_CACHE_BYTES);
+	mem_res_sz = num_resources * sizeof(*mem_res);//计算内存资源结构所需的大小
+	mem_res = memblock_alloc(mem_res_sz, SMP_CACHE_BYTES);//分配内存资源结构数组
 	if (!mem_res)
-		panic("%s: Failed to allocate %zu bytes\n", __func__, mem_res_sz);
+		panic("%s: Failed to allocate %zu bytes\n", __func__, mem_res_sz);//输出错误信息并终止
 
 	/*
 	 * Start by adding the reserved regions, if they overlap
 	 * with /memory regions, insert_resource later on will take
 	 * care of it.
 	 */
-	ret = add_kernel_resources();
+	ret = add_kernel_resources();//添加内核资源
 	if (ret < 0)
-		goto error;
+		goto error;//添加失败，跳转到 error 标签进行错误处理
 
 #ifdef CONFIG_CRASH_DUMP
 	if (elfcorehdr_size > 0) {
-		elfcorehdr_res.start = elfcorehdr_addr;
-		elfcorehdr_res.end = elfcorehdr_addr + elfcorehdr_size - 1;
-		elfcorehdr_res.flags = IORESOURCE_SYSTEM_RAM | IORESOURCE_BUSY;
-		add_resource(&iomem_resource, &elfcorehdr_res);
+		elfcorehdr_res.start = elfcorehdr_addr;//设置内核崩溃转储区域的起始地址
+		elfcorehdr_res.end = elfcorehdr_addr + elfcorehdr_size - 1;//设置内核崩溃转储区域的结束地址
+		elfcorehdr_res.flags = IORESOURCE_SYSTEM_RAM | IORESOURCE_BUSY;//设置资源标志
+		add_resource(&iomem_resource, &elfcorehdr_res);//将崩溃转储资源添加到 IO 内存资源中
 	}
 #endif
 
-	for_each_reserved_mem_region(region) {
-		res = &mem_res[res_idx--];
+	for_each_reserved_mem_region(region) {// 遍历每个保留的内存区域
+		res = &mem_res[res_idx--];//获取下一个资源结构指针
 
-		res->name = "Reserved";
-		res->flags = IORESOURCE_MEM | IORESOURCE_EXCLUSIVE;
-		res->start = __pfn_to_phys(memblock_region_reserved_base_pfn(region));
-		res->end = __pfn_to_phys(memblock_region_reserved_end_pfn(region)) - 1;
+		res->name = "Reserved";//设置资源名称为 "Reserved"
+		res->flags = IORESOURCE_MEM | IORESOURCE_EXCLUSIVE;//设置资源标志为保留内存
+		res->start = __pfn_to_phys(memblock_region_reserved_base_pfn(region));//获取保留内存区域的起始物理地址
+		res->end = __pfn_to_phys(memblock_region_reserved_end_pfn(region)) - 1;//获取保留内存区域的结束物理地址
 
 		/*
 		 * Ignore any other reserved regions within
@@ -187,40 +187,40 @@ static void __init init_resources(void)
 			continue;
 		}
 
-		ret = add_resource(&iomem_resource, res);
+		ret = add_resource(&iomem_resource, res);//将保留内存资源添加到 IO 内存资源中
 		if (ret < 0)
-			goto error;
+			goto error;//如果出错，跳转到 error 标签进行错误处理
 	}
 
-	/* Add /memory regions to the resource tree */
-	for_each_mem_region(region) {
-		res = &mem_res[res_idx--];
+	/* 将 /memory 区域添加到资源树 */
+	for_each_mem_region(region) {//遍历每个内存区域
+		res = &mem_res[res_idx--];// 获取下一个资源结构指针
 
-		if (unlikely(memblock_is_nomap(region))) {
-			res->name = "Reserved";
-			res->flags = IORESOURCE_MEM | IORESOURCE_EXCLUSIVE;
+		if (unlikely(memblock_is_nomap(region))) {//检查内存区域是否设置为 no-map
+			res->name = "Reserved";//设置资源名称为 "Reserved"
+			res->flags = IORESOURCE_MEM | IORESOURCE_EXCLUSIVE;//设置资源标志为保留内存
 		} else {
-			res->name = "System RAM";
-			res->flags = IORESOURCE_SYSTEM_RAM | IORESOURCE_BUSY;
+			res->name = "System RAM";//设置资源名称为 "System RAM"
+			res->flags = IORESOURCE_SYSTEM_RAM | IORESOURCE_BUSY;//设置资源标志为系统 RAM
 		}
 
-		res->start = __pfn_to_phys(memblock_region_memory_base_pfn(region));
-		res->end = __pfn_to_phys(memblock_region_memory_end_pfn(region)) - 1;
+		res->start = __pfn_to_phys(memblock_region_memory_base_pfn(region));//获取内存区域的起始物理地址
+		res->end = __pfn_to_phys(memblock_region_memory_end_pfn(region)) - 1;//获取内存区域的结束物理地址
 
-		ret = add_resource(&iomem_resource, res);
+		ret = add_resource(&iomem_resource, res);//将内存资源添加到 IO 内存资源中
 		if (ret < 0)
-			goto error;
+			goto error;//如果出错，跳转到 error 标签进行错误处理
 	}
 
-	/* Clean-up any unused pre-allocated resources */
-	if (res_idx >= 0)
-		memblock_free(mem_res, (res_idx + 1) * sizeof(*mem_res));
+	/* 清理任何未使用的预分配资源 */
+	if (res_idx >= 0)//如果有未使用的资源
+		memblock_free(mem_res, (res_idx + 1) * sizeof(*mem_res));//释放这些资源结构
 	return;
 
  error:
 	/* Better an empty resource tree than an inconsistent one */
-	release_child_resources(&iomem_resource);
-	memblock_free(mem_res, mem_res_sz);
+	release_child_resources(&iomem_resource);//释放 IO 内存资源中的所有子资源
+	memblock_free(mem_res, mem_res_sz);//释放预分配的资源结构
 }
 
 
@@ -259,7 +259,7 @@ void __init setup_arch(char **cmdline_p)
 	parse_early_param();//解析早期参数
 
 	efi_init();//初始化 EFI（可扩展固件接口）
-	paging_init();//初始化分页系统，设置内存分页
+	paging_init();//创建页表映射，保留内存等
 
 	/* Parse the ACPI tables for possible boot-time configuration */
 	acpi_boot_table_init();//解析ACPI表，用于引导时的配置
@@ -267,11 +267,11 @@ void __init setup_arch(char **cmdline_p)
 #if IS_ENABLED(CONFIG_BUILTIN_DTB)
 	unflatten_and_copy_device_tree();//展开并复制设备树（如果启用了内建 DTB）
 #else
-	unflatten_device_tree();//展开设备树
+	unflatten_device_tree();//将设备树从扁平结构（FDT）展开内核使用的层次化数据结构
 #endif
-	misc_mem_init();//初始化杂项内存
+	misc_mem_init();//初始化通用内存管理
 
-	init_resources();//初始化资源
+	init_resources();//初始化内存资源到资源树中
 
 #ifdef CONFIG_KASAN
 	kasan_init();//初始化 KASAN（Kernel Address Sanitizer）

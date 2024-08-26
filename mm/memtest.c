@@ -103,19 +103,23 @@ static int __init parse_memtest(char *arg)
 }
 
 early_param("memtest", parse_memtest);
-
+/*
+ * 验证物理内存区域的可靠性和正确性。在系统启动的早期阶段，通过对指定
+ * 的物理内存范围进行写入和读取操作，检测该内存区域是否存在潜在的硬
+ * 件问题，如内存坏块或不稳定的内存单元
+ */
 void __init early_memtest(phys_addr_t start, phys_addr_t end)
 {
 	unsigned int i;
 	unsigned int idx = 0;
 
-	if (!memtest_pattern)
+	if (!memtest_pattern)// 如果没有设置内存测试模式（即 `memtest_pattern` 为 0），则直接返回。
 		return;
 
-	pr_info("early_memtest: # of tests: %u\n", memtest_pattern);
-	for (i = memtest_pattern-1; i < UINT_MAX; --i) {
-		idx = i % ARRAY_SIZE(patterns);
-		do_one_pass(patterns[idx], start, end);
+	pr_info("early_memtest: # of tests: %u\n", memtest_pattern);//打印信息，显示要进行的测试次数
+	for (i = memtest_pattern-1; i < UINT_MAX; --i) {//循环测试
+		idx = i % ARRAY_SIZE(patterns);//计算要使用的模式索引，根据 `patterns` 数组的大小循环选择测试模式
+		do_one_pass(patterns[idx], start, end);//对内存区域进行一次测试，使用 `patterns` 数组中的模式
 	}
 }
 

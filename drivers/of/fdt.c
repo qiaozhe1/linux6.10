@@ -513,27 +513,32 @@ static void __init fdt_reserve_elfcorehdr(void)
  * This function grabs memory from early allocator for device exclusive use
  * defined in device tree structures. It should be called by arch specific code
  * once the early allocator (i.e. memblock) has been fully activated.
+ * 用于在系统初始化早期阶段处理设备树（FDT, Flattened Device Tree）中定义的保留内存区域
  */
 void __init early_init_fdt_scan_reserved_mem(void)
 {
 	int n;
 	u64 base, size;
 
-	if (!initial_boot_params)
+	if (!initial_boot_params)//引导参数未设置，则意味着没有设备树信息可供处理，函数直接返回。
 		return;
 
-	fdt_scan_reserved_mem();
-	fdt_reserve_elfcorehdr();
+	fdt_scan_reserved_mem();//扫描并处理设备树中指定的保留内存区域
+	fdt_reserve_elfcorehdr();//保留 elfcorehdr (内核崩溃后的内存转储区域)
 
-	/* Process header /memreserve/ fields */
+	/*
+	 * 设备树中可能会有全局的 /memreserve/ 字段，明确指定内存中不应被操作系统使用的区域。
+	 * 通过调用fdt_get_mem_rsv函数获取每个保留区域的基地址和大小，然后调用 
+	 * memblock_reserve 保留这些区域。
+	 */
 	for (n = 0; ; n++) {
-		fdt_get_mem_rsv(initial_boot_params, n, &base, &size);
+		fdt_get_mem_rsv(initial_boot_params, n, &base, &size);//从设备树中获取保留内存区域的信息
 		if (!size)
 			break;
 		memblock_reserve(base, size);
 	}
 
-	fdt_init_reserved_mem();
+	fdt_init_reserved_mem();//初始化并处理在设备树中定义的其他保留内存区域
 }
 
 /**
@@ -950,23 +955,23 @@ int __init early_init_dt_scan_root(void)
 {
 	const __be32 *prop;
 	const void *fdt = initial_boot_params;
-	int node = fdt_path_offset(fdt, "/");
+	int node = fdt_path_offset(fdt, "/");//获取设备树中根节点的偏移量。
 
-	if (node < 0)
+	if (node < 0)//如果根节点偏移量无效，则返回错误。
 		return -ENODEV;
 
-	dt_root_size_cells = OF_ROOT_NODE_SIZE_CELLS_DEFAULT;
-	dt_root_addr_cells = OF_ROOT_NODE_ADDR_CELLS_DEFAULT;
+	dt_root_size_cells = OF_ROOT_NODE_SIZE_CELLS_DEFAULT;// 初始化根节点的 size-cells，默认为 2。
+	dt_root_addr_cells = OF_ROOT_NODE_ADDR_CELLS_DEFAULT;//初始化根节点的 address-cells，默认为 2
 
-	prop = of_get_flat_dt_prop(node, "#size-cells", NULL);
+	prop = of_get_flat_dt_prop(node, "#size-cells", NULL);//从根节点获取 "#size-cells" 属性
 	if (prop)
-		dt_root_size_cells = be32_to_cpup(prop);
-	pr_debug("dt_root_size_cells = %x\n", dt_root_size_cells);
+		dt_root_size_cells = be32_to_cpup(prop);//如果获取到该属性，转换为 CPU 可读格式并赋值给 dt_root_size_cells。
+	pr_debug("dt_root_size_cells = %x\n", dt_root_size_cells);//打印获取到的 size-cells 信息。
 
-	prop = of_get_flat_dt_prop(node, "#address-cells", NULL);
+	prop = of_get_flat_dt_prop(node, "#address-cells", NULL);//从根节点获取 "#address-cells" 属性。
 	if (prop)
-		dt_root_addr_cells = be32_to_cpup(prop);
-	pr_debug("dt_root_addr_cells = %x\n", dt_root_addr_cells);
+		dt_root_addr_cells = be32_to_cpup(prop);//如果获取到该属性，转换为 CPU 可读格式并赋值给 dt_root_addr_cells
+	pr_debug("dt_root_addr_cells = %x\n", dt_root_addr_cells);//打印获取到的 address-cells 信息。
 
 	return 0;
 }
@@ -1228,38 +1233,40 @@ static void *__init copy_device_tree(void *fdt)
  * tree of struct device_node. It also fills the "name" and "type"
  * pointers of the nodes so the normal device-tree walking functions
  * can be used.
+ * 用于将设备树从扁平结构（FDT）展开为内核使用的层次化数据结构，以便内
+ * 核可以访问和管理硬件资源。该过程通常在系统启动时完成。
  */
 void __init unflatten_device_tree(void)
 {
-	void *fdt = initial_boot_params;
+	void *fdt = initial_boot_params;//初始化 FDT（设备树）指针，指向 bootloader 提供的设备树
 
 	/* Don't use the bootloader provided DTB if ACPI is enabled */
-	if (!acpi_disabled)
-		fdt = NULL;
+	if (!acpi_disabled)//如果 ACPI 没有禁用（即启用了 ACPI）
+		fdt = NULL;//则不使用 bootloader 提供的设备树。
 
 	/*
 	 * Populate an empty root node when ACPI is enabled or bootloader
 	 * doesn't provide one.
 	 */
-	if (!fdt) {
-		fdt = (void *) __dtb_empty_root_begin;
+	if (!fdt) {//如果没有有效的 FDT（即使用 ACPI 或 bootloader 没有提供设备树）。
+		fdt = (void *) __dtb_empty_root_begin;//使用内核提供的空根节点设备树
 		/* fdt_totalsize() will be used for copy size */
 		if (fdt_totalsize(fdt) >
-		    __dtb_empty_root_end - __dtb_empty_root_begin) {
+		    __dtb_empty_root_end - __dtb_empty_root_begin) {//如果设备树的大小不合法，打印错误信息。
 			pr_err("invalid size in dtb_empty_root\n");
 			return;
 		}
-		of_fdt_crc32 = crc32_be(~0, fdt, fdt_totalsize(fdt));
-		fdt = copy_device_tree(fdt);
+		of_fdt_crc32 = crc32_be(~0, fdt, fdt_totalsize(fdt));//计算设备树的校验和，用于后续验证
+		fdt = copy_device_tree(fdt);//复制设备树数据以供使用
 	}
 
 	__unflatten_device_tree(fdt, NULL, &of_root,
-				early_init_dt_alloc_memory_arch, false);
+				early_init_dt_alloc_memory_arch, false);//调用内部函数展开设备树，构建内核使用的设备树结构。
 
 	/* Get pointer to "/chosen" and "/aliases" nodes for use everywhere */
-	of_alias_scan(early_init_dt_alloc_memory_arch);
+	of_alias_scan(early_init_dt_alloc_memory_arch);//在设备树展开后扫描设备树，找到 "/chosen" 和 "/aliases" 节点。这些节点通常包含重要的启动参数和别名映射，用于设备的初始化和配置。
 
-	unittest_unflatten_overlay_base();
+	unittest_unflatten_overlay_base();//执行设备树展开的单元测试，确保正确性
 }
 
 /**

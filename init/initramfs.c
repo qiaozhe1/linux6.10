@@ -576,16 +576,20 @@ extern unsigned long __initramfs_size;
 #include <linux/kexec.h>
 
 static BIN_ATTR(initrd, 0440, sysfs_bin_attr_simple_read, NULL, 0);
-
+/*
+ * 保留内存盘 (initrd) 在物理内存中的位置，确保其所在的内存区域不会被其
+ * 他用途占用，并将其物理地址转换为内核可使用的虚拟地址
+ * initrd: 提供了内核启动所需的初始文件系统映像
+ */
 void __init reserve_initrd_mem(void)
 {
 	phys_addr_t start;
 	unsigned long size;
 
 	/* Ignore the virtul address computed during device tree parsing */
-	initrd_start = initrd_end = 0;
+	initrd_start = initrd_end = 0;//重置 initrd 的起始和结束地址，忽略设备树解析期间计算的虚拟地址。
 
-	if (!phys_initrd_size)
+	if (!phys_initrd_size)//如果 initrd 的物理大小为 0，直接返回，不做处理
 		return;
 	/*
 	 * Round the memory region to page boundaries as per free_initrd_mem()
@@ -593,31 +597,31 @@ void __init reserve_initrd_mem(void)
 	 * are in use, but more importantly, reserves the entire set of pages
 	 * as we don't want these pages allocated for other purposes.
 	 */
-	start = round_down(phys_initrd_start, PAGE_SIZE);
-	size = phys_initrd_size + (phys_initrd_start - start);
-	size = round_up(size, PAGE_SIZE);
+	start = round_down(phys_initrd_start, PAGE_SIZE);//将 initrd 的起始地址向下对齐到最近的页边界。
+	size = phys_initrd_size + (phys_initrd_start - start);//计算调整后的大小，包含向下对齐后的多余部分
+	size = round_up(size, PAGE_SIZE);//将总大小向上对齐到页边界
 
 	if (!memblock_is_region_memory(start, size)) {
 		pr_err("INITRD: 0x%08llx+0x%08lx is not a memory region",
-		       (u64)start, size);
+		       (u64)start, size);//如果该区域不属于内存范围，打印错误信息并跳转到 disable 标签。
 		goto disable;
 	}
 
-	if (memblock_is_region_reserved(start, size)) {
+	if (memblock_is_region_reserved(start, size)) {//如果该区域已被其他用途保留，打印错误信息并跳转到 disable 标签
 		pr_err("INITRD: 0x%08llx+0x%08lx overlaps in-use memory region\n",
 		       (u64)start, size);
 		goto disable;
 	}
 
-	memblock_reserve(start, size);
+	memblock_reserve(start, size);//使用 memblock 系统保留该内存区域，防止其被分配给其他用途
 	/* Now convert initrd to virtual addresses */
-	initrd_start = (unsigned long)__va(phys_initrd_start);
-	initrd_end = initrd_start + phys_initrd_size;
-	initrd_below_start_ok = 1;
+	initrd_start = (unsigned long)__va(phys_initrd_start);//将 initrd 的物理起始地址转换为虚拟地址
+	initrd_end = initrd_start + phys_initrd_size;//计算并设置 initrd 的虚拟结束地址
+	initrd_below_start_ok = 1;//标记 initrd 地址是有效的
 
-	return;
+	return;//成功完成初始化，函数返回。
 disable:
-	pr_cont(" - disabling initrd\n");
+	pr_cont(" - disabling initrd\n");// 如果出错，禁用 initrd，并将相关变量清零。
 	initrd_start = 0;
 	initrd_end = 0;
 }

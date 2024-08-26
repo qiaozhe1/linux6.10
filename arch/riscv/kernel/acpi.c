@@ -119,6 +119,10 @@ static int __init acpi_fadt_sanity_check(void)
  *   explicitly through acpi=off command line parameter
  *
  * ACPI is disabled on function return otherwise
+ *
+ * 用于在系统引导过程中决定是否启用 ACPI（高级配置与电源接口），并
+ * 对 ACPI 表进行初始化和合理性检查。ACPI 是一种开放标准，用于在操
+ * 作系统和硬件之间传递信息，并为电源管理和硬件配置提供接口。
  */
 void __init acpi_boot_table_init(void)
 {
@@ -128,16 +132,16 @@ void __init acpi_boot_table_init(void)
 	 * - firmware has not populated ACPI ptr in EFI system table
 	 *   and ACPI has not been [force] enabled (acpi=on|force)
 	 */
-	if (param_acpi_off ||
-	    (!param_acpi_on && !param_acpi_force &&
+	if (param_acpi_off ||//如果ACPI 被显式禁用（通过命令行参数 acpi=off）
+	    (!param_acpi_on && !param_acpi_force &&//或者固件未在 EFI 系统表中填充 ACPI 指针，并且没有强制启用 ACPI
 	     efi.acpi20 == EFI_INVALID_TABLE_ADDR))
-		return;
+		return;//如果满足上述条件之一，则直接返回，不初始化 ACPI。
 
 	/*
 	 * ACPI is disabled at this point. Enable it in order to parse
 	 * the ACPI tables and carry out sanity checks
 	 */
-	enable_acpi();
+	enable_acpi();//启用ACPI
 
 	/*
 	 * If ACPI tables are initialized and FADT sanity checks passed,
@@ -146,9 +150,9 @@ void __init acpi_boot_table_init(void)
 	 * If acpi=force was passed on the command line it forces ACPI
 	 * to be enabled even if its initialization failed.
 	 */
-	if (acpi_table_init() || acpi_fadt_sanity_check()) {
-		pr_err("Failed to init ACPI tables\n");
-		if (!param_acpi_force)
+	if (acpi_table_init() || acpi_fadt_sanity_check()) {//如果 ACPI 表初始化成功并且 FADT（固定 ACPI 描述表）合理性检查通过
+		pr_err("Failed to init ACPI tables\n");//如果初始化失败，打印错误信息。
+		if (!param_acpi_force)//如果未强制启用 ACPI，则禁用 ACPI
 			disable_acpi();
 	}
 }

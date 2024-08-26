@@ -346,22 +346,24 @@ again:
 
 	return ret;
 }
-
+/*
+ * 用于从 memblock 的内存块区域数组中移除指定索引的区域，并更新 memblock 的管理结构。
+ */
 static void __init_memblock memblock_remove_region(struct memblock_type *type, unsigned long r)
 {
-	type->total_size -= type->regions[r].size;
+	type->total_size -= type->regions[r].size;//从总的内存块大小中减去被移除的区域的大小
 	memmove(&type->regions[r], &type->regions[r + 1],
-		(type->cnt - (r + 1)) * sizeof(type->regions[r]));
-	type->cnt--;
+		(type->cnt - (r + 1)) * sizeof(type->regions[r]));//将被移除区域后的内存块区域向前移动，以填补移除区域的位置。
+	type->cnt--;// 内存块区域的计数减一
 
 	/* Special case for empty arrays */
-	if (type->cnt == 0) {
-		WARN_ON(type->total_size != 0);
-		type->cnt = 1;
-		type->regions[0].base = 0;
-		type->regions[0].size = 0;
-		type->regions[0].flags = 0;
-		memblock_set_region_node(&type->regions[0], MAX_NUMNODES);
+	if (type->cnt == 0) {//如果这是最后一个内存块区域被移除后的特殊情况。
+		WARN_ON(type->total_size != 0);//确保在所有内存块区域被移除后，总大小为0，否则发出警告。
+		type->cnt = 1;//保留一个虚拟区域，以防止数组为空时出现问题
+		type->regions[0].base = 0;//将虚拟区域的基地址设置为0
+		type->regions[0].size = 0;//将虚拟区域的大小设置为0
+		type->regions[0].flags = 0;//清空虚拟区域的标志
+		memblock_set_region_node(&type->regions[0], MAX_NUMNODES);//将虚拟区域分配给不存在的节点(MAX_NUMNODES)
 	}
 }
 
@@ -785,79 +787,83 @@ bool __init_memblock memblock_validate_numa_coverage(unsigned long threshold_byt
  *
  * Return:
  * 0 on success, -errno on failure.
+ * 隔离指定的物理地址范围 [base, base + size)，并将该范围内的内存块区域进行必
+ * 要的切割和调整，以便后续操作，如删除或修改这些内存区域。
  */
 static int __init_memblock memblock_isolate_range(struct memblock_type *type,
 					phys_addr_t base, phys_addr_t size,
 					int *start_rgn, int *end_rgn)
 {
-	phys_addr_t end = base + memblock_cap_size(base, &size);
+	phys_addr_t end = base + memblock_cap_size(base, &size);//计算指定范围的结束地址，并限制其大小不超过实际可用内存。
 	int idx;
 	struct memblock_region *rgn;
 
-	*start_rgn = *end_rgn = 0;
+	*start_rgn = *end_rgn = 0;//初始化起始和结束区域索引为0。
 
-	if (!size)
+	if (!size)//如果大小为0，直接返回成功。
 		return 0;
 
 	/* we'll create at most two more regions */
-	while (type->cnt + 2 > type->max)
-		if (memblock_double_array(type, base, size) < 0)
-			return -ENOMEM;
+	while (type->cnt + 2 > type->max)//确保 memblock 的存储数组有足够空间存储新的内存区域。
+		if (memblock_double_array(type, base, size) < 0)//如果当前数组空间不足，尝试扩展数组的容量
+			return -ENOMEM;//如果扩展失败，返回内存不足错误
 
-	for_each_memblock_type(idx, type, rgn) {
-		phys_addr_t rbase = rgn->base;
-		phys_addr_t rend = rbase + rgn->size;
+	for_each_memblock_type(idx, type, rgn) {//遍历所有 memblock 的内存区域
+		phys_addr_t rbase = rgn->base;//当前区域的起始地址
+		phys_addr_t rend = rbase + rgn->size;//当前区域的结束地址
 
-		if (rbase >= end)
+		if (rbase >= end)//如果当前区域的起始地址超出指定范围的结束地址，跳出循环。
 			break;
-		if (rend <= base)
+		if (rend <= base)//如果当前区域的结束地址在指定范围的起始地址之前，继续下一个区域
 			continue;
 
-		if (rbase < base) {
+		if (rbase < base) {//如果当前区域的起始地址在指定范围之前，表示该区域与指定范围有重叠。
 			/*
 			 * @rgn intersects from below.  Split and continue
 			 * to process the next region - the new top half.
 			 */
-			rgn->base = base;
-			rgn->size -= base - rbase;
-			type->total_size -= base - rbase;
+			rgn->base = base;//将当前区域的起始地址调整为指定范围的起始地址
+			rgn->size -= base - rbase;//调整当前区域的大小
+			type->total_size -= base - rbase;//更新 memblock 的总大小
 			memblock_insert_region(type, idx, rbase, base - rbase,
 					       memblock_get_region_node(rgn),
-					       rgn->flags);
-		} else if (rend > end) {
+					       rgn->flags);//将被切割出来的下半部分插入到 memblock 中
+		} else if (rend > end) {//如果当前区域的结束地址在指定范围之后，表示该区域与指定范围有重叠
 			/*
 			 * @rgn intersects from above.  Split and redo the
 			 * current region - the new bottom half.
 			 */
-			rgn->base = end;
-			rgn->size -= end - rbase;
-			type->total_size -= end - rbase;
+			rgn->base = end;//将当前区域的起始地址调整为指定范围的结束地址
+			rgn->size -= end - rbase;//调整当前区域的大小
+			type->total_size -= end - rbase;//更新 memblock 的总大小。
 			memblock_insert_region(type, idx--, rbase, end - rbase,
 					       memblock_get_region_node(rgn),
-					       rgn->flags);
-		} else {
+					       rgn->flags);//将被切割出来的上半部分插入到 memblock 中
+		} else {//如果当前区域完全包含在指定范围内
 			/* @rgn is fully contained, record it */
-			if (!*end_rgn)
+			if (!*end_rgn)//记录该区域的起始索引
 				*start_rgn = idx;
-			*end_rgn = idx + 1;
+			*end_rgn = idx + 1;//记录该区域的结束索引
 		}
 	}
 
 	return 0;
 }
-
+/*
+ * 从内存块 (memblock) 中移除指定的物理地址范围 (base 到 base + size) 的内存区域。
+ */
 static int __init_memblock memblock_remove_range(struct memblock_type *type,
 					  phys_addr_t base, phys_addr_t size)
 {
 	int start_rgn, end_rgn;
 	int i, ret;
 
-	ret = memblock_isolate_range(type, base, size, &start_rgn, &end_rgn);
+	ret = memblock_isolate_range(type, base, size, &start_rgn, &end_rgn);//隔离出指定的内存范围。这一步会计算并返回该范围在 memblock 中的起始和结束区域索引 (start_rgn 和 end_rgn)。
 	if (ret)
 		return ret;
 
-	for (i = end_rgn - 1; i >= start_rgn; i--)
-		memblock_remove_region(type, i);
+	for (i = end_rgn - 1; i >= start_rgn; i--)//从结束索引 (end_rgn - 1) 开始，向前遍历到起始索引 (start_rgn)，逐一移除这些内存区域。采用从后往前遍历是为了避免在删除过程中因区域索引的变化导致的问题。
+		memblock_remove_region(type, i);//移除指定索引 i 处的内存块区域。这个操作会将该区域从 memblock 的管理列表中移除。
 	return 0;
 }
 
@@ -1745,20 +1751,20 @@ phys_addr_t __init_memblock memblock_end_of_DRAM(void)
 
 static phys_addr_t __init_memblock __find_max_addr(phys_addr_t limit)
 {
-	phys_addr_t max_addr = PHYS_ADDR_MAX;
-	struct memblock_region *r;
+	phys_addr_t max_addr = PHYS_ADDR_MAX;//将 max_addr 初始化为 PHYS_ADDR_MAX。如果无法找到合适的内存块地址（例如，limit 超出了所有内存块的总大小），max_addr 将保持为此初始值。
+	struct memblock_region *r;// 指向内存块区域的指针变量。
 
 	/*
 	 * translate the memory @limit size into the max address within one of
 	 * the memory memblock regions, if the @limit exceeds the total size
 	 * of those regions, max_addr will keep original value PHYS_ADDR_MAX
 	 */
-	for_each_mem_region(r) {
-		if (limit <= r->size) {
-			max_addr = r->base + limit;
-			break;
+	for_each_mem_region(r) {//遍历每一个内存块区域
+		if (limit <= r->size) {//如果限制大小小于或等于当前内存块的大小，
+			max_addr = r->base + limit;//计算出在此内存块中的最大物理地址 (max_addr)。
+			break;//已找到合适的区域，跳出循环
 		}
-		limit -= r->size;
+		limit -= r->size;//如果 limit 大于当前内存块区域的大小，则从 limit 中减去这个内存块区域的大小，继续处理下一个内存块区域。
 	}
 
 	return max_addr;
@@ -1769,19 +1775,19 @@ void __init memblock_enforce_memory_limit(phys_addr_t limit)
 	phys_addr_t max_addr;
 
 	if (!limit)
-		return;
+		return;//如果限制为 0，则不需要处理，直接返回。
 
-	max_addr = __find_max_addr(limit);
+	max_addr = __find_max_addr(limit);//查找接近 `limit` 的最大物理地址。这个地址将用于决定哪些内存块需要被截断。
 
 	/* @limit exceeds the total size of the memory, do nothing */
-	if (max_addr == PHYS_ADDR_MAX)
+	if (max_addr == PHYS_ADDR_MAX)//如果 max_addr 等于 PHYS_ADDR_MAX，说明 limit 超过了系统内存的实际总大小。在这种情况下，内存没有超出系统可用范围，因此函数无需执行任何截断操作，直接返回。
 		return;
 
 	/* truncate both memory and reserved regions */
 	memblock_remove_range(&memblock.memory, max_addr,
-			      PHYS_ADDR_MAX);
+			      PHYS_ADDR_MAX);//从 `max_addr` 开始移除超过 `limit` 的内存块。
 	memblock_remove_range(&memblock.reserved, max_addr,
-			      PHYS_ADDR_MAX);
+			      PHYS_ADDR_MAX);//从 `max_addr` 开始移除超过 `limit` 的保留内存块。
 }
 
 void __init memblock_cap_memory_range(phys_addr_t base, phys_addr_t size)

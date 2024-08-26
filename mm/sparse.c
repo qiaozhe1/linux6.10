@@ -561,31 +561,31 @@ void __init sparse_init(void)
 	int nid_begin;
 
 	/* see include/linux/mmzone.h 'struct mem_section' definition */
-	BUILD_BUG_ON(!is_power_of_2(sizeof(struct mem_section)));
-	memblocks_present();
+	BUILD_BUG_ON(!is_power_of_2(sizeof(struct mem_section)));//确保 struct mem_section 结构的大小是 2 的幂
+	memblocks_present();//初始化内存块的节点信息，将内存区域映射到对应的节点
 
-	pnum_begin = first_present_section_nr();
-	nid_begin = sparse_early_nid(__nr_to_section(pnum_begin));
+	pnum_begin = first_present_section_nr();//获取第一个存在的内存段编号
+	nid_begin = sparse_early_nid(__nr_to_section(pnum_begin));//取第一个存在的内存段对应的节点 ID
 
 	/* Setup pageblock_order for HUGETLB_PAGE_SIZE_VARIABLE */
-	set_pageblock_order();
+	set_pageblock_order();//设置 HUGETLB_PAGE_SIZE_VARIABLE 所需的 pageblock_order
 
-	for_each_present_section_nr(pnum_begin + 1, pnum_end) {
+	for_each_present_section_nr(pnum_begin + 1, pnum_end) {//遍历所有存在的内存段
 		int nid = sparse_early_nid(__nr_to_section(pnum_end));
 
-		if (nid == nid_begin) {
-			map_count++;
-			continue;
+		if (nid == nid_begin) {//如果当前段和前一段属于同一节点
+			map_count++;//增加映射计数
+			continue;//跳过初始化，继续遍历
 		}
 		/* Init node with sections in range [pnum_begin, pnum_end) */
 		sparse_init_nid(nid_begin, pnum_begin, pnum_end, map_count);
-		nid_begin = nid;
-		pnum_begin = pnum_end;
-		map_count = 1;
+		nid_begin = nid;//更新为当前节点 ID
+		pnum_begin = pnum_end;//更新为当前段起始编号
+		map_count = 1;//重置映射计数
 	}
 	/* cover the last node */
-	sparse_init_nid(nid_begin, pnum_begin, pnum_end, map_count);
-	vmemmap_populate_print_last();
+	sparse_init_nid(nid_begin, pnum_begin, pnum_end, map_count);//对最后一个节点进行初始化
+	vmemmap_populate_print_last();//打印最后的 vmemmap 填充信息
 }
 
 #ifdef CONFIG_MEMORY_HOTPLUG

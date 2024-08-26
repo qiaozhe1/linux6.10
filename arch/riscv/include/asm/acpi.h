@@ -36,9 +36,9 @@ static inline void disable_acpi(void)
 
 static inline void enable_acpi(void)
 {
-	acpi_disabled = 0;
-	acpi_pci_disabled = 0;
-	acpi_noirq = 0;
+	acpi_disabled = 0;//启用 ACPI
+	acpi_pci_disabled = 0;//启用 ACPI 对 PCI 的支持
+	acpi_noirq = 0;//启用 ACPI 的 IRQ（中断请求）处理
 }
 
 /*

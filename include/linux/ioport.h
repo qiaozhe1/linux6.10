@@ -17,14 +17,16 @@
 /*
  * Resources are tree-like, allowing
  * nesting etc..
+ * 用于表示系统中的各种资源（如内存、IO
+ * 端口等）的地址范围、标志、层次结构和描述信息的结构
  */
 struct resource {
-	resource_size_t start;
-	resource_size_t end;
-	const char *name;
-	unsigned long flags;
-	unsigned long desc;
-	struct resource *parent, *sibling, *child;
+	resource_size_t start;//资源的起始地址
+	resource_size_t end;//资源的结束地址
+	const char *name;//资源的名称
+	unsigned long flags;//资源的标志，描述资源的类型和属性
+	unsigned long desc;//资源的描述符，用于存储额外的描述信息
+	struct resource *parent, *sibling, *child;//资源的父、兄弟、子资源指针
 };
 
 /*
