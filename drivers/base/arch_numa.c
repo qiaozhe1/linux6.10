@@ -269,26 +269,27 @@ void __init numa_free_distance(void)
 
 /*
  * Create a new NUMA distance table.
+ * 用于初始化 NUMA 节点距离矩阵的函数
  */
 static int __init numa_alloc_distance(void)
 {
 	size_t size;
 	int i, j;
 
-	size = nr_node_ids * nr_node_ids * sizeof(numa_distance[0]);
-	numa_distance = memblock_alloc(size, PAGE_SIZE);
-	if (WARN_ON(!numa_distance))
+	size = nr_node_ids * nr_node_ids * sizeof(numa_distance[0]);//计算需要分配的距离矩阵的大小
+	numa_distance = memblock_alloc(size, PAGE_SIZE);//使用 memblock 分配距离矩阵，大小为节点数量平方乘以单个元素的大小
+	if (WARN_ON(!numa_distance))//如果分配失败，打印警告并返回内存不足的错误码
 		return -ENOMEM;
 
-	numa_distance_cnt = nr_node_ids;
+	numa_distance_cnt = nr_node_ids;//设置距离矩阵的节点数量
 
-	/* fill with the default distances */
-	for (i = 0; i < numa_distance_cnt; i++)
-		for (j = 0; j < numa_distance_cnt; j++)
+	/* fill with the default distances用默认的距离值填充距离矩阵 */
+	for (i = 0; i < numa_distance_cnt; i++)//遍历每一个NUMA节点
+		for (j = 0; j < numa_distance_cnt; j++)//内层循环遍历每个 NUMA 节点，用于计算节点之间的距离
 			numa_distance[i * numa_distance_cnt + j] = i == j ?
-				LOCAL_DISTANCE : REMOTE_DISTANCE;
+				LOCAL_DISTANCE : REMOTE_DISTANCE;// 如果是同一节点，距离设为本地距离；否则设为远程距离
 
-	pr_debug("Initialized distance table, cnt=%d\n", numa_distance_cnt);
+	pr_debug("Initialized distance table, cnt=%d\n", numa_distance_cnt);// 打印调试信息，显示距离表初始化完成
 
 	return 0;
 }
@@ -377,33 +378,33 @@ static int __init numa_init(int (*init_func)(void))
 {
 	int ret;
 
-	nodes_clear(numa_nodes_parsed);
-	nodes_clear(node_possible_map);
-	nodes_clear(node_online_map);
+	nodes_clear(numa_nodes_parsed);// 清除解析的 NUMA 节点集合
+	nodes_clear(node_possible_map);// 清除可能存在的 NUMA 节点集合
+	nodes_clear(node_online_map);//清除当前在线的 NUMA 节点集合
 
-	ret = numa_alloc_distance();
+	ret = numa_alloc_distance();//分配 NUMA 节点之间的距离矩阵
 	if (ret < 0)
 		return ret;
 
-	ret = init_func();
+	ret = init_func();// 调用传入的初始化函数来执行特定的 NUMA 初始化逻辑
 	if (ret < 0)
 		goto out_free_distance;
 
-	if (nodes_empty(numa_nodes_parsed)) {
-		pr_info("No NUMA configuration found\n");
-		ret = -EINVAL;
-		goto out_free_distance;
+	if (nodes_empty(numa_nodes_parsed)) {//检查是否成功解析到了任何 NUMA 节点
+		pr_info("No NUMA configuration found\n");// 如果没有发现 NUMA 配置，则打印信息
+		ret = -EINVAL;//设置错误码
+		goto out_free_distance;//跳转到错误处理
 	}
 
-	ret = numa_register_nodes();
+	ret = numa_register_nodes();//注册 NUMA 节点
 	if (ret < 0)
-		goto out_free_distance;
+		goto out_free_distance;//如果注册失败，跳转到错误处理
 
-	setup_node_to_cpumask_map();
+	setup_node_to_cpumask_map();//设置每个节点对应的 CPU 掩码映射
 
 	return 0;
 out_free_distance:
-	numa_free_distance();
+	numa_free_distance();//如果在初始化过程中出现错误，释放分配的距离矩阵
 	return ret;
 }
 

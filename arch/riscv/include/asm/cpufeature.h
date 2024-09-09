@@ -64,12 +64,12 @@ static __always_inline bool has_fast_unaligned_accesses(void)
 
 unsigned long riscv_get_elf_hwcap(void);
 
-struct riscv_isa_ext_data {
-	const unsigned int id;
-	const char *name;
-	const char *property;
-	const unsigned int *subset_ext_ids;
-	const unsigned int subset_ext_size;
+struct riscv_isa_ext_data {//用于描述 RISC-V ISA 的扩展信息。这个结构体通常用于管理和查询 RISC-V 处理器支持的特定 ISA 扩展。
+	const unsigned int id;//扩展的唯一标识符 (ID)，用于标识特定的 RISC-V ISA 扩展
+	const char *name;//扩展的名称，通常是一个描述性的字符串
+	const char *property;//与设备树中属性名对应的字符串，用于匹配设备树中定义的 ISA 扩展属性
+	const unsigned int *subset_ext_ids;// 指向子集扩展 ID 的数组，如果该扩展包含子集扩展，则指向这些子集扩展的 ID 列表
+	const unsigned int subset_ext_size;//子集扩展的数量，即 `subset_ext_ids` 数组中的元素个数
 };
 
 extern const struct riscv_isa_ext_data riscv_isa_ext[];
@@ -86,23 +86,24 @@ static __always_inline bool
 riscv_has_extension_likely(const unsigned long ext)
 {
 	compiletime_assert(ext < RISCV_ISA_EXT_MAX,
-			   "ext must be < RISCV_ISA_EXT_MAX");
+			   "ext must be < RISCV_ISA_EXT_MAX");//编译时断言(这个断言可以在编译阶段捕获错误)，确保传入的扩展标识符 ext 小于 RISCV_ISA_EXT_MAX
 
-	if (IS_ENABLED(CONFIG_RISCV_ALTERNATIVE)) {
+	if (IS_ENABLED(CONFIG_RISCV_ALTERNATIVE)) {//如果启用了RISC-V ALTERNATIVE功能(这个配置项启用 RISC-V 的替代特性机制（如动态指令替换)。)
+		/* 使用汇编指令检测是否支持特定扩展 */
 		asm goto(
 		ALTERNATIVE("j	%l[l_no]", "nop", 0, %[ext], 1)
-		:
-		: [ext] "i" (ext)
-		:
-		: l_no);
+		:							//无输出操作数
+		: [ext] "i" (ext)					//输入操作数：立即数 ext
+		:							//无破坏的寄存器
+		: l_no);						//如果不支持扩展则跳转到 l_no 标签
 	} else {
-		if (!__riscv_isa_extension_available(NULL, ext))
-			goto l_no;
+		if (!__riscv_isa_extension_available(NULL, ext))//如果没有启用 ALTERNATIVE 功能，使用 __riscv_isa_extension_available 检查
+			goto l_no;//如果不支持扩展则跳转到 l_no 标签
 	}
 
-	return true;
+	return true;//如果支持扩展则返回 true
 l_no:
-	return false;
+	return false;//如果不支持扩展则返回 false
 }
 
 static __always_inline bool

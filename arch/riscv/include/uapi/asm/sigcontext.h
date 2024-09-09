@@ -26,12 +26,13 @@ struct __sc_riscv_v_state {
  *
  * This contains the context saved before a signal handler is invoked;
  * it is restored by sys_rt_sigreturn.
+ * 用于保存信号处理程序执行时的寄存器状态
  */
 struct sigcontext {
-	struct user_regs_struct sc_regs;
+	struct user_regs_struct sc_regs;//保存信号处理时 CPU 的通用寄存器状态。
 	union {
-		union __riscv_fp_state sc_fpregs;
-		struct __riscv_extra_ext_header sc_extdesc;
+		union __riscv_fp_state sc_fpregs;//保存浮点寄存器的状态
+		struct __riscv_extra_ext_header sc_extdesc;//保存额外扩展的描述头
 	};
 };
 

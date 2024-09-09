@@ -62,26 +62,29 @@ static inline void set_section_nid(unsigned long section_nr, int nid)
 #ifdef CONFIG_SPARSEMEM_EXTREME
 static noinline struct mem_section __ref *sparse_index_alloc(int nid)
 {
-	struct mem_section *section = NULL;
+	struct mem_section *section = NULL;//定义一个指向 mem_section 结构的指针并初始化为空
 	unsigned long array_size = SECTIONS_PER_ROOT *
-				   sizeof(struct mem_section);
+				   sizeof(struct mem_section);//计算一个页可以存放mem_section结构的数量
 
-	if (slab_is_available()) {
-		section = kzalloc_node(array_size, GFP_KERNEL, nid);
+	if (slab_is_available()) {//检查 slab 分配器是否可用
+		section = kzalloc_node(array_size, GFP_KERNEL, nid);//使用 slab 分配器在指定节点上分配并清零内存
 	} else {
-		section = memblock_alloc_node(array_size, SMP_CACHE_BYTES,
+		section = memblock_alloc_node(array_size, SMP_CACHE_BYTES,//如果不可用，使用 memblock 分配器在指定节点上分配内存
 					      nid);
-		if (!section)
+		if (!section) //检查 memblock 分配是否成功
 			panic("%s: Failed to allocate %lu bytes nid=%d\n",
-			      __func__, array_size, nid);
+			      __func__, array_size, nid);//分配失败时，触发内核 panic，并输出错误信息
 	}
 
-	return section;
+	return section;//返回分配的 mem_section 指针
 }
-
+/*
+ * 用于初始化稀疏内存索引，确保内存节结构已分配并正确关联内存节点。
+ * 确保给定的内存节编号在稀疏内存索引表中有一个有效的 mem_section 结构。
+ */
 static int __meminit sparse_index_init(unsigned long section_nr, int nid)
 {
-	unsigned long root = SECTION_NR_TO_ROOT(section_nr);
+	unsigned long root = SECTION_NR_TO_ROOT(section_nr);// 计算节编号对应的根索引。假设一页可以设置4个mem_section结构，节编号是7。那么root就等于1(从零开始)，意思就是该节编号对应的mem_section结构应在第二个页上分配。并使用二级数组管理:mem_section[1][2].
 	struct mem_section *section;
 
 	/*
@@ -91,14 +94,14 @@ static int __meminit sparse_index_init(unsigned long section_nr, int nid)
 	 *
 	 * The mem_hotplug_lock resolves the apparent race below.
 	 */
-	if (mem_section[root])
+	if (mem_section[root])//检查在mem_section数组中是否已经有对应的节
 		return 0;
 
-	section = sparse_index_alloc(nid);
+	section = sparse_index_alloc(nid);//在nid内存节点上分配新的 mem_section 结构
 	if (!section)
 		return -ENOMEM;
 
-	mem_section[root] = section;
+	mem_section[root] = section;//将新分配的mem_section结构（这块的大小是一个页面可以存在的全部mem_section结构大小，并将第一个mem_section结构指针赋值给mem_section[root]数组,因为mem_section数组是二维数组）赋值给根索引位置
 
 	return 0;
 }
@@ -226,20 +229,20 @@ static void __init memory_present(int nid, unsigned long start, unsigned long en
 {
 	unsigned long pfn;
 
-	start &= PAGE_SECTION_MASK;
-	mminit_validate_memmodel_limits(&start, &end);
-	for (pfn = start; pfn < end; pfn += PAGES_PER_SECTION) {
-		unsigned long section = pfn_to_section_nr(pfn);
+	start &= PAGE_SECTION_MASK;//对齐起始地址，使其与内存段(section)对齐
+	mminit_validate_memmodel_limits(&start, &end);// 验证内存模型的限制条件，确保起始和结束地址在允许范围内
+	for (pfn = start; pfn < end; pfn += PAGES_PER_SECTION) {//遍历从起始地址到结束地址的所有内存段(一个内存段大小为128MB)
+		unsigned long section = pfn_to_section_nr(pfn);//获取当前页帧号对应的段编号
 		struct mem_section *ms;
 
-		sparse_index_init(section, nid);
-		set_section_nid(section, nid);
+		sparse_index_init(section, nid);//初始化稀疏索引表(mem_section数组)，将段编号对应的mem_section结构关联到mem_section数组中
+		set_section_nid(section, nid);//设置当前内存段的节点 ID
 
-		ms = __nr_to_section(section);
-		if (!ms->section_mem_map) {
+		ms = __nr_to_section(section);//根据段编号获取当前段的内存段结构
+		if (!ms->section_mem_map) {//如果当前段的内存映射尚未初始化
 			ms->section_mem_map = sparse_encode_early_nid(nid) |
-							SECTION_IS_ONLINE;
-			__section_mark_present(ms, section);
+							SECTION_IS_ONLINE;//将节点 ID 编码为早期内存编码，并标记该内存段为在线状态
+			__section_mark_present(ms, section);//将该段标记为存在
 		}
 	}
 }
@@ -248,27 +251,28 @@ static void __init memory_present(int nid, unsigned long start, unsigned long en
  * Mark all memblocks as present using memory_present().
  * This is a convenience function that is useful to mark all of the systems
  * memory as present during initialization.
+ * 用于在内核初始化期间设置内存块的段信息
  */
 static void __init memblocks_present(void)
 {
-	unsigned long start, end;
-	int i, nid;
+	unsigned long start, end;//表示内存块的起始和结束地址
+	int i, nid;//i 用于遍历内存块，nid 表示节点 ID
 
-#ifdef CONFIG_SPARSEMEM_EXTREME
-	if (unlikely(!mem_section)) {
-		unsigned long size, align;
+#ifdef CONFIG_SPARSEMEM_EXTREME//极端稀疏内存模式
+	if (unlikely(!mem_section)) {// 如果mem_section为空
+		unsigned long size, align;//定义 size 和 align，表示分配内存的大小和对齐方式
 
-		size = sizeof(struct mem_section *) * NR_SECTION_ROOTS;
-		align = 1 << (INTERNODE_CACHE_SHIFT);
-		mem_section = memblock_alloc(size, align);
+		size = sizeof(struct mem_section *) * NR_SECTION_ROOTS;//计算mem_section数组的大小
+		align = 1 << (INTERNODE_CACHE_SHIFT);//设置对齐方式，根据不同 CPU 之间的缓存行间距来设置
+		mem_section = memblock_alloc(size, align);//分配内存给 mem_section，按指定的大小和对齐方式
 		if (!mem_section)
 			panic("%s: Failed to allocate %lu bytes align=0x%lx\n",
-			      __func__, size, align);
+			      __func__, size, align);//如果分配失败，打印错误信息并终止系统
 	}
 #endif
 
 	for_each_mem_pfn_range(i, MAX_NUMNODES, &start, &end, &nid)
-		memory_present(nid, start, end);
+		memory_present(nid, start, end);//遍历所有内存块的 PFN 范围，调用memory_present函数将内存块映射到mem_section结构上
 }
 
 /*
@@ -360,41 +364,40 @@ again:
 static void __init check_usemap_section_nr(int nid,
 		struct mem_section_usage *usage)
 {
-	unsigned long usemap_snr, pgdat_snr;
+	unsigned long usemap_snr, pgdat_snr;//定义两个无符号长整数 usemap_snr 和 pgdat_snr，用于存储内存段编号
 	static unsigned long old_usemap_snr;
 	static unsigned long old_pgdat_snr;
-	struct pglist_data *pgdat = NODE_DATA(nid);
-	int usemap_nid;
+	struct pglist_data *pgdat = NODE_DATA(nid);// 获取节点数据结构的指针
+	int usemap_nid;//用于存储 usemap 的节点 ID
 
 	/* First call */
-	if (!old_usemap_snr) {
+	if (!old_usemap_snr) {//如果是第一次调用该函数，初始化 old_usemap_snr 和 old_pgdat_snr 为最大内存段数
 		old_usemap_snr = NR_MEM_SECTIONS;
 		old_pgdat_snr = NR_MEM_SECTIONS;
 	}
 
-	usemap_snr = pfn_to_section_nr(__pa(usage) >> PAGE_SHIFT);
-	pgdat_snr = pfn_to_section_nr(pgdat_to_phys(pgdat) >> PAGE_SHIFT);
-	if (usemap_snr == pgdat_snr)
+	usemap_snr = pfn_to_section_nr(__pa(usage) >> PAGE_SHIFT);//将 mem_section_usage 结构的物理地址转换为段编号
+	pgdat_snr = pfn_to_section_nr(pgdat_to_phys(pgdat) >> PAGE_SHIFT);//将节点数据结构的物理地址转换为段编号
+	if (usemap_snr == pgdat_snr)// 如果 usemap_snr 和 pgdat_snr 相同，说明它们在同一段，不需要处理
 		return;
 
-	if (old_usemap_snr == usemap_snr && old_pgdat_snr == pgdat_snr)
+	if (old_usemap_snr == usemap_snr && old_pgdat_snr == pgdat_snr)//如果当前的 usemap_snr 和 pgdat_snr 与上一次记录的值相同，跳过冗余信息输出
 		/* skip redundant message */
 		return;
-
+	/* 更新上一次的段编号记录 */
 	old_usemap_snr = usemap_snr;
 	old_pgdat_snr = pgdat_snr;
 
-	usemap_nid = sparse_early_nid(__nr_to_section(usemap_snr));
-	if (usemap_nid != nid) {
+	usemap_nid = sparse_early_nid(__nr_to_section(usemap_snr));//获取 usemap_snr 段对应的节点 ID
+	if (usemap_nid != nid) {//如果 usemap 所属节点与当前节点不同，打印信息提示需要移除该节点
 		pr_info("node %d must be removed before remove section %ld\n",
 			nid, usemap_snr);
 		return;
 	}
 	/*
-	 * There is a circular dependency.
-	 * Some platforms allow un-removable section because they will just
-	 * gather other removable sections for dynamic partitioning.
-	 * Just notify un-removable section's number here.
+	 *  检测到 usemap 和 pgdat 在段的分配上存在循环依赖。某些平台允许
+	 *  不可移除的段，因为它们会将其他可移除的段用于动态分区。在这里，
+	 *  仅输出不可移除段的编号作为通知。
 	 */
 	pr_info("Section %ld and %ld (node %d) have a circular dependency on usemap and pgdat allocations\n",
 		usemap_snr, pgdat_snr, nid);
@@ -416,6 +419,11 @@ static void __init check_usemap_section_nr(int nid,
 #ifdef CONFIG_SPARSEMEM_VMEMMAP
 static unsigned long __init section_map_size(void)
 {
+	/*
+	 * 计算一个内存段的映射大小,并对齐到 PMD_SIZE。
+	 * PAGES_PER_SECTION ：定义了一个内存段包含的页面数量。
+	 * ALIGN宏：用于将给定的大小对齐到指定的边界
+	 * */
 	return ALIGN(sizeof(struct page) * PAGES_PER_SECTION, PMD_SIZE);
 }
 
@@ -429,19 +437,19 @@ struct page __init *__populate_section_memmap(unsigned long pfn,
 		unsigned long nr_pages, int nid, struct vmem_altmap *altmap,
 		struct dev_pagemap *pgmap)
 {
-	unsigned long size = section_map_size();
-	struct page *map = sparse_buffer_alloc(size);
-	phys_addr_t addr = __pa(MAX_DMA_ADDRESS);
+	unsigned long size = section_map_size();// 计算当前段的映射大小，需要为该段分配相应大小的内存
+	struct page *map = sparse_buffer_alloc(size);//尝试从稀疏缓冲区（sparse buffer）中分配一块内存，用于该段的映射
+	phys_addr_t addr = __pa(MAX_DMA_ADDRESS);//定义物理地址 addr，从 MAX_DMA_ADDRESS 开始
 
-	if (map)
+	if (map)//如果成功分配到内存映射，直接返回
 		return map;
 
-	map = memmap_alloc(size, size, addr, nid, false);
-	if (!map)
+	map = memmap_alloc(size, size, addr, nid, false);// 如果无法从稀疏缓冲区分配，则尝试直接从内存中分配
+	if (!map)//如果分配失败，触发 panic，输出错误信息并停止系统
 		panic("%s: Failed to allocate %lu bytes align=0x%lx nid=%d from=%pa\n",
 		      __func__, size, PAGE_SIZE, nid, &addr);
 
-	return map;
+	return map;// 返回成功分配的内存映射
 }
 #endif /* !CONFIG_SPARSEMEM_VMEMMAP */
 
@@ -453,45 +461,50 @@ static inline void __meminit sparse_buffer_free(unsigned long size)
 	WARN_ON(!sparsemap_buf || size == 0);
 	memblock_free(sparsemap_buf, size);
 }
-
+/* 该函数用于初始化稀疏缓冲区（sparse buffer），该缓冲区用于稀疏内存段的内存管理。 */
 static void __init sparse_buffer_init(unsigned long size, int nid)
 {
-	phys_addr_t addr = __pa(MAX_DMA_ADDRESS);
+	phys_addr_t addr = __pa(MAX_DMA_ADDRESS);//将虚拟地址 MAX_DMA_ADDRESS 转换为物理地址，并赋值给 addr
+	/* 检查 sparsemap_buf 是否非空，如果非空则发出警告，说明可能忘记调用 sparse_buffer_fini() 来释放资源 */
 	WARN_ON(sparsemap_buf);	/* forgot to call sparse_buffer_fini()? */
 	/*
 	 * Pre-allocated buffer is mainly used by __populate_section_memmap
 	 * and we want it to be properly aligned to the section size - this is
 	 * especially the case for VMEMMAP which maps memmap to PMDs
+	 *
+	 * 预分配的缓冲区主要用于 __populate_section_memmap，我们希望它能够正确对齐
+	 * 到内存段的大小 - 尤其是在 VMEMMAP 模型中，该模型将内存映射 (memmap) 映射
+	 * 到 PMD（页面中间目录）中。
 	 */
-	sparsemap_buf = memmap_alloc(size, section_map_size(), addr, nid, true);
-	sparsemap_buf_end = sparsemap_buf + size;
+	sparsemap_buf = memmap_alloc(size, section_map_size(), addr, nid, true);//分配缓冲区，起始地址对齐到 section_map_size()
+	sparsemap_buf_end = sparsemap_buf + size;//计算缓冲区的结束地址
 }
 
 static void __init sparse_buffer_fini(void)
 {
-	unsigned long size = sparsemap_buf_end - sparsemap_buf;
+	unsigned long size = sparsemap_buf_end - sparsemap_buf;//计算稀疏缓冲区的大小，通过减去缓冲区的起始地址从结束地址
 
-	if (sparsemap_buf && size > 0)
+	if (sparsemap_buf && size > 0)//如果 sparsemap_buf 非空且 size 大于 0，释放缓冲区
 		sparse_buffer_free(size);
-	sparsemap_buf = NULL;
+	sparsemap_buf = NULL;//将 sparsemap_buf 设置为 NULL，表示缓冲区已被释放
 }
 
 void * __meminit sparse_buffer_alloc(unsigned long size)
 {
-	void *ptr = NULL;
+	void *ptr = NULL;//初始化一个指针，用于存储分配的内存地址
 
-	if (sparsemap_buf) {
-		ptr = (void *) roundup((unsigned long)sparsemap_buf, size);
-		if (ptr + size > sparsemap_buf_end)
-			ptr = NULL;
+	if (sparsemap_buf) {//如果预先分配的缓冲区存在
+		ptr = (void *) roundup((unsigned long)sparsemap_buf, size);//将 sparsemap_buf 向上对齐到指定的大小，并将其转换为指针
+		if (ptr + size > sparsemap_buf_end)//检查分配后的地址是否超过缓冲区的末尾
+			ptr = NULL;//如果超过，设置 ptr 为 NULL，表示分配失败
 		else {
 			/* Free redundant aligned space */
-			if ((unsigned long)(ptr - sparsemap_buf) > 0)
-				sparse_buffer_free((unsigned long)(ptr - sparsemap_buf));
-			sparsemap_buf = ptr + size;
+			if ((unsigned long)(ptr - sparsemap_buf) > 0)//计算对齐后未使用的空间大小
+				sparse_buffer_free((unsigned long)(ptr - sparsemap_buf));//释放未使用的空间
+			sparsemap_buf = ptr + size;//更新 sparsemap_buf 的起始位置到新分配区域的末尾
 		}
 	}
-	return ptr;
+	return ptr;//返回分配的内存指针，或者 NULL 如果分配失败
 }
 
 void __weak __meminit vmemmap_populate_print_last(void)
@@ -501,53 +514,54 @@ void __weak __meminit vmemmap_populate_print_last(void)
 /*
  * Initialize sparse on a specific node. The node spans [pnum_begin, pnum_end)
  * And number of present sections in this node is map_count.
+ * 用于初始化稀疏内存模型中指定节点 (nid) 的内存段
  */
 static void __init sparse_init_nid(int nid, unsigned long pnum_begin,
 				   unsigned long pnum_end,
 				   unsigned long map_count)
 {
-	struct mem_section_usage *usage;
-	unsigned long pnum;
-	struct page *map;
+	struct mem_section_usage *usage;//用于记录内存段使用情况的结构体指针
+	unsigned long pnum;//内存段编号
+	struct page *map;//用于存储段的物理页映射
 
 	usage = sparse_early_usemaps_alloc_pgdat_section(NODE_DATA(nid),
-			mem_section_usage_size() * map_count);
+			mem_section_usage_size() * map_count);//为节点分配内存段使用情况映射表，映射表的总大小是段的数量乘以单个映射表（就是mem_section_usage结构的大小）所需的大小。NODE_DATA(nid) ：返回当前节点的数据结构。
 	if (!usage) {
-		pr_err("%s: node[%d] usemap allocation failed", __func__, nid);
+		pr_err("%s: node[%d] usemap allocation failed", __func__, nid);//如果分配失败，打印错误信息，并跳转到错误处理
 		goto failed;
 	}
-	sparse_buffer_init(map_count * section_map_size(), nid);
-	for_each_present_section_nr(pnum_begin, pnum) {
-		unsigned long pfn = section_nr_to_pfn(pnum);
+	sparse_buffer_init(map_count * section_map_size(), nid);//初始化稀疏内存映射缓冲区，大小为段数乘以每个段的映射大小(段内页面数乘page结构体大小)
+	for_each_present_section_nr(pnum_begin, pnum) {//遍历从 pnum_begin 到 pnum_end 的所有存在的内存段编号
+		unsigned long pfn = section_nr_to_pfn(pnum);//将段编号转换为页帧编号，用于后续的内存映射
 
-		if (pnum >= pnum_end)
+		if (pnum >= pnum_end)//如果当前段编号大于等于结束编号，退出循环
 			break;
 
 		map = __populate_section_memmap(pfn, PAGES_PER_SECTION,
-				nid, NULL, NULL);
-		if (!map) {
+				nid, NULL, NULL);//在稀疏内存映射缓冲区为内存段的页面映射分配内存
+		if (!map) {//检查是否申请成功
 			pr_err("%s: node[%d] memory map backing failed. Some memory will not be available.",
-			       __func__, nid);
-			pnum_begin = pnum;
-			sparse_buffer_fini();
-			goto failed;
+			       __func__, nid);//如果内存映射失败，打印错误信息
+			pnum_begin = pnum;//更新起始编号以便标记失败的段
+			sparse_buffer_fini();//清理缓冲区
+			goto failed;//跳转到错误处理
 		}
-		check_usemap_section_nr(nid, usage);
+		check_usemap_section_nr(nid, usage);//检查当前段的使用情况映射表是否与当前段编号一致
 		sparse_init_one_section(__nr_to_section(pnum), pnum, map, usage,
-				SECTION_IS_EARLY);
-		usage = (void *) usage + mem_section_usage_size();
+				SECTION_IS_EARLY);//初始化单个内存段结构（mem_section），配置段的相关信息，包括页帧映射和使用映射表
+		usage = (void *) usage + mem_section_usage_size();// 更新 usage 指针，指向下一个使用映射表区域
 	}
-	sparse_buffer_fini();
+	sparse_buffer_fini();//清理稀疏内存映射缓冲区
 	return;
 failed:
-	/* We failed to allocate, mark all the following pnums as not present */
+	/* 如果内存映射失败，将所有接下来的段标记为不存在 */
 	for_each_present_section_nr(pnum_begin, pnum) {
-		struct mem_section *ms;
+		struct mem_section *ms;//用于存储段的结构体指针
 
-		if (pnum >= pnum_end)
+		if (pnum >= pnum_end)// 如果当前段编号大于等于结束编号，退出循环
 			break;
-		ms = __nr_to_section(pnum);
-		ms->section_mem_map = 0;
+		ms = __nr_to_section(pnum);//获取段结构指针
+		ms->section_mem_map = 0;//标记段为不存在
 	}
 }
 
@@ -562,7 +576,7 @@ void __init sparse_init(void)
 
 	/* see include/linux/mmzone.h 'struct mem_section' definition */
 	BUILD_BUG_ON(!is_power_of_2(sizeof(struct mem_section)));//确保 struct mem_section 结构的大小是 2 的幂
-	memblocks_present();//初始化内存块的节点信息，将内存区域映射到对应的节点
+	memblocks_present();//初始化内存块的内存段信息(初始化mem_section结构)，将内存区域映射到对应的mem_section结构上
 
 	pnum_begin = first_present_section_nr();//获取第一个存在的内存段编号
 	nid_begin = sparse_early_nid(__nr_to_section(pnum_begin));//取第一个存在的内存段对应的节点 ID
@@ -571,14 +585,14 @@ void __init sparse_init(void)
 	set_pageblock_order();//设置 HUGETLB_PAGE_SIZE_VARIABLE 所需的 pageblock_order
 
 	for_each_present_section_nr(pnum_begin + 1, pnum_end) {//遍历所有存在的内存段
-		int nid = sparse_early_nid(__nr_to_section(pnum_end));
+		int nid = sparse_early_nid(__nr_to_section(pnum_end));//获取当前内存段的节点 ID
 
 		if (nid == nid_begin) {//如果当前段和前一段属于同一节点
 			map_count++;//增加映射计数
 			continue;//跳过初始化，继续遍历
 		}
 		/* Init node with sections in range [pnum_begin, pnum_end) */
-		sparse_init_nid(nid_begin, pnum_begin, pnum_end, map_count);
+		sparse_init_nid(nid_begin, pnum_begin, pnum_end, map_count);//对于属于同一个节点的连续段，调用 sparse_init_nid 进行初始化。处理段的范围为 [pnum_begin, pnum_end)
 		nid_begin = nid;//更新为当前节点 ID
 		pnum_begin = pnum_end;//更新为当前段起始编号
 		map_count = 1;//重置映射计数

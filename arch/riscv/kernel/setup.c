@@ -285,8 +285,8 @@ void __init setup_arch(char **cmdline_p)
 		acpi_init_rintc_map();
 
 	riscv_init_cbo_blocksizes();//初始化 RISC-V 的 CBO（Cache Block Operation）缓存行大小
-	riscv_fill_hwcap();//填充 RISC-V 硬件能力
-	init_rt_signal_env();//初始化实时信号环境
+	riscv_fill_hwcap();//填充 RISC-V 硬件能力(指令扩展能力)
+	init_rt_signal_env();//初始化实时信号环境(主要计算信号框架和信号帧总大小)
 	apply_boot_alternatives();//应用引导时的替换方案（如替换特定指令）
 	/*如果启用了 RISC-V ISA ZICBOM 扩展并且该扩展可用，则支持非一致性 */
 	if (IS_ENABLED(CONFIG_RISCV_ISA_ZICBOM) &&

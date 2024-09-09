@@ -29,12 +29,16 @@ extern u32 __user_rt_sigreturn[2];
 static size_t riscv_v_sc_size __ro_after_init;
 
 #define DEBUG_SIG 0
-
+/*
+ * 表示实时信号处理程序的栈帧。
+ * 当信号处理程序被触发时，系统会使用这个栈帧来保存信号相关的信息以及处
+ * 理程序运行时的上下文，以便在信号处理完成后能够正确恢复程序的执行
+ * */
 struct rt_sigframe {
-	struct siginfo info;
-	struct ucontext uc;
+	struct siginfo info;//信号信息结构体，包含了信号编号、信号代码、信号发送者等信息
+	struct ucontext uc;//用户上下文结构体，保存了信号处理程序运行时的处理器状态
 #ifndef CONFIG_MMU
-	u32 sigreturn_code[2];
+	u32 sigreturn_code[2];// 在没有内存管理单元 (MMU) 的系统上，存储 sigreturn 系统调用的机器码
 #endif
 };
 
@@ -205,27 +209,29 @@ static long restore_sigcontext(struct pt_regs *regs,
 
 static size_t get_rt_frame_size(bool cal_all)
 {
-	struct rt_sigframe __user *frame;
-	size_t frame_size;
-	size_t total_context_size = 0;
+	struct rt_sigframe __user *frame;//定义一个指向用户空间实时信号帧的指针
+	size_t frame_size;//用于存储信号帧的总大小
+	size_t total_context_size = 0;//初始化上下文的总大小为0
 
-	frame_size = sizeof(*frame);
+	frame_size = sizeof(*frame);// 计算信号帧的基本大小，包括通用的实时信号帧结构
 
-	if (has_vector()) {
-		if (cal_all || riscv_v_vstate_query(task_pt_regs(current)))
-			total_context_size += riscv_v_sc_size;
+	if (has_vector()) {//检查系统是否支持向量(v扩展)扩展
+		if (cal_all || riscv_v_vstate_query(task_pt_regs(current)))//如果需要计算所有的上下文（cal_all 为 true）或者当前任务使用了向量状态
+			total_context_size += riscv_v_sc_size;//将向量扩展的上下文大小累加到总的上下文大小
 	}
 	/*
 	 * Preserved a __riscv_ctx_hdr for END signal context header if an
 	 * extension uses __riscv_extra_ext_header
+	 * 如果有扩展使用了 __riscv_extra_ext_header，为了确保信号上下文的完整性，
+	 * 保留一个 __riscv_ctx_hdr 用作信号上下文头的结尾。
 	 */
 	if (total_context_size)
-		total_context_size += sizeof(struct __riscv_ctx_hdr);
+		total_context_size += sizeof(struct __riscv_ctx_hdr);//增加一个 __riscv_ctx_hdr 的大小，以表示扩展上下文的结束
 
-	frame_size += total_context_size;
+	frame_size += total_context_size;//将累积的上下文大小加到信号帧的总大小中
 
-	frame_size = round_up(frame_size, 16);
-	return frame_size;
+	frame_size = round_up(frame_size, 16);//将信号帧的大小向上对齐到 16 字节，以满足对齐要求
+	return frame_size;//返回最终计算的信号帧大小
 }
 
 SYSCALL_DEFINE0(rt_sigreturn)
@@ -471,14 +477,22 @@ void arch_do_signal_or_restart(struct pt_regs *regs)
 void init_rt_signal_env(void);
 void __init init_rt_signal_env(void)
 {
+	/*
+	 *  计算 RISC-V 向量寄存器状态结构在信号处理中的总大小
+	 *  这些大小包括 RISC-V 上下文头部、向量寄存器状态和向量寄存器的大小
+	 */
 	riscv_v_sc_size = sizeof(struct __riscv_ctx_hdr) +
 			  sizeof(struct __sc_riscv_v_state) + riscv_v_vsize;
 	/*
 	 * Determine the stack space required for guaranteed signal delivery.
 	 * The signal_minsigstksz will be populated into the AT_MINSIGSTKSZ entry
 	 * in the auxiliary array at process startup.
+	 *
+	 * 确定保证信号传递所需的最小堆栈空间大小。 signal_minsigstksz 会在进程
+	 * 启动时被填充到辅助数组的 AT_MINSIGSTKSZ 条目中。AT_MINSIGSTKSZ 是一个
+	 * 进程的 ELF 辅助向量条目，用于表示信号处理的最小堆栈大小。
 	 */
-	signal_minsigstksz = get_rt_frame_size(true);
+	signal_minsigstksz = get_rt_frame_size(true);//计算实时信号框架所需的大小
 }
 
 #ifdef CONFIG_DYNAMIC_SIGFRAME

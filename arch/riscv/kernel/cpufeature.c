@@ -63,12 +63,12 @@ EXPORT_SYMBOL_GPL(riscv_isa_extension_base);
  */
 bool __riscv_isa_extension_available(const unsigned long *isa_bitmap, unsigned int bit)
 {
-	const unsigned long *bmap = (isa_bitmap) ? isa_bitmap : riscv_isa;
+	const unsigned long *bmap = (isa_bitmap) ? isa_bitmap : riscv_isa;//如果提供了 isa_bitmap，则使用它；否则使用默认的riscv_isa位图
 
-	if (bit >= RISCV_ISA_EXT_MAX)
+	if (bit >= RISCV_ISA_EXT_MAX)//如果传入的 bit 值大于或等于支持的最大扩展标识符，则返回 false
 		return false;
 
-	return test_bit(bit, bmap) ? true : false;
+	return test_bit(bit, bmap) ? true : false;//检查 bmap 中是否设置了 bit 位，如果是则返回 true，否则返回 false
 }
 EXPORT_SYMBOL_GPL(__riscv_isa_extension_available);
 
@@ -481,64 +481,67 @@ static void __init riscv_parse_isa_string(unsigned long *this_hwcap, struct risc
 		}
 	}
 }
-
+/*
+ * 从系统的 ISA 字符串（通过 ACPI 或设备树）获取 RISC-V 硬件扩展的信息，
+ * 并更新系统的硬件能力位图和每个 CPU 的 ISA 信息。 
+ */
 static void __init riscv_fill_hwcap_from_isa_string(unsigned long *isa2hwcap)
 {
-	struct device_node *node;
-	const char *isa;
+	struct device_node *node;//声明设备节点指针
+	const char *isa;// 用于存储 ISA 字符串的指针
 	int rc;
-	struct acpi_table_header *rhct;
-	acpi_status status;
-	unsigned int cpu;
-	u64 boot_vendorid;
-	u64 boot_archid;
+	struct acpi_table_header *rhct;//ACPI 表头指针
+	acpi_status status;//ACPI 状态
+	unsigned int cpu;// CPU 索引
+	u64 boot_vendorid;//引导时获取的供应商 ID
+	u64 boot_archid;//引导时获取的架构 ID
 
-	if (!acpi_disabled) {
-		status = acpi_get_table(ACPI_SIG_RHCT, 0, &rhct);
-		if (ACPI_FAILURE(status))
+	if (!acpi_disabled) {// 检查 ACPI 是否被禁用
+		status = acpi_get_table(ACPI_SIG_RHCT, 0, &rhct);//获取 ACPI RHCT 表
+		if (ACPI_FAILURE(status))//如果获取失败，退出
 			return;
 	}
 
-	boot_vendorid = riscv_get_mvendorid();
-	boot_archid = riscv_get_marchid();
+	boot_vendorid = riscv_get_mvendorid();// 获取当前 CPU 的供应商 ID
+	boot_archid = riscv_get_marchid();// 获取当前 CPU 的架构 ID
 
-	for_each_possible_cpu(cpu) {
-		struct riscv_isainfo *isainfo = &hart_isa[cpu];
-		unsigned long this_hwcap = 0;
+	for_each_possible_cpu(cpu) {//遍历所有可能的 CPU
+		struct riscv_isainfo *isainfo = &hart_isa[cpu];// 获取当前 CPU 的 ISA 信息结构
+		unsigned long this_hwcap = 0;//用于存储当前 CPU 的硬件能力
 
-		if (acpi_disabled) {
-			node = of_cpu_device_node_get(cpu);
-			if (!node) {
+		if (acpi_disabled) {//如果 ACPI 被禁用，使用设备树（Device Tree）
+			node = of_cpu_device_node_get(cpu);// 获取当前 CPU 的设备树节点
+			if (!node) {//如果节点不存在，打印警告并继续
 				pr_warn("Unable to find cpu node\n");
 				continue;
 			}
 
-			rc = of_property_read_string(node, "riscv,isa", &isa);
-			of_node_put(node);
-			if (rc) {
+			rc = of_property_read_string(node, "riscv,isa", &isa);//读取设备树中的 ISA 字符串
+			of_node_put(node);//释放设备树节点
+			if (rc) {//如果读取失败，打印警告并继续
 				pr_warn("Unable to find \"riscv,isa\" devicetree entry\n");
 				continue;
 			}
-		} else {
-			rc = acpi_get_riscv_isa(rhct, cpu, &isa);
-			if (rc < 0) {
+		} else {//如果 ACPI 没有被禁用
+			rc = acpi_get_riscv_isa(rhct, cpu, &isa);//从 ACPI 获取 ISA 字符串
+			if (rc < 0) {//如果获取失败，打印警告并继续
 				pr_warn("Unable to get ISA for the hart - %d\n", cpu);
 				continue;
 			}
 		}
 
-		riscv_parse_isa_string(&this_hwcap, isainfo, isa2hwcap, isa);
+		riscv_parse_isa_string(&this_hwcap, isainfo, isa2hwcap, isa);//解析 ISA 字符串，并填充硬件能力和 ISA 信息
 
 		/*
 		 * These ones were as they were part of the base ISA when the
 		 * port & dt-bindings were upstreamed, and so can be set
 		 * unconditionally where `i` is in riscv,isa on DT systems.
 		 */
-		if (acpi_disabled) {
-			set_bit(RISCV_ISA_EXT_ZICSR, isainfo->isa);
-			set_bit(RISCV_ISA_EXT_ZIFENCEI, isainfo->isa);
-			set_bit(RISCV_ISA_EXT_ZICNTR, isainfo->isa);
-			set_bit(RISCV_ISA_EXT_ZIHPM, isainfo->isa);
+		if (acpi_disabled) {//如果使用设备树，设置一些默认的 ISA 扩展位
+			set_bit(RISCV_ISA_EXT_ZICSR, isainfo->isa);//设置 ZICSR 扩展位
+			set_bit(RISCV_ISA_EXT_ZIFENCEI, isainfo->isa);//设置 ZIFENCEI 扩展位
+			set_bit(RISCV_ISA_EXT_ZICNTR, isainfo->isa);//设置 ZICNTR 扩展位
+			set_bit(RISCV_ISA_EXT_ZIHPM, isainfo->isa);//设置 ZIHPM 扩展位
 		}
 
 		/*
@@ -548,10 +551,11 @@ static void __init riscv_fill_hwcap_from_isa_string(unsigned long *isa2hwcap)
 		 * version of the vector specification put "v" into their DTs.
 		 * CPU cores with the ratified spec will contain non-zero
 		 * marchid.
+		 * 处理 V 扩展的特殊情况，针对一些供应商的行为(主要是芯来的CPU)
 		 */
 		if (acpi_disabled && boot_vendorid == THEAD_VENDOR_ID && boot_archid == 0x0) {
-			this_hwcap &= ~isa2hwcap[RISCV_ISA_EXT_v];
-			clear_bit(RISCV_ISA_EXT_v, isainfo->isa);
+			this_hwcap &= ~isa2hwcap[RISCV_ISA_EXT_v];//清除 V 扩展的硬件能力
+			clear_bit(RISCV_ISA_EXT_v, isainfo->isa);//清除 V 扩展的 ISA 位
 		}
 
 		/*
@@ -559,85 +563,86 @@ static void __init riscv_fill_hwcap_from_isa_string(unsigned long *isa2hwcap)
 		 * common capabilities of every "okay" hart, in case they don't
 		 * have.
 		 */
-		if (elf_hwcap)
-			elf_hwcap &= this_hwcap;
+		if (elf_hwcap)//将硬件能力设为所有 CPU 的交集，确保每个 CPU 都有相同的 ISA 能力
+			elf_hwcap &= this_hwcap;//取交集
 		else
-			elf_hwcap = this_hwcap;
+			elf_hwcap = this_hwcap;//初始设定硬件能力
 
-		if (bitmap_empty(riscv_isa, RISCV_ISA_EXT_MAX))
-			bitmap_copy(riscv_isa, isainfo->isa, RISCV_ISA_EXT_MAX);
+		if (bitmap_empty(riscv_isa, RISCV_ISA_EXT_MAX))// 更新全局 riscv_isa 位图，确保所有 harts（硬件线程）的一致性
+			bitmap_copy(riscv_isa, isainfo->isa, RISCV_ISA_EXT_MAX);//复制当前hart的ISA位图
 		else
-			bitmap_and(riscv_isa, riscv_isa, isainfo->isa, RISCV_ISA_EXT_MAX);
+			bitmap_and(riscv_isa, riscv_isa, isainfo->isa, RISCV_ISA_EXT_MAX);//取交集以保持一致性
 	}
 
-	if (!acpi_disabled && rhct)
-		acpi_put_table((struct acpi_table_header *)rhct);
+	if (!acpi_disabled && rhct)//如果 ACPI 没有禁用且获取到 RHCT 表
+		acpi_put_table((struct acpi_table_header *)rhct);//释放 ACPI 表
 }
 
 static int __init riscv_fill_hwcap_from_ext_list(unsigned long *isa2hwcap)
 {
 	unsigned int cpu;
 
-	for_each_possible_cpu(cpu) {
-		unsigned long this_hwcap = 0;
-		struct device_node *cpu_node;
-		struct riscv_isainfo *isainfo = &hart_isa[cpu];
+	for_each_possible_cpu(cpu) {//遍历系统上存在的每一个CPU
+		unsigned long this_hwcap = 0;//表示本次迭代CPU的硬件能力
+		struct device_node *cpu_node;//定义一个指向设备节点的指针，用于获取CPU的设备节点
+		struct riscv_isainfo *isainfo = &hart_isa[cpu];//获取当前 CPU 的 RISC-V ISA 信息
 
-		cpu_node = of_cpu_device_node_get(cpu);
-		if (!cpu_node) {
-			pr_warn("Unable to find cpu node\n");
-			continue;
+		cpu_node = of_cpu_device_node_get(cpu);//获取与当前 CPU 相关联的设备树节点
+		if (!cpu_node) {//如果无法获取设备树节点
+			pr_warn("Unable to find cpu node\n");//打印警告信息
+			continue;//跳过当前 CPU，继续处理下一个 CPU
 		}
 
-		if (!of_property_present(cpu_node, "riscv,isa-extensions")) {
-			of_node_put(cpu_node);
-			continue;
+		if (!of_property_present(cpu_node, "riscv,isa-extensions")) {//检查设备树节点中是否存在 "riscv,isa-extensions" 属性
+			of_node_put(cpu_node);// 如果没有，则释放设备节点
+			continue;//跳过当前 CPU
 		}
 
-		for (int i = 0; i < riscv_isa_ext_count; i++) {
-			const struct riscv_isa_ext_data *ext = &riscv_isa_ext[i];
+		for (int i = 0; i < riscv_isa_ext_count; i++) {// 遍历已知的 RISC-V ISA 扩展列表
+			const struct riscv_isa_ext_data *ext = &riscv_isa_ext[i];//获取当前扩展的指针
 
 			if (of_property_match_string(cpu_node, "riscv,isa-extensions",
-						     ext->property) < 0)
-				continue;
+						     ext->property) < 0)//检查当前 CPU 的设备节点是否包含该扩展的字符串属性
+				continue;//如果没有匹配的字符串属性，跳过该扩展
 
-			if (ext->subset_ext_size) {
-				for (int j = 0; j < ext->subset_ext_size; j++) {
-					if (riscv_isa_extension_check(ext->subset_ext_ids[j]))
+			if (ext->subset_ext_size) {// 如果该扩展有子集扩展，进一步处理这些子集扩展
+				for (int j = 0; j < ext->subset_ext_size; j++) {//遍历子集扩展
+					if (riscv_isa_extension_check(ext->subset_ext_ids[j]))// 检查子集扩展是否支持，并将其标记在 ISA 信息中
 						set_bit(ext->subset_ext_ids[j], isainfo->isa);
 				}
 			}
 
-			if (riscv_isa_extension_check(ext->id)) {
-				set_bit(ext->id, isainfo->isa);
+			if (riscv_isa_extension_check(ext->id)) {//检查该扩展是否被支持，并将其标记在 ISA 信息中
+				set_bit(ext->id, isainfo->isa);//设置扩展位
 
 				/* Only single letter extensions get set in hwcap */
-				if (strnlen(riscv_isa_ext[i].name, 2) == 1)
+				if (strnlen(riscv_isa_ext[i].name, 2) == 1)// 如果扩展名称为单字母，则将其添加到硬件能力变量中
 					this_hwcap |= isa2hwcap[riscv_isa_ext[i].id];
 			}
 		}
 
-		of_node_put(cpu_node);
+		of_node_put(cpu_node);// 处理完当前 CPU 的设备节点后，释放节点
 
 		/*
 		 * All "okay" harts should have same isa. Set HWCAP based on
 		 * common capabilities of every "okay" hart, in case they don't.
+		 * 所有状态为 "okay" 的处理器核应该具有相同的 ISA。设定 HWCAP 为所有 "okay" 核心的公共能力集。
 		 */
 		if (elf_hwcap)
-			elf_hwcap &= this_hwcap;
+			elf_hwcap &= this_hwcap;//与前面的 HWCAP 取交集，确保所有处理器核支持相同的功能
 		else
-			elf_hwcap = this_hwcap;
+			elf_hwcap = this_hwcap;// 如果 elf_hwcap 尚未设置，直接赋值
 
-		if (bitmap_empty(riscv_isa, RISCV_ISA_EXT_MAX))
+		if (bitmap_empty(riscv_isa, RISCV_ISA_EXT_MAX))//如果全局 ISA 位图为空，则复制当前处理器的 ISA 位图
 			bitmap_copy(riscv_isa, isainfo->isa, RISCV_ISA_EXT_MAX);
 		else
-			bitmap_and(riscv_isa, riscv_isa, isainfo->isa, RISCV_ISA_EXT_MAX);
+			bitmap_and(riscv_isa, riscv_isa, isainfo->isa, RISCV_ISA_EXT_MAX);//否则取交集，以确保全局 ISA 位图只包含所有处理器都支持的扩展
 	}
 
-	if (bitmap_empty(riscv_isa, RISCV_ISA_EXT_MAX))
+	if (bitmap_empty(riscv_isa, RISCV_ISA_EXT_MAX))//如果全局 ISA 位图仍为空，表示没有找到支持的扩展，返回错误
 		return -ENOENT;
 
-	return 0;
+	return 0;//成功返回0
 }
 
 #ifdef CONFIG_RISCV_ISA_FALLBACK
@@ -654,60 +659,58 @@ early_param("riscv_isa_fallback", riscv_isa_fallback_setup);
 
 void __init riscv_fill_hwcap(void)
 {
-	char print_str[NUM_ALPHA_EXTS + 1];
-	unsigned long isa2hwcap[26] = {0};
+	char print_str[NUM_ALPHA_EXTS + 1];//定义一个字符数组，用于存储要打印的 ISA 扩展字符串
+	unsigned long isa2hwcap[26] = {0};//定义一个数组，用于将ISA扩展字母映射到硬件能力标志
 	int i, j;
+	/* 将 ISA 字母映射到对应的硬件能力标志 */
+	isa2hwcap['i' - 'a'] = COMPAT_HWCAP_ISA_I;//映射 'i' 扩展
+	isa2hwcap['m' - 'a'] = COMPAT_HWCAP_ISA_M;//映射 'm' 扩展
+	isa2hwcap['a' - 'a'] = COMPAT_HWCAP_ISA_A;//映射 'a' 扩展
+	isa2hwcap['f' - 'a'] = COMPAT_HWCAP_ISA_F;//映射 'f' 扩展
+	isa2hwcap['d' - 'a'] = COMPAT_HWCAP_ISA_D;//映射 'd' 扩展
+	isa2hwcap['c' - 'a'] = COMPAT_HWCAP_ISA_C;//映射 'c' 扩展
+	isa2hwcap['v' - 'a'] = COMPAT_HWCAP_ISA_V;//映射 'v' 扩展
 
-	isa2hwcap['i' - 'a'] = COMPAT_HWCAP_ISA_I;
-	isa2hwcap['m' - 'a'] = COMPAT_HWCAP_ISA_M;
-	isa2hwcap['a' - 'a'] = COMPAT_HWCAP_ISA_A;
-	isa2hwcap['f' - 'a'] = COMPAT_HWCAP_ISA_F;
-	isa2hwcap['d' - 'a'] = COMPAT_HWCAP_ISA_D;
-	isa2hwcap['c' - 'a'] = COMPAT_HWCAP_ISA_C;
-	isa2hwcap['v' - 'a'] = COMPAT_HWCAP_ISA_V;
-
-	if (!acpi_disabled) {
-		riscv_fill_hwcap_from_isa_string(isa2hwcap);
+	if (!acpi_disabled) {//检查是否禁用了 ACPI
+		riscv_fill_hwcap_from_isa_string(isa2hwcap);// 如果没有禁用 ACPI，则从 ISA 字符串中填充硬件能力
 	} else {
-		int ret = riscv_fill_hwcap_from_ext_list(isa2hwcap);
+		int ret = riscv_fill_hwcap_from_ext_list(isa2hwcap);//如果禁用了 ACPI，则从扩展列表中填充硬件能力
 
-		if (ret && riscv_isa_fallback) {
-			pr_info("Falling back to deprecated \"riscv,isa\"\n");
-			riscv_fill_hwcap_from_isa_string(isa2hwcap);
+		if (ret && riscv_isa_fallback) {//如果填充失败并且启用了ISA回退机制
+			pr_info("Falling back to deprecated \"riscv,isa\"\n");//打印信息，提示回退到过时的 "riscv,isa" 方法。
+			riscv_fill_hwcap_from_isa_string(isa2hwcap);//回退到从 ISA 字符串中填充硬件能力
 		}
 	}
 
 	/*
-	 * We don't support systems with F but without D, so mask those out
-	 * here.
+	 *  我们不支持仅有 F 而没有 D 扩展的系统，因此在此处屏蔽掉 F 扩展
 	 */
-	if ((elf_hwcap & COMPAT_HWCAP_ISA_F) && !(elf_hwcap & COMPAT_HWCAP_ISA_D)) {
+	if ((elf_hwcap & COMPAT_HWCAP_ISA_F) && !(elf_hwcap & COMPAT_HWCAP_ISA_D)) {//如果检测到 F 扩展但没有 D 扩展，打印不支持的警告信息并移除 F 扩展标志
 		pr_info("This kernel does not support systems with F but not D\n");
 		elf_hwcap &= ~COMPAT_HWCAP_ISA_F;
 	}
 
-	if (elf_hwcap & COMPAT_HWCAP_ISA_V) {
-		riscv_v_setup_vsize();
+	if (elf_hwcap & COMPAT_HWCAP_ISA_V) {//检查是否检测到 V 扩展
+		riscv_v_setup_vsize();//如果存在 V 扩展，则设置 V 扩展的相关参数
 		/*
-		 * ISA string in device tree might have 'v' flag, but
-		 * CONFIG_RISCV_ISA_V is disabled in kernel.
-		 * Clear V flag in elf_hwcap if CONFIG_RISCV_ISA_V is disabled.
+		 *  设备树中的 ISA 字符串可能包含 'v' 标志,但是如果内核未启用 
+		 *  CONFIG_RISCV_ISA_V，则清除 ELF 中的 V 扩展标志。
 		 */
 		if (!IS_ENABLED(CONFIG_RISCV_ISA_V))
 			elf_hwcap &= ~COMPAT_HWCAP_ISA_V;
 	}
 
-	memset(print_str, 0, sizeof(print_str));
-	for (i = 0, j = 0; i < NUM_ALPHA_EXTS; i++)
-		if (riscv_isa[0] & BIT_MASK(i))
-			print_str[j++] = (char)('a' + i);
-	pr_info("riscv: base ISA extensions %s\n", print_str);
+	memset(print_str, 0, sizeof(print_str));//初始化 print_str 字符数组为空字符串
+	for (i = 0, j = 0; i < NUM_ALPHA_EXTS; i++)//遍历所有可能的字母扩展，将存在的扩展添加到打印字符串中
+		if (riscv_isa[0] & BIT_MASK(i))// 检查 riscv_isa[0] 中对应位是否被设置，即是否支持该扩展
+			print_str[j++] = (char)('a' + i);// 将存在的扩展字母加入字符串
+	pr_info("riscv: base ISA extensions %s\n", print_str);//打印出基础 ISA 扩展列表
 
-	memset(print_str, 0, sizeof(print_str));
-	for (i = 0, j = 0; i < NUM_ALPHA_EXTS; i++)
-		if (elf_hwcap & BIT_MASK(i))
-			print_str[j++] = (char)('a' + i);
-	pr_info("riscv: ELF capabilities %s\n", print_str);
+	memset(print_str, 0, sizeof(print_str));// 再次初始化 print_str 字符数组为空字符串
+	for (i = 0, j = 0; i < NUM_ALPHA_EXTS; i++)//遍历硬件能力标志，添加存在的扩展到打印字符串中
+		if (elf_hwcap & BIT_MASK(i))// 检查 elf_hwcap 中对应位是否被设置，即是否支持该硬件能力
+			print_str[j++] = (char)('a' + i);//将存在的扩展字母加入字符串
+	pr_info("riscv: ELF capabilities %s\n", print_str);//打印出 ELF 中的硬件能力列表
 }
 
 unsigned long riscv_get_elf_hwcap(void)
@@ -724,8 +727,8 @@ unsigned long riscv_get_elf_hwcap(void)
 
 void riscv_user_isa_enable(void)
 {
-	if (riscv_cpu_has_extension_unlikely(smp_processor_id(), RISCV_ISA_EXT_ZICBOZ))
-		csr_set(CSR_ENVCFG, ENVCFG_CBZE);
+	if (riscv_cpu_has_extension_unlikely(smp_processor_id(), RISCV_ISA_EXT_ZICBOZ))//检查当前CPU是否支持ZICBOZ 扩展
+		csr_set(CSR_ENVCFG, ENVCFG_CBZE);//如果支持，则设置CSR_ENVCFG寄存器以启用相关功能
 }
 
 #ifdef CONFIG_RISCV_ALTERNATIVE

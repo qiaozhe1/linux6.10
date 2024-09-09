@@ -75,10 +75,10 @@ struct __riscv_q_ext_state {
 	 */
 	__u32 reserved[3];
 };
-
+/* 描述 RISC-V 信号上下文头部的结构体 */
 struct __riscv_ctx_hdr {
-	__u32 magic;
-	__u32 size;
+	__u32 magic;//头部的魔数，用于标识结构的类型
+	__u32 size;//头部的大小，表示接下来数据块的字节数
 };
 
 struct __riscv_extra_ext_header {
@@ -96,18 +96,23 @@ union __riscv_fp_state {
 	struct __riscv_d_ext_state d;
 	struct __riscv_q_ext_state q;
 };
-
+/*
+ * 该结构体定义了 RISC-V 向量扩展的状态，用于保存和恢复向量寄存器的数据。
+ * 在信号处理等场景下，该结构体提供了向量寄存器的完整状态。
+ */
 struct __riscv_v_ext_state {
-	unsigned long vstart;
-	unsigned long vl;
-	unsigned long vtype;
-	unsigned long vcsr;
-	unsigned long vlenb;
-	void *datap;
+	unsigned long vstart;//向量起始索引，指示向量指令开始处理的元素索引
+	unsigned long vl;//向量长度寄存器，定义了向量操作中要处理的元素数量
+	unsigned long vtype;//向量类型寄存器，定义了向量的配置，如元素宽度和向量聚集模式
+	unsigned long vcsr;//向量控制和状态寄存器，用于控制和跟踪向量操作状态
+	unsigned long vlenb;//向量长度（以字节为单位），定义了每个向量寄存器的字节数
+	void *datap;//指向数据的指针，通常指向用户堆栈中的位置，用于保存和恢复向量寄存器的数据
 	/*
 	 * In signal handler, datap will be set a correct user stack offset
 	 * and vector registers will be copied to the address of datap
 	 * pointer.
+	 * 在信号处理程序中，datap 将被设置为指向用户堆栈中合适的偏移位置,
+	 * 并且向量寄存器的数据将被复制到 datap 指针指向的地址。
 	 */
 };
 

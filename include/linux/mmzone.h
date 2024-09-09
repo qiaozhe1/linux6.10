@@ -1784,14 +1784,17 @@ static inline unsigned long section_nr_to_pfn(unsigned long sec)
 
 #define SUBSECTION_ALIGN_UP(pfn) ALIGN((pfn), PAGES_PER_SUBSECTION)
 #define SUBSECTION_ALIGN_DOWN(pfn) ((pfn) & PAGE_SUBSECTION_MASK)
-
+/*
+ * 这是一个描述内存段使用情况的结构体，用于管理稀疏内存模型中各个内存段的状态。
+ * 通常用于跟踪内存段的使用信息，例如哪些子段(subsection)被使用或哪些页块存在特定的状态。
+ */
 struct mem_section_usage {
-	struct rcu_head rcu;
+	struct rcu_head rcu;//用于 RCU（Read-Copy-Update）机制的头部，用于延迟释放该结构体
 #ifdef CONFIG_SPARSEMEM_VMEMMAP
-	DECLARE_BITMAP(subsection_map, SUBSECTIONS_PER_SECTION);
+	DECLARE_BITMAP(subsection_map, SUBSECTIONS_PER_SECTION);//位图，用于记录每个内存段中的子段(subsection)的使用情况
 #endif
 	/* See declaration of similar field in struct zone */
-	unsigned long pageblock_flags[0];
+	unsigned long pageblock_flags[0];//可变长数组，实际大小由内存分配时决定，并在运行时确定。用于表示页块的状态或标志。每个页块对应一个或多个标志，用于记录内存管理的不同状态，比如是否是可移动内存块、是否存在特殊的内存保护等。
 };
 
 void subsection_map_init(unsigned long pfn, unsigned long nr_pages);
@@ -1811,16 +1814,16 @@ struct mem_section {
 	 * Making it a UL at least makes someone do a cast
 	 * before using it wrong.
 	 */
-	unsigned long section_mem_map;
+	unsigned long section_mem_map;//是一个逻辑上指向 struct page 数组的指针，实际存储时有些特殊处理。
 
-	struct mem_section_usage *usage;
+	struct mem_section_usage *usage;//用于表示内存段的使用情况，如子节映射和页面块标志等
 #ifdef CONFIG_PAGE_EXTENSION
 	/*
 	 * If SPARSEMEM, pgdat doesn't have page_ext pointer. We use
 	 * section. (see page_ext.h about this.)
 	 */
-	struct page_ext *page_ext;
-	unsigned long pad;
+	struct page_ext *page_ext;//在稀疏内存模式下，pgdat 结构体没有 page_ext 指针，因此在内存段结构中定义这个指针。
+	unsigned long pad;//用于对齐或填充，确保结构体的大小符合对齐要求
 #endif
 	/*
 	 * WARNING: mem_section must be a power-of-2 in size for the
