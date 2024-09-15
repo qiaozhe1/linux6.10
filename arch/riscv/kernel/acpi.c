@@ -56,27 +56,30 @@ early_param("acpi", parse_acpi);
  *			      checks on it
  *
  * Return 0 on success,  <0 on failure
+ * 用于检查 FADT 表的有效性和合规性。
  */
 static int __init acpi_fadt_sanity_check(void)
 {
-	struct acpi_table_header *table;
-	struct acpi_table_fadt *fadt;
-	acpi_status status;
-	int ret = 0;
+	struct acpi_table_header *table;//定义一个指向 ACPI 表头的指针，用于存储 FADT 表的指针。
+	struct acpi_table_fadt *fadt;//定义一个指向 FADT（固件 ACPI 描述表）的指针。
+	acpi_status status;//定义变量 `status` 来存储 ACPI 函数的返回状态。
+	int ret = 0;//定义并初始化返回值为 0，表示默认情况下没有错误。
 
 	/*
 	 * FADT is required on riscv; retrieve it to check its presence
 	 * and carry out revision and ACPI HW reduced compliancy tests
+	 * FADT 是 RISC-V 上必须存在的 ACPI 表；检索它以检查其存在性，
+	 * 并进行修订版本检查和 ACPI 硬件减少兼容性测试。
 	 */
-	status = acpi_get_table(ACPI_SIG_FADT, 0, &table);
-	if (ACPI_FAILURE(status)) {
-		const char *msg = acpi_format_exception(status);
+	status = acpi_get_table(ACPI_SIG_FADT, 0, &table);//通过 ACPI 接口获取 FADT 表。
+	if (ACPI_FAILURE(status)) {// 如果获取表失败
+		const char *msg = acpi_format_exception(status);//获取错误信息字符串。
 
-		pr_err("Failed to get FADT table, %s\n", msg);
+		pr_err("Failed to get FADT table, %s\n", msg);//打印错误信息。
 		return -ENODEV;
 	}
 
-	fadt = (struct acpi_table_fadt *)table;
+	fadt = (struct acpi_table_fadt *)table;//将获取的表头转换为 FADT 表的结构体指针
 
 	/*
 	 * The revision in the table header is the FADT's Major revision. The
@@ -86,12 +89,12 @@ static int __init acpi_fadt_sanity_check(void)
 	 * for HW_REDUCED flag. However, once RISC-V updates are released in
 	 * the ACPI spec, we need to update this check for exact minor revision
 	 */
-	if (table->revision < 6 || (table->revision == 6 && fadt->minor_revision < 5))
+	if (table->revision < 6 || (table->revision == 6 && fadt->minor_revision < 5))//检查 FADT 版本是否小于 6.5
 		pr_err(FW_BUG "Unsupported FADT revision %d.%d, should be 6.5+\n",
-		       table->revision, fadt->minor_revision);
+		       table->revision, fadt->minor_revision);// 如果不支持的版本，打印错误信息。
 
-	if (!(fadt->flags & ACPI_FADT_HW_REDUCED)) {
-		pr_err("FADT not ACPI hardware reduced compliant\n");
+	if (!(fadt->flags & ACPI_FADT_HW_REDUCED)) {//检查 FADT 表中的标志，判断是否支持硬件减少
+		pr_err("FADT not ACPI hardware reduced compliant\n");// 如果不支持，打印错误信息
 		ret = -EINVAL;
 	}
 
@@ -99,8 +102,8 @@ static int __init acpi_fadt_sanity_check(void)
 	 * acpi_get_table() creates FADT table mapping that
 	 * should be released after parsing and before resuming boot
 	 */
-	acpi_put_table(table);
-	return ret;
+	acpi_put_table(table);// 释放 FADT 表的内存映射。
+	return ret;//返回检查结果，0 表示成功，非 0 表示错误。
 }
 
 /*
@@ -181,11 +184,12 @@ static int acpi_parse_madt_rintc(union acpi_subtable_headers *header, const unsi
  * Instead of parsing (and freeing) the ACPI table, cache
  * the RINTC structures since they are frequently used
  * like in  cpuinfo.
+ * 用于初始化 RINTC (RISC-V Interrupt Controller) 映射。
  */
 void __init acpi_init_rintc_map(void)
 {
-	if (acpi_table_parse_madt(ACPI_MADT_TYPE_RINTC, acpi_parse_madt_rintc, 0) <= 0) {
-		pr_err("No valid RINTC entries exist\n");
+	if (acpi_table_parse_madt(ACPI_MADT_TYPE_RINTC, acpi_parse_madt_rintc, 0) <= 0) {//如果从 ACPI MADT 表中解析 RINTC (RISC-V Interrupt Controller) 条目失败或没有找到有效条目，则执行以下逻辑。
+		pr_err("No valid RINTC entries exist\n");//打印错误信息，表示没有找到有效的 RINTC 条目。
 		BUG();
 	}
 }

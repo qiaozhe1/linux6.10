@@ -67,9 +67,9 @@ void kvm_riscv_vcpu_host_fp_save(struct kvm_cpu_context *cntx)
 
 void kvm_riscv_vcpu_host_fp_restore(struct kvm_cpu_context *cntx)
 {
-	if (riscv_isa_extension_available(NULL, d))
+	if (riscv_isa_extension_available(NULL, d))//如果当前系统支持 'd' 扩展（即双精度浮点扩展），则恢复双精度浮点寄存器
 		__kvm_riscv_fp_d_restore(cntx);
-	else if (riscv_isa_extension_available(NULL, f))
+	else if (riscv_isa_extension_available(NULL, f))//否则，如果当前系统仅支持 'f' 扩展（即单精度浮点扩展），则恢复单精度浮点寄存器。
 		__kvm_riscv_fp_f_restore(cntx);
 }
 #endif

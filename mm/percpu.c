@@ -3047,69 +3047,73 @@ static void __init pcpu_fc_free(void *ptr, size_t size)
  *
  * RETURNS:
  * 0 on success, -errno on failure.
+ *
+ * 用于初始化和分配内嵌的第一个 per-cpu 内存块。它计算每个 CPU 所需的空间，
+ * 分配内存区域，确保所有组都能容纳必要的数据，并处理各个内存区域的基地址和偏移量。
  */
 int __init pcpu_embed_first_chunk(size_t reserved_size, size_t dyn_size,
 				  size_t atom_size,
 				  pcpu_fc_cpu_distance_fn_t cpu_distance_fn,
 				  pcpu_fc_cpu_to_node_fn_t cpu_to_nd_fn)
 {
-	void *base = (void *)ULONG_MAX;
-	void **areas = NULL;
-	struct pcpu_alloc_info *ai;
-	size_t size_sum, areas_size;
-	unsigned long max_distance;
-	int group, i, highest_group, rc = 0;
-
+	void *base = (void *)ULONG_MAX;//初始化 base 为最大值，用于找出最小的分配地址
+	void **areas = NULL;//指针数组，用于存储每个组的分配区域
+	struct pcpu_alloc_info *ai;//分配信息结构体指针
+	size_t size_sum, areas_size;//总大小和区域指针数组大小
+	unsigned long max_distance;//最大距离，用于检测内存布局合理性
+	int group, i, highest_group, rc = 0;//group 和 i 用于循环，highest_group 用于记录最大的组，rc 存储返回代码
+	
 	ai = pcpu_build_alloc_info(reserved_size, dyn_size, atom_size,
-				   cpu_distance_fn);
-	if (IS_ERR(ai))
+				   cpu_distance_fn);//构建分配信息结构体，包括静态大小、保留大小、动态大小和距离函数
+	if (IS_ERR(ai))//如果分配信息构建失败，返回错误代码
 		return PTR_ERR(ai);
+	
+	size_sum = ai->static_size + ai->reserved_size + ai->dyn_size;//计算总大小：静态大小 + 保留大小 + 动态大小
+	areas_size = PFN_ALIGN(ai->nr_groups * sizeof(void *));//计算分组信息的指针数组的大小，并对齐页面边界
 
-	size_sum = ai->static_size + ai->reserved_size + ai->dyn_size;
-	areas_size = PFN_ALIGN(ai->nr_groups * sizeof(void *));
-
-	areas = memblock_alloc(areas_size, SMP_CACHE_BYTES);
-	if (!areas) {
+	areas = memblock_alloc(areas_size, SMP_CACHE_BYTES);//从初始内存分配器中分配用于存储per_cpu内存组内存的起始地址的指针数组
+	if (!areas) {//如果分配失败，设置错误码并跳转到错误处理
 		rc = -ENOMEM;
 		goto out_free;
 	}
 
-	/* allocate, copy and determine base address & max_distance */
-	highest_group = 0;
-	for (group = 0; group < ai->nr_groups; group++) {
-		struct pcpu_group_info *gi = &ai->groups[group];
-		unsigned int cpu = NR_CPUS;
-		void *ptr;
+	/* 分配内存空间，并确定基地址和最大距离 */
+	highest_group = 0;//初始化最大组为0
+	for (group = 0; group < ai->nr_groups; group++) {//遍历所有per_cpu内存组
+		struct pcpu_group_info *gi = &ai->groups[group];//获取当前组的信息
+		unsigned int cpu = NR_CPUS;//初始化 CPU 为NR_CPUS
+		void *ptr;//用于存储当前组的分配地址
 
-		for (i = 0; i < gi->nr_units && cpu == NR_CPUS; i++)
-			cpu = gi->cpu_map[i];
-		BUG_ON(cpu == NR_CPUS);
+		for (i = 0; i < gi->nr_units && cpu == NR_CPUS; i++)//遍历当前组中的所有单元（一个单元相当于一个per_cpu变量内存块），查找有效的CPU索引
+			cpu = gi->cpu_map[i];//记录第一个有效的 CPU 索引
+		BUG_ON(cpu == NR_CPUS);//如果所有 CPU 都不可用，触发错误
 
-		/* allocate space for the whole group */
-		ptr = pcpu_fc_alloc(cpu, gi->nr_units * ai->unit_size, atom_size, cpu_to_nd_fn);
-		if (!ptr) {
+		/*为组内所有单元分配内存，分配原则基于单元大小和对齐要求 */
+		ptr = pcpu_fc_alloc(cpu, gi->nr_units * ai->unit_size, atom_size, cpu_to_nd_fn);//在memblock中分配
+		if (!ptr) {//如果分配失败，设置错误码并跳转到错误处理
 			rc = -ENOMEM;
 			goto out_free_areas;
 		}
 		/* kmemleak tracks the percpu allocations separately */
-		kmemleak_ignore_phys(__pa(ptr));
-		areas[group] = ptr;
+		kmemleak_ignore_phys(__pa(ptr));//将分配的地址标记为内核内存泄漏检测忽略区域
+		areas[group] = ptr;//将分配的地址指针存储到 areas 数组
 
-		base = min(ptr, base);
-		if (ptr > areas[highest_group])
+		base = min(ptr, base);//更新最小的基地址
+		if (ptr > areas[highest_group])//更新最大组索引
 			highest_group = group;
 	}
+	/*计算最大距离：最大组的地址减去最小基地址，并加上单元大小乘以单元数*/
 	max_distance = areas[highest_group] - base;
 	max_distance += ai->unit_size * ai->groups[highest_group].nr_units;
 
-	/* warn if maximum distance is further than 75% of vmalloc space */
+	/* 如果最大距离超过 vmalloc 空间的 75%，打印警告并在有回退时返回错误 */
 	if (max_distance > VMALLOC_TOTAL * 3 / 4) {
 		pr_warn("max_distance=0x%lx too large for vmalloc space 0x%lx\n",
 				max_distance, VMALLOC_TOTAL);
 #ifdef CONFIG_NEED_PER_CPU_PAGE_FIRST_CHUNK
 		/* and fail if we have fallback */
-		rc = -EINVAL;
-		goto out_free_areas;
+		rc = -EINVAL;//设置错误代码
+		goto out_free_areas;//跳转到释放区域处理
 #endif
 	}
 
@@ -3117,45 +3121,47 @@ int __init pcpu_embed_first_chunk(size_t reserved_size, size_t dyn_size,
 	 * Copy data and free unused parts.  This should happen after all
 	 * allocations are complete; otherwise, we may end up with
 	 * overlapping groups.
+	 * 复制数据并释放未使用的部分。所有分配完成后执行这些操作，
+	 * 否则可能会导致组之间重叠。
 	 */
-	for (group = 0; group < ai->nr_groups; group++) {
-		struct pcpu_group_info *gi = &ai->groups[group];
-		void *ptr = areas[group];
+	for (group = 0; group < ai->nr_groups; group++) {//遍历所有组
+		struct pcpu_group_info *gi = &ai->groups[group];//获取当前组信息
+		void *ptr = areas[group];//获取当前组的分配地址
 
-		for (i = 0; i < gi->nr_units; i++, ptr += ai->unit_size) {
-			if (gi->cpu_map[i] == NR_CPUS) {
+		for (i = 0; i < gi->nr_units; i++, ptr += ai->unit_size) {//遍历组中的所有单元
+			if (gi->cpu_map[i] == NR_CPUS) {//如果该单元未使用
 				/* unused unit, free whole */
-				pcpu_fc_free(ptr, ai->unit_size);
+				pcpu_fc_free(ptr, ai->unit_size);//释放该单元内存
 				continue;
 			}
-			/* copy and return the unused part */
+			/* 将静态数据复制到每个单元，并释放未使用的部分 */
 			memcpy(ptr, __per_cpu_load, ai->static_size);
 			pcpu_fc_free(ptr + size_sum, ai->unit_size - size_sum);
 		}
 	}
 
-	/* base address is now known, determine group base offsets */
+	/* 确定每个组的基地址偏移量 */
 	for (group = 0; group < ai->nr_groups; group++) {
-		ai->groups[group].base_offset = areas[group] - base;
+		ai->groups[group].base_offset = areas[group] - base;//计算并设置基地址偏移
 	}
 
 	pr_info("Embedded %zu pages/cpu s%zu r%zu d%zu u%zu\n",
 		PFN_DOWN(size_sum), ai->static_size, ai->reserved_size,
-		ai->dyn_size, ai->unit_size);
+		ai->dyn_size, ai->unit_size);//打印每个 CPU 嵌入的页数及其各部分大小
 
-	pcpu_setup_first_chunk(ai, base);
-	goto out_free;
+	pcpu_setup_first_chunk(ai, base);//设置第一个per_cpu内存块
+	goto out_free;//跳转到释放部分的处理
 
 out_free_areas:
-	for (group = 0; group < ai->nr_groups; group++)
+	for (group = 0; group < ai->nr_groups; group++)//释放所有组已分配区域
 		if (areas[group])
 			pcpu_fc_free(areas[group],
 				ai->groups[group].nr_units * ai->unit_size);
 out_free:
-	pcpu_free_alloc_info(ai);
-	if (areas)
+	pcpu_free_alloc_info(ai);//释放分配信息
+	if (areas)//如果区域数组存在，释放区域数组内存
 		memblock_free(areas, areas_size);
-	return rc;
+	return rc;//返回结果
 }
 #endif /* BUILD_EMBED_FIRST_CHUNK */
 
@@ -3349,25 +3355,29 @@ out_free_ar:
  */
 unsigned long __per_cpu_offset[NR_CPUS] __read_mostly;
 EXPORT_SYMBOL(__per_cpu_offset);
-
+/*用于初始化每个 CPU 的 per-CPU 数据区域，确保每个 CPU 都有自己的独立数据
+ * 存储空间，避免多核环境下的竞争和数据共享问题。
+ */
 void __init setup_per_cpu_areas(void)
 {
-	unsigned long delta;
-	unsigned int cpu;
-	int rc;
+	unsigned long delta;//用于计算每个 CPU 的偏移量
+	unsigned int cpu;//CPU 标识符
+	int rc;//存储函数调用的返回值
 
 	/*
 	 * Always reserve area for module percpu variables.  That's
 	 * what the legacy allocator did.
+	 * 始终为模块中的per-CPU 变量保留区域。
+	 * 这是传统分配器所做的操作。
 	 */
 	rc = pcpu_embed_first_chunk(PERCPU_MODULE_RESERVE, PERCPU_DYNAMIC_RESERVE,
-				    PAGE_SIZE, NULL, NULL);
-	if (rc < 0)
+				    PAGE_SIZE, NULL, NULL);//用于初始化 per-CPU 内存块，为每个 CPU 分配必要的内存空间。PERCPU_MODULE_RESERVE:内核为per-CPU变量所保留的固定区域大小。PERCPU_DYNAMIC_RESERVE：内核为动态分配的per-CPU变量保留的区域大小。PAGE_SIZE：内存块的对齐大小
+	if (rc < 0)//如果初始化失败，则直接触发内核崩溃，以防止系统继续运行
 		panic("Failed to initialize percpu areas.");
 
-	delta = (unsigned long)pcpu_base_addr - (unsigned long)__per_cpu_start;
-	for_each_possible_cpu(cpu)
-		__per_cpu_offset[cpu] = delta + pcpu_unit_offsets[cpu];
+	delta = (unsigned long)pcpu_base_addr - (unsigned long)__per_cpu_start;//计算全局 per-CPU 区域基地址与 per-CPU 数据的起始地址之间的差值
+	for_each_possible_cpu(cpu)//遍历每个可能的CPU，计算cpu在per-CPU区域中的偏移
+		__per_cpu_offset[cpu] = delta + pcpu_unit_offsets[cpu];//__per_cpu_offset数组保存了每个 CPU 在 per-CPU 数据块中的偏移位置，以便在访问 per-CPU 变量时快速定位到正确的内存位置。
 }
 #endif	/* CONFIG_HAVE_SETUP_PER_CPU_AREA */
 

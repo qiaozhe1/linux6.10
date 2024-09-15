@@ -350,53 +350,58 @@ static unsigned long relocate_restore_code(void)
 
 	return (unsigned long)page;
 }
-
+/* 用于恢复系统的休眠状态，通过创建临时页表、重新定位恢复代码并映射必要的内存区域，确保恢复过程的正常执行 */
 int swsusp_arch_resume(void)
 {
-	unsigned long end = (unsigned long)pfn_to_virt(max_low_pfn);
-	unsigned long start = PAGE_OFFSET;
+	unsigned long end = (unsigned long)pfn_to_virt(max_low_pfn);//计算最大物理页帧的虚拟地址，作为恢复时的内存结束地址。
+	unsigned long start = PAGE_OFFSET;//线性映射的起始地址，即内核的起始虚拟地址。
 	int ret;
 
 	/*
 	 * Memory allocated by get_safe_page() will be dealt with by the hibernation core,
 	 * we don't need to free it here.
 	 */
-	resume_pg_dir = (pgd_t *)get_safe_page(GFP_ATOMIC);
-	if (!resume_pg_dir)
+	resume_pg_dir = (pgd_t *)get_safe_page(GFP_ATOMIC);//分配一个安全页面用于临时页表的页目录。
+	if (!resume_pg_dir)//如果分配失败，返回内存不足错误。
 		return -ENOMEM;
 
 	/*
 	 * Create a temporary page table and map the whole linear region as executable and
 	 * writable.
 	 */
-	ret = temp_pgtable_mapping(resume_pg_dir, start, end, __pgprot(_PAGE_WRITE | _PAGE_EXEC));
-	if (ret)
+	ret = temp_pgtable_mapping(resume_pg_dir, start, end, __pgprot(_PAGE_WRITE | _PAGE_EXEC));//使用临时页表将线性地址范围映射为可执行和可写。
+	if (ret)//如果映射失败，返回错误码。
 		return ret;
 
 	/* Move the restore code to a new page so that it doesn't get overwritten by itself. */
-	relocated_restore_code = relocate_restore_code();
+	relocated_restore_code = relocate_restore_code();//将恢复代码移到新的地址空间中
 	if (relocated_restore_code == -ENOMEM)
-		return -ENOMEM;
+		return -ENOMEM;//如果内存不足，返回错误。
 
 	/*
 	 * Map the __hibernate_cpu_resume() address to the temporary page table so that the
 	 * restore code can jumps to it after finished restore the image. The next execution
 	 * code doesn't find itself in a different address space after switching over to the
 	 * original page table used by the hibernated image.
+	 * 将 __hibernate_cpu_resume() 函数的地址映射到临时页表中，以便恢复代码在恢复映像后可以跳转到该地址。
+	 * 这样可以确保在切换回休眠映像使用的原始页表后，下一个执行的代码不会发现自己处于不同的地址空间。
 	 * The __hibernate_cpu_resume() mapping is unnecessary for RV32 since the kernel and
 	 * linear addresses are identical, but different for RV64. To ensure consistency, we
 	 * map it for both RV32 and RV64 kernels.
+	 * 对于 RV32 内核，这个映射是不必要的，因为内核地址和线性地址相同，但对于 RV64，它们是不同的。
+	 * 为了保持一致性，我们对 RV32 和 RV64 内核都进行映射
 	 * Additionally, we should ensure that the page is writable before restoring the image.
+	 * 在恢复映像之前，我们还应该确保该页面是可写的。
 	 */
-	start = (unsigned long)resume_hdr.restore_cpu_addr;
-	end = start + PAGE_SIZE;
+	start = (unsigned long)resume_hdr.restore_cpu_addr;//获取恢复 CPU 的地址，开始映射的起始地址。
+	end = start + PAGE_SIZE;// 映射一页的大小
 
-	ret = temp_pgtable_mapping(resume_pg_dir, start, end, __pgprot(_PAGE_WRITE));
-	if (ret)
+	ret = temp_pgtable_mapping(resume_pg_dir, start, end, __pgprot(_PAGE_WRITE));//将恢复代码所在的页映射为可写。
+	if (ret)//如果映射失败，返回错误码。
 		return ret;
 
 	hibernate_restore_image(resume_hdr.saved_satp, (PFN_DOWN(__pa(resume_pg_dir)) | satp_mode),
-				resume_hdr.restore_cpu_addr);
+				resume_hdr.restore_cpu_addr);//调用 hibernate_restore_image 恢复休眠映像，传递保存的 SATP、页表基址和恢复 CPU 的地址。
 
 	return 0;
 }

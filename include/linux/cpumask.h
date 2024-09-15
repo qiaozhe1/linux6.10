@@ -44,10 +44,13 @@ extern unsigned int nr_cpu_ids;
 
 static inline void set_nr_cpu_ids(unsigned int nr)
 {
+/*如果系统只支持一个CPU（NR_CPUS == 1），或者配置了强制使用固定CPU数量
+ * 的选项(CONFIG_FORCE_NR_CPUS)，则检查传入的nr参数是否与当前系统的nr_cpu_ids一致。
+ */
 #if (NR_CPUS == 1) || defined(CONFIG_FORCE_NR_CPUS)
-	WARN_ON(nr != nr_cpu_ids);
+	WARN_ON(nr != nr_cpu_ids);//如果传入的nr与系统当前的nr_cpu_ids不同，则触发警告信息。
 #else
-	nr_cpu_ids = nr;
+	nr_cpu_ids = nr;//如果系统支持多个CPU且没有强制使用固定CPU数量，则允许修改nr_cpu_ids的值为传入的nr。
 #endif
 }
 
@@ -121,12 +124,41 @@ static inline void set_nr_cpu_ids(unsigned int nr)
  *    optimization - don't waste any instructions or memory references
  *    asking if you're online or how many CPUs there are if there is
  *    only one CPU.
+ *
+ * 以下特定系统的 cpumasks 和操作管理可能、已存在、在线和活跃的 CPU。
+ *
+ *     cpu_possible_mask - 如果 CPU 是可插拔的，则位 'cpu' 被设置
+ *     cpu_present_mask - 如果 CPU 已被插入，则位 'cpu' 被设置
+ *     cpu_online_mask  - 如果 CPU 可用于调度，则位 'cpu' 被设置
+ *     cpu_active_mask  - 如果 CPU 可用于迁移，则位 'cpu' 被设置
+ *
+ *  如果 !CONFIG_HOTPLUG_CPU，则 present == possible，active == online。
+ *
+ *  cpu_possible_mask 在启动时固定，因为它表示在系统启动期间
+ *  可能插入的 CPU ID 集合。cpu_present_mask 是动态的(*),
+ *  代表当前已插入的 CPU。而 cpu_online_mask 是 cpu_present_mask
+ *  的动态子集，指示那些可用于调度的 CPU。
+ *
+ *  如果启用了 HOTPLUG，那么 cpu_present_mask 会动态变化，
+ *  取决于 ACPI 报告的当前插入情况，否则 cpu_present_mask
+ *  就是 cpu_possible_mask 的副本。
+ *
+ *  (*) 当然，cpu_present_mask 在热插拔的情况下是动态的。如果
+ *      没有热插拔，它是 cpu_possible_mask 的副本，因此在启动时固定。
+ *
+ * 微妙之处：
+ * 1) 单处理器架构（NR_CPUS == 1，未定义 CONFIG_SMP）硬编码
+ *    假设其唯一的 CPU 是在线的。UP 的 cpu_{online,possible,present}_masks
+ *    是虚假的。更改它们不会对以下 num_*_cpus() 和 cpu_*() 宏
+ *    在 UP 情况下产生有用的影响。这种丑陋的优化是针对 UP
+ *    的 - 不要浪费任何指令或内存引用来检查你是否在线或有多少
+ *    CPU，如果只有一个 CPU 的话。
  */
 
-extern struct cpumask __cpu_possible_mask;
-extern struct cpumask __cpu_online_mask;
-extern struct cpumask __cpu_present_mask;
-extern struct cpumask __cpu_active_mask;
+extern struct cpumask __cpu_possible_mask;//如果 CPU 是可插拔的，则'cpu'位被设置
+extern struct cpumask __cpu_online_mask;//如果 CPU 可用于调度，则相关'cpu'位被设置
+extern struct cpumask __cpu_present_mask;//如果 CPU 已被插入，则相关'cpu'位被设置
+extern struct cpumask __cpu_active_mask;//如果 CPU 可用于迁移，则相关'cpu'位被设置
 extern struct cpumask __cpu_dying_mask;
 #define cpu_possible_mask ((const struct cpumask *)&__cpu_possible_mask)
 #define cpu_online_mask   ((const struct cpumask *)&__cpu_online_mask)

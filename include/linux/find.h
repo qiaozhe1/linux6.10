@@ -401,17 +401,19 @@ unsigned long find_first_zero_bit(const unsigned long *addr, unsigned long size)
  * @size: The number of bits to search
  *
  * Returns the bit number of the last set bit, or size.
+ *
+ * 用于在给定的位图中查找最后一个被设置为 1 的位。
  */
 static inline
 unsigned long find_last_bit(const unsigned long *addr, unsigned long size)
 {
-	if (small_const_nbits(size)) {
-		unsigned long val = *addr & GENMASK(size - 1, 0);
+	if (small_const_nbits(size)) {// 如果 size 是一个小的常量值，进行快速位查找
+		unsigned long val = *addr & GENMASK(size - 1, 0);//生成一个掩码，从最低位到第 (size-1) 位，全为 1
 
-		return val ? __fls(val) : size;
+		return val ? __fls(val) : size;//如果 val 不为 0，返回最高的 1 位索引；否则返回 size
 	}
 
-	return _find_last_bit(addr, size);
+	return _find_last_bit(addr, size);//如果 size 不是小常量，使用通用查找函数 _find_last_bit
 }
 #endif
 

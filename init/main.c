@@ -265,49 +265,52 @@ early_param("loglevel", loglevel);
 #ifdef CONFIG_BLK_DEV_INITRD
 static void * __init get_boot_config_from_initrd(size_t *_size)
 {
-	u32 size, csum;
-	char *data;
-	u32 *hdr;
+	u32 size, csum;//size 保存bootconfig数据的大小，`csum`保存校验和
+	char *data;//指向可能包含 bootconfig 的数据区域
+	u32 *hdr;//指向 bootconfig 的头部，包含大小和校验和
 	int i;
 
-	if (!initrd_end)
+	if (!initrd_end)//如果initrd_end未定义，说明没有initrd，直接返回 NULL
 		return NULL;
 
-	data = (char *)initrd_end - BOOTCONFIG_MAGIC_LEN;
+	data = (char *)initrd_end - BOOTCONFIG_MAGIC_LEN;//data指向initrd的尾部，尝试找到BOOTCONFIG_MAGIC 的位置
 	/*
 	 * Since Grub may align the size of initrd to 4, we must
 	 * check the preceding 3 bytes as well.
+	 * 由于 Grub 可能将 initrd 的大小对齐到 4 字节，我们需要检查前面的 3 个字节
+	 * 以确保不遗漏 bootconfig 的魔术标记。
 	 */
 	for (i = 0; i < 4; i++) {
-		if (!memcmp(data, BOOTCONFIG_MAGIC, BOOTCONFIG_MAGIC_LEN))
-			goto found;
-		data--;
+		if (!memcmp(data, BOOTCONFIG_MAGIC, BOOTCONFIG_MAGIC_LEN))//比较当前 data 位置的内容是否是 BOOTCONFIG_MAGIC
+			goto found;//找到 bootconfig 的魔术标记，跳转到 `found` 标签
+		data--;//如果没有找到，指针前移一个字节，继续检查.
 	}
-	return NULL;
+	return NULL;//未找到bootconfig魔术标记，返回NULL
 
 found:
+	//找到bootconfig头部，数据的前8字节包含大小和校验和
 	hdr = (u32 *)(data - 8);
-	size = le32_to_cpu(hdr[0]);
-	csum = le32_to_cpu(hdr[1]);
+	size = le32_to_cpu(hdr[0]);//读取并转换bootconfig数据的大小
+	csum = le32_to_cpu(hdr[1]);//读取并转换bootconfig数据的校验和
 
-	data = ((void *)hdr) - size;
-	if ((unsigned long)data < initrd_start) {
+	data = ((void *)hdr) - size;//将 data 指向 bootconfig 数据的开始位置
+	if ((unsigned long)data < initrd_start) {//检查 bootconfig 数据是否在 initrd 的有效范围内
 		pr_err("bootconfig size %d is greater than initrd size %ld\n",
 			size, initrd_end - initrd_start);
 		return NULL;
 	}
 
-	if (xbc_calc_checksum(data, size) != csum) {
+	if (xbc_calc_checksum(data, size) != csum) {//验证 bootconfig 数据的校验和是否匹配
 		pr_err("bootconfig checksum failed\n");
 		return NULL;
 	}
 
 	/* Remove bootconfig from initramfs/initrd */
-	initrd_end = (unsigned long)data;
-	if (_size)
+	initrd_end = (unsigned long)data;//从 initramfs/initrd 中移除 bootconfig 数据
+	if (_size)// 如果传入了 _size 参数，则将 bootconfig 的大小返回给调用者
 		*_size = size;
 
-	return data;
+	return data;//返回指向 bootconfig 数据的指针
 }
 #else
 static void * __init get_boot_config_from_initrd(size_t *_size)
@@ -474,7 +477,10 @@ static void __init exit_boot_config(void)
 }
 
 #else	/* !CONFIG_BOOT_CONFIG */
-
+/*
+ * 函数的唯一作用是调用 get_boot_config_from_initrd 来从 initrd 中移除 bootconfig 数据。
+ * 为了确保 initrd 的数据被正确调整和处理，并防止 bootconfig 数据在后续过程中被错误使用或保留。
+ * */
 static void __init setup_boot_config(void)
 {
 	/* Remove bootconfig data from initrd */
@@ -928,7 +934,7 @@ void start_kernel(void)
 	setup_boot_config();//设置引导配置，读取并处理引导参数
 	setup_command_line(command_line);//设置命令行参数，解析并保存命令行参数
 	setup_nr_cpu_ids();//设置系统中的 CPU 数量
-	setup_per_cpu_areas();//设置每个 CPU 的内存区域，用于 CPU 特定的数据存储
+	setup_per_cpu_areas();//设置per_CPU 的内存区域，用于 CPU 特定的数据存储
 	smp_prepare_boot_cpu();	/* arch-specific boot-cpu hooks 准备引导 CPU，包括设置特定于架构的钩子函数 */
 	early_numa_node_init();//早期初始化 NUMA 节点，用于非统一内存访问系统
 	boot_cpu_hotplug_init();//引导 CPU 热插拔初始化，允许引导 CPU 进行热插拔操作

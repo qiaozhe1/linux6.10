@@ -202,14 +202,14 @@ int __init numa_add_memblk(int nid, u64 start, u64 end)
 {
 	int ret;
 
-	ret = memblock_set_node(start, (end - start), &memblock.memory, nid);
-	if (ret < 0) {
+	ret = memblock_set_node(start, (end - start), &memblock.memory, nid);//将内存块添加到 memblock 的 memory 列表中，并将其与指定的 NUMA 节点关联
+	if (ret < 0) {//检查 memblock_set_node 是否返回错误。
 		pr_err("memblock [0x%llx - 0x%llx] failed to add on node %d\n",
-			start, (end - 1), nid);
-		return ret;
+			start, (end - 1), nid);//打印错误信息，指明哪个内存块未能成功添加到指定的节点。
+		return ret;//返回错误代码。
 	}
 
-	node_set(nid, numa_nodes_parsed);
+	node_set(nid, numa_nodes_parsed);//将节点 nid 标记为已解析的NUMA节点。
 	return ret;
 }
 
@@ -382,7 +382,7 @@ static int __init numa_init(int (*init_func)(void))
 	nodes_clear(node_possible_map);// 清除可能存在的 NUMA 节点集合
 	nodes_clear(node_online_map);//清除当前在线的 NUMA 节点集合
 
-	ret = numa_alloc_distance();//分配 NUMA 节点之间的距离矩阵
+	ret = numa_alloc_distance();//分配NUMA节点之间的距离矩阵。(假设有两个节点，那么这块就会初始化一个2*2的数组，相同节点距离为10,不同节点距离为20)
 	if (ret < 0)
 		return ret;
 

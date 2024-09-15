@@ -1336,17 +1336,17 @@ int __init_memblock memblock_set_node(phys_addr_t base, phys_addr_t size,
 				      struct memblock_type *type, int nid)
 {
 #ifdef CONFIG_NUMA
-	int start_rgn, end_rgn;
+	int start_rgn, end_rgn;//用于记录内存块开始和结束的区域索引。
 	int i, ret;
 
-	ret = memblock_isolate_range(type, base, size, &start_rgn, &end_rgn);
-	if (ret)
+	ret = memblock_isolate_range(type, base, size, &start_rgn, &end_rgn);//隔离指定范围的内存块，将其划分为独立的区域，并返回开始和结束的区域索引。
+	if (ret)//检查隔离操作是否成功，如果失败则返回错误码。
 		return ret;
 
-	for (i = start_rgn; i < end_rgn; i++)
+	for (i = start_rgn; i < end_rgn; i++)//遍历隔离出来的内存区域，设置每个区域的节点为 nid。
 		memblock_set_region_node(&type->regions[i], nid);
 
-	memblock_merge_regions(type, start_rgn, end_rgn);
+	memblock_merge_regions(type, start_rgn, end_rgn);//合并隔离范围内的内存区域，优化内存区域的布局。
 #endif
 	return 0;
 }

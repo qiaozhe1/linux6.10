@@ -213,21 +213,26 @@ EXPORT_SYMBOL(_find_next_zero_bit);
 #endif
 
 #ifndef find_last_bit
+/*
+ * 逐字向前查找位图中最后一个被设置的位。
+ * 它从最后一个字开始，通过掩码屏蔽无效位，检查每一个字中的位。
+ * 当找到设置的位时，计算并返回其位置；如果没有找到，则返回 size。
+ * */
 unsigned long _find_last_bit(const unsigned long *addr, unsigned long size)
 {
-	if (size) {
-		unsigned long val = BITMAP_LAST_WORD_MASK(size);
-		unsigned long idx = (size-1) / BITS_PER_LONG;
+	if (size) {//如果 size 为非零，表示有位需要检查
+		unsigned long val = BITMAP_LAST_WORD_MASK(size);//计算位图最后一个字的掩码,确保仅检查有效的位
+		unsigned long idx = (size-1) / BITS_PER_LONG;/// 计算位图中最后一个有效字的索引
 
-		do {
-			val &= addr[idx];
-			if (val)
-				return idx * BITS_PER_LONG + __fls(val);
-
-			val = ~0ul;
-		} while (idx--);
+		do {//从最后一个字开始，逐个向前查找，直到找到被设置的位
+			val &= addr[idx];//过滤掉当前字中无效的位，仅保留有效位
+			if (val)//如果当前字中有任何位被设置
+				return idx * BITS_PER_LONG + __fls(val);//返回最高有效位的位号，该位号是 idx 乘以每个字的位数，再加上当前字的最高有效位位置
+			/* 如果当前字没有 1，则继续检查前一个字*/
+			val = ~0ul;//重置掩码为全 1，继续向前查找
+		} while (idx--);//循环，直到 idx 递减到 0
 	}
-	return size;
+	return size;// 如果没有找到设置为 1 的位，或者 size 为 0，则返回 size
 }
 EXPORT_SYMBOL(_find_last_bit);
 #endif

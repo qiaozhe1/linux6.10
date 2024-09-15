@@ -3095,7 +3095,7 @@ void init_cpu_online(const struct cpumask *src)
 {
 	cpumask_copy(&__cpu_online_mask, src);
 }
-
+/*设置指定 CPU 的在线状态*/
 void set_cpu_online(unsigned int cpu, bool online)
 {
 	/*
@@ -3108,30 +3108,31 @@ void set_cpu_online(unsigned int cpu, bool online)
 	 * does not protect readers which are not serialized against
 	 * concurrent hotplug operations.
 	 */
-	if (online) {
+	if (online) {//如果 `online` 为 true，检查并将指定 CPU 标记为在线。
 		if (!cpumask_test_and_set_cpu(cpu, &__cpu_online_mask))
-			atomic_inc(&__num_online_cpus);
-	} else {
+			atomic_inc(&__num_online_cpus);//如果指定的 CPU 当前不在线，则将其标记为在线，并增加在线 CPU 的计数。
+	} else {//如果 `online` 为 false，检查并将指定 CPU 标记为离线。
 		if (cpumask_test_and_clear_cpu(cpu, &__cpu_online_mask))
-			atomic_dec(&__num_online_cpus);
+			atomic_dec(&__num_online_cpus);//如果指定的 CPU 当前在线，则将其标记为离线，并减少在线 CPU 的计数。
 	}
 }
 
 /*
  * Activate the first processor.
+ * 用于初始化引导 CPU（启动 CPU）的状态
  */
 void __init boot_cpu_init(void)
 {
-	int cpu = smp_processor_id();
+	int cpu = smp_processor_id();//获取当前正在执行的处理器的ID
 
-	/* Mark the boot cpu "present", "online" etc for SMP and UP case */
-	set_cpu_online(cpu, true);
-	set_cpu_active(cpu, true);
-	set_cpu_present(cpu, true);
-	set_cpu_possible(cpu, true);
+	/*  将启动 CPU 标记为“存在”、“在线”等，适用于 SMP（对称多处理）和 UP（单处理器）情况 */
+	set_cpu_online(cpu, true);//标记当前 CPU 为在线状态
+	set_cpu_active(cpu, true);//标记当前 CPU 为激活状态
+	set_cpu_present(cpu, true);//标记当前 CPU 为存在状态
+	set_cpu_possible(cpu, true);//标记当前 CPU 为可能使用的状态
 
 #ifdef CONFIG_SMP
-	__boot_cpu_id = cpu;
+	__boot_cpu_id = cpu;//如果启用了SMP，则记录启动CPU的ID
 #endif
 }
 

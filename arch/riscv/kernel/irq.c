@@ -43,14 +43,14 @@ DEFINE_PER_CPU(ulong *, irq_shadow_call_stack_ptr);
 
 static void init_irq_scs(void)
 {
-	int cpu;
+	int cpu;//定义一个整数变量 cpu，用于循环遍历所有可能的 CPU。
 
-	if (!scs_is_enabled())
+	if (!scs_is_enabled())//如果 Shadow Call Stack (SCS) 功能未启用，直接返回，不做任何操作。
 		return;
 
-	for_each_possible_cpu(cpu)
+	for_each_possible_cpu(cpu)//遍历系统中所有可能存在的 CPU。
 		per_cpu(irq_shadow_call_stack_ptr, cpu) =
-			scs_alloc(cpu_to_node(cpu));
+			scs_alloc(cpu_to_node(cpu));//为每个 CPU 分配一个 Shadow Call Stack，并存储指针。
 }
 
 DEFINE_PER_CPU(ulong *, irq_stack_ptr);
@@ -107,10 +107,10 @@ int arch_show_interrupts(struct seq_file *p, int prec)
 
 void __init init_IRQ(void)
 {
-	init_irq_scs();
-	init_irq_stacks();
-	irqchip_init();
-	if (!handle_arch_irq)
-		panic("No interrupt controller found.");
-	sbi_ipi_init();
+	init_irq_scs();//初始化每个 CPU 的中断上下文存储.为每个 CPU 配置专用的 IRQ 上下文。
+	init_irq_stacks();//初始化中断堆栈，确保每个CPU拥有独立的中断处理堆栈。避免在中断处理过程中出现堆栈混乱。
+	irqchip_init();//初始化中断控制器，设置中断处理器的基本功能和参数。为系统提供处理硬件中断的能力。
+	if (!handle_arch_irq)//检查是否已设置 handle_arch_irq，它是一个指向架构特定中断处理函数的指针。
+		panic("No interrupt controller found.");//如果未找到中断控制器,系统将无法处理中断，触发内核 panic 错误。
+	sbi_ipi_init();//初始化 SBI IPI (Software Break Interrupt)，用于处理多核系统中的软件中断，支持多个核心之间的通信和同步。。
 }

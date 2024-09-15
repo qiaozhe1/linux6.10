@@ -75,24 +75,31 @@
 
 extern void *pcpu_base_addr;
 extern const unsigned long *pcpu_unit_offsets;
-
+/*
+ * 用于描述一个 per-CPU 内存组的配置信息。它定义了组中包含的单位数量、组
+ * 的基地址偏移量，以及每个单位到实际 CPU 的映射关系。
+ *
+ * 一个per-CPU内存组包含当前cpu组所有cpu所需的per-cpu内存块
+ *
+ * */
 struct pcpu_group_info {
-	int			nr_units;	/* aligned # of units */
-	unsigned long		base_offset;	/* base address offset */
-	unsigned int		*cpu_map;	/* unit->cpu map, empty
-						 * entries contain NR_CPUS */
+	int			nr_units;//当前组中包含的 per-CPU 单元的数量。一个 per-CPU 单元可以被视为为某个 CPU 预留的内存块。它决定了该组要为多少个 CPU 分配内存资源
+	unsigned long		base_offset;//用来表示每个 pcpu_group_info 组在整个 per-CPU 内存区域中的位置.它是该组的基地址相对于整个per-CPU内存块基地址的偏移量。
+	unsigned int		*cpu_map;//用于映射该组中每个 per-CPU 单元所对应的CPU编号。如果该组中的某个 per-CPU 单元没有分配到具体的CPU，或者是无效的，那么cpu_map数组中的相应位置会存储 NR_CPUS 这个特殊值（无效值）。
 };
-
+/*用于描述 per-CPU 内存的分配策略和布局。它包含了每个 CPU 需要的静态、
+ * 动态和保留的内存大小，以及分组和对齐的详细信息
+ */
 struct pcpu_alloc_info {
-	size_t			static_size;
-	size_t			reserved_size;
-	size_t			dyn_size;
-	size_t			unit_size;
-	size_t			atom_size;
-	size_t			alloc_size;
-	size_t			__ai_size;	/* internal, don't use */
-	int			nr_groups;	/* 0 if grouping unnecessary */
-	struct pcpu_group_info	groups[];
+	size_t			static_size;//每个 CPU 静态分配的 per-CPU 数据大小。这些数据通常是固定大小并且不会在运行时变化。
+	size_t			reserved_size;//系统保留的 per-CPU 空间大小。这个空间通常为内核或特定模块保留，以防止未来的分配冲突或确保内存对齐。
+	size_t			dyn_size;//动态分配的 per-CPU 数据大小。与静态大小不同，这部分内存可能会在运行时根据需要调整或扩展。
+	size_t			unit_size;//每个 CPU 的 per-CPU 内存块的总大小，包含静态、保留和动态数据的大小总和。
+	size_t			atom_size;//用于分配时的对齐和原子性要求，确保内存分配满足系统的对齐要求，从而提高访问效率。
+	size_t			alloc_size;//表示实际为每个组分配的内存大小，可能比 unit_size 大以满足对齐要求或其他系统特定条件。
+	size_t			__ai_size;	/* 内部使用的字段，不应在外部代码中使用。它通常用于计算和管理内部内存结构的大小。 */
+	int			nr_groups;//定义组的数量，如果不需要分组，则为 0。分组的目的是为了优化内存布局，根据不同 CPU 的亲和性或拓扑结构进行分组。
+	struct pcpu_group_info	groups[];//分组信息的数组，包含每个组的详细配置。这些配置决定了每个组的内存分配策略和实际布局。
 };
 
 enum pcpu_fc {

@@ -66,8 +66,8 @@ void kvm_riscv_vcpu_host_vector_save(struct kvm_cpu_context *cntx)
 
 void kvm_riscv_vcpu_host_vector_restore(struct kvm_cpu_context *cntx)
 {
-	if (riscv_isa_extension_available(NULL, v))
-		__kvm_riscv_vector_restore(cntx);
+	if (riscv_isa_extension_available(NULL, v))//检查 RISC-V 指令集是否支持 'v' 扩展（向量扩展）
+		__kvm_riscv_vector_restore(cntx);//如果 'v' 扩展可用，调用该扩展，保存向量寄存器的状态到cntx中，以便之后可以正确恢复。
 }
 
 int kvm_riscv_vcpu_alloc_vector_context(struct kvm_vcpu *vcpu,

@@ -596,33 +596,34 @@ void kvm_arch_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 
 	vcpu->cpu = cpu;
 }
-
+/*用于在虚拟 CPU (vcpu) 被调度出去时，保存其当前的状态。*/
 void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
 {
-	struct kvm_vcpu_csr *csr = &vcpu->arch.guest_csr;
+	struct kvm_vcpu_csr *csr = &vcpu->arch.guest_csr;//获取指向虚拟 CPU (vcpu) 的控制状态寄存器 (CSR) 结构的指针。
 
-	vcpu->cpu = -1;
+	vcpu->cpu = -1;//将 vcpu 的 CPU ID 设置为 -1，表示 vcpu 现在不再绑定到任何物理 CPU。
 
-	kvm_riscv_vcpu_aia_put(vcpu);
-
+	kvm_riscv_vcpu_aia_put(vcpu);//保存 Advanced Interrupt Architecture (AIA) 状态，执行与中断相关的状态保存操作。
+	//保存客体浮点上下文到 vcpu 的结构中，并恢复主机的浮点上下文。
 	kvm_riscv_vcpu_guest_fp_save(&vcpu->arch.guest_context,
 				     vcpu->arch.isa);
 	kvm_riscv_vcpu_host_fp_restore(&vcpu->arch.host_context);
 
-	kvm_riscv_vcpu_timer_save(vcpu);
+	kvm_riscv_vcpu_timer_save(vcpu);//保存 vcpu 的定时器状态。
+	/* 保存客体矢量寄存器状态到 vcpu 的结构中，并恢复主机的矢量寄存器状态。*/
 	kvm_riscv_vcpu_guest_vector_save(&vcpu->arch.guest_context,
 					 vcpu->arch.isa);
 	kvm_riscv_vcpu_host_vector_restore(&vcpu->arch.host_context);
-
-	csr->vsstatus = csr_read(CSR_VSSTATUS);
-	csr->vsie = csr_read(CSR_VSIE);
-	csr->vstvec = csr_read(CSR_VSTVEC);
-	csr->vsscratch = csr_read(CSR_VSSCRATCH);
-	csr->vsepc = csr_read(CSR_VSEPC);
-	csr->vscause = csr_read(CSR_VSCAUSE);
-	csr->vstval = csr_read(CSR_VSTVAL);
-	csr->hvip = csr_read(CSR_HVIP);
-	csr->vsatp = csr_read(CSR_VSATP);
+	/*  读取并保存虚拟 CPU 的多个 CSR 寄存器状态，用于恢复虚拟机状态时使用。*/
+	csr->vsstatus = csr_read(CSR_VSSTATUS);//读取虚拟超级用户状态寄存器 (VSSTATUS)。
+	csr->vsie = csr_read(CSR_VSIE);//读取虚拟中断使能寄存器 (VSIE)。
+	csr->vstvec = csr_read(CSR_VSTVEC);//读取虚拟陷阱向量基址寄存器 (VSTVEC)。
+	csr->vsscratch = csr_read(CSR_VSSCRATCH);// 读取虚拟超级用户暂存寄存器 (VSSCRATCH)。
+	csr->vsepc = csr_read(CSR_VSEPC);//读取虚拟异常程序计数器寄存器 (VSEPC)。
+	csr->vscause = csr_read(CSR_VSCAUSE);// 读取虚拟异常原因寄存器 (VSCAUSE)。
+	csr->vstval = csr_read(CSR_VSTVAL);//读取虚拟陷阱值寄存器 (VSTVAL)。
+	csr->hvip = csr_read(CSR_HVIP);//读取虚拟化中断挂起寄存器 (HVIP)。
+	csr->vsatp = csr_read(CSR_VSATP);//读取虚拟超级用户地址转换页表寄存器 (VSATP)。
 }
 
 static void kvm_riscv_check_vcpu_requests(struct kvm_vcpu *vcpu)

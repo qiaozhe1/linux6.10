@@ -6290,18 +6290,22 @@ static void kvm_sched_in(struct preempt_notifier *pn, int cpu)
 	kvm_arch_sched_in(vcpu, cpu);
 	kvm_arch_vcpu_load(vcpu, cpu);
 }
-
+/*
+ * 用于处理虚拟 CPU 被调度出去的情况。它确保在虚拟CPU
+ * 被抢占时正确标记状态，并在架构层面上执行必要的保存操作。
+ * 函数确保虚拟 CPU 可以安全地恢复到运行状态。
+ * */
 static void kvm_sched_out(struct preempt_notifier *pn,
 			  struct task_struct *next)
 {
-	struct kvm_vcpu *vcpu = preempt_notifier_to_vcpu(pn);
+	struct kvm_vcpu *vcpu = preempt_notifier_to_vcpu(pn);//从 preempt_notifier 获取 KVM 虚拟 CPU (vcpu) 指针。
 
-	if (current->on_rq) {
-		WRITE_ONCE(vcpu->preempted, true);
-		WRITE_ONCE(vcpu->ready, true);
+	if (current->on_rq) {//如果当前任务仍在运行队列中（未被完全调度出去）
+		WRITE_ONCE(vcpu->preempted, true);//标记 vcpu 被抢占，确保这个写操作是原子且及时生效。
+		WRITE_ONCE(vcpu->ready, true);//标记 vcpu 准备好再次运行，写操作是原子性的。
 	}
-	kvm_arch_vcpu_put(vcpu);
-	__this_cpu_write(kvm_running_vcpu, NULL);
+	kvm_arch_vcpu_put(vcpu);//将vcpu状态保存，执行架构相关的虚拟CPU操作。
+	__this_cpu_write(kvm_running_vcpu, NULL);//将当前CPU上正在运行的 vcpu 设置为 NULL，表示该 CPU 不再运行任何 vcpu。
 }
 
 /**
