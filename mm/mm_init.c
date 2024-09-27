@@ -566,21 +566,21 @@ out:
 	/* restore the node_state */
 	node_states[N_MEMORY] = saved_node_state;//恢复节点状态
 }
-
+/*用于初始化单个内存页面的结构体（struct page）*/
 void __meminit __init_single_page(struct page *page, unsigned long pfn,
 				unsigned long zone, int nid)
 {
-	mm_zero_struct_page(page);
-	set_page_links(page, zone, nid, pfn);
-	init_page_count(page);
-	page_mapcount_reset(page);
-	page_cpupid_reset_last(page);
-	page_kasan_tag_reset(page);
+	mm_zero_struct_page(page);//将页面结构体初始化为零
+	set_page_links(page, zone, nid, pfn);//设置页面的链接，包括区域、节点和页帧号
+	init_page_count(page);//初始化页面引用计数
+	page_mapcount_reset(page);//重置页面映射计数
+	page_cpupid_reset_last(page);//重置页面的最后 CPUID（用于进程跟踪）
+	page_kasan_tag_reset(page);//重置 KASAN（Kernel Address Sanitizer）标记
 
-	INIT_LIST_HEAD(&page->lru);
+	INIT_LIST_HEAD(&page->lru);//初始化页面的 LRU 链表头
 #ifdef WANT_PAGE_VIRTUAL
 	/* The shift won't overflow because ZONE_NORMAL is below 4G. */
-	if (!is_highmem_idx(zone))
+	if (!is_highmem_idx(zone))//如果该页面不在高端内存区域，将其虚拟地址设置为对应的物理地址
 		set_page_address(page, __va(pfn << PAGE_SHIFT));
 #endif
 }
@@ -912,49 +912,49 @@ void __meminit memmap_init_range(unsigned long size, int nid, unsigned long zone
 		pfn++;
 	}
 }
-
+/*用于初始化指定内存区域的页表结构，并处理内存空洞。*/
 static void __init memmap_init_zone_range(struct zone *zone,
 					  unsigned long start_pfn,
 					  unsigned long end_pfn,
 					  unsigned long *hole_pfn)
 {
-	unsigned long zone_start_pfn = zone->zone_start_pfn;
-	unsigned long zone_end_pfn = zone_start_pfn + zone->spanned_pages;
-	int nid = zone_to_nid(zone), zone_id = zone_idx(zone);
+	unsigned long zone_start_pfn = zone->zone_start_pfn;//获取该内存区域的起始页帧号
+	unsigned long zone_end_pfn = zone_start_pfn + zone->spanned_pages;// 计算该内存区域的结束页帧号
+	int nid = zone_to_nid(zone), zone_id = zone_idx(zone);// 获取该内存区域所属的节点 ID 和区域 ID
 
-	start_pfn = clamp(start_pfn, zone_start_pfn, zone_end_pfn);
+	start_pfn = clamp(start_pfn, zone_start_pfn, zone_end_pfn);//将传入的起始和结束页帧号限制在该区域的页帧号范围内
 	end_pfn = clamp(end_pfn, zone_start_pfn, zone_end_pfn);
 
-	if (start_pfn >= end_pfn)
+	if (start_pfn >= end_pfn)//如果起始页帧号大于等于结束页帧号，说明没有有效内存块需要初始化，直接返回
 		return;
 
 	memmap_init_range(end_pfn - start_pfn, nid, zone_id, start_pfn,
-			  zone_end_pfn, MEMINIT_EARLY, NULL, MIGRATE_MOVABLE);
+			  zone_end_pfn, MEMINIT_EARLY, NULL, MIGRATE_MOVABLE);//初始化该内存区域的page结构，处理从 start_pfn 到 end_pfn 的页帧
 
 	if (*hole_pfn < start_pfn)
-		init_unavailable_range(*hole_pfn, start_pfn, zone_id, nid);
+		init_unavailable_range(*hole_pfn, start_pfn, zone_id, nid);// 如果当前 hole_pfn 小于 start_pfn，说明存在内存空洞，需初始化不可用的内存范围
 
-	*hole_pfn = end_pfn;
+	*hole_pfn = end_pfn;//更新 hole_pfn 为该区域的结束页帧号，表示处理到的最远位置
 }
-
+/*用于初始化系统中的内存映射表，即为每个内存页分配和设置对应的页结构（struct page）。*/
 static void __init memmap_init(void)
 {
-	unsigned long start_pfn, end_pfn;
-	unsigned long hole_pfn = 0;
-	int i, j, zone_id = 0, nid;
+	unsigned long start_pfn, end_pfn;// 定义起始和结束页帧号
+	unsigned long hole_pfn = 0;//用于记录内存空洞的起始页帧号，初始化为 0
+	int i, j, zone_id = 0, nid;//定义循环变量 i 和 j，zone_id 用于记录区域 ID，nid 记录节点 ID
 
-	for_each_mem_pfn_range(i, MAX_NUMNODES, &start_pfn, &end_pfn, &nid) {
-		struct pglist_data *node = NODE_DATA(nid);
+	for_each_mem_pfn_range(i, MAX_NUMNODES, &start_pfn, &end_pfn, &nid) {//遍历所有内存区域，获取每个区域的起始和结束页帧号及对应的节点 ID
+		struct pglist_data *node = NODE_DATA(nid);//获取节点的数据结构 pglist_data
 
-		for (j = 0; j < MAX_NR_ZONES; j++) {
-			struct zone *zone = node->node_zones + j;
+		for (j = 0; j < MAX_NR_ZONES; j++) {//遍历当前节点中的所有内存区域（zone）
+			struct zone *zone = node->node_zones + j;//获取当前节点的第 j 个内存区域
 
-			if (!populated_zone(zone))
+			if (!populated_zone(zone))//如果该区域没有分配人口（即没有有效页面），跳过该区域
 				continue;
 
 			memmap_init_zone_range(zone, start_pfn, end_pfn,
-					       &hole_pfn);
-			zone_id = j;
+					       &hole_pfn);//初始化该内存区域内存的page结构，处理从 start_pfn 到 end_pfn 之间的页帧
+			zone_id = j;//记录当前区域 ID
 		}
 	}
 
@@ -968,10 +968,10 @@ static void __init memmap_init(void)
 	 * silence the compiler warining about zone_id set but not used;
 	 * for FLATMEM it is a nop anyway
 	 */
-	end_pfn = round_up(end_pfn, PAGES_PER_SECTION);
-	if (hole_pfn < end_pfn)
+	end_pfn = round_up(end_pfn, PAGES_PER_SECTION);// 将结束页帧号向上对齐到段的边界（PAGES_PER_SECTION 的倍数）
+	if (hole_pfn < end_pfn)//如果 hole_pfn 小于对齐后的 end_pfn，则说明还有内存空洞需要处理
 #endif
-		init_unavailable_range(hole_pfn, end_pfn, zone_id, nid);
+		init_unavailable_range(hole_pfn, end_pfn, zone_id, nid);// 初始化不可用内存范围，处理从 hole_pfn 到 end_pfn 的内存空洞
 }
 
 #ifdef CONFIG_ZONE_DEVICE
@@ -1270,27 +1270,27 @@ static void __init reset_memoryless_node_totalpages(struct pglist_data *pgdat)
 	pgdat->node_present_pages = 0;
 	pr_debug("On node %d totalpages: 0\n", pgdat->node_id);
 }
-
+/*用于计算系统中用于内核的总页面数，以及系统中所有页面的总数*/
 static void __init calc_nr_kernel_pages(void)
 {
-	unsigned long start_pfn, end_pfn;
-	phys_addr_t start_addr, end_addr;
+	unsigned long start_pfn, end_pfn;// 定义起始和结束页帧号
+	phys_addr_t start_addr, end_addr;//定义物理地址的起始和结束值
 	u64 u;
 #ifdef CONFIG_HIGHMEM
-	unsigned long high_zone_low = arch_zone_lowest_possible_pfn[ZONE_HIGHMEM];
+	unsigned long high_zone_low = arch_zone_lowest_possible_pfn[ZONE_HIGHMEM];//用于获取高端内存区域的最低可用页帧号
 #endif
 
-	for_each_free_mem_range(u, NUMA_NO_NODE, MEMBLOCK_NONE, &start_addr, &end_addr, NULL) {
-		start_pfn = PFN_UP(start_addr);
-		end_pfn   = PFN_DOWN(end_addr);
+	for_each_free_mem_range(u, NUMA_NO_NODE, MEMBLOCK_NONE, &start_addr, &end_addr, NULL) {//遍历系统中所有的空闲内存块，获取每个块的起始和结束地址
+		start_pfn = PFN_UP(start_addr);//将起始地址向上对齐为页帧号
+		end_pfn   = PFN_DOWN(end_addr);//将结束地址向下对齐为页帧号
 
-		if (start_pfn < end_pfn) {
-			nr_all_pages += end_pfn - start_pfn;
+		if (start_pfn < end_pfn) {//如果起始页帧号小于结束页帧号，说明内存区域有效
+			nr_all_pages += end_pfn - start_pfn;//增加总页数，表示系统中所有的页面数量
 #ifdef CONFIG_HIGHMEM
-			start_pfn = clamp(start_pfn, 0, high_zone_low);
+			start_pfn = clamp(start_pfn, 0, high_zone_low);//如果启用了高端内存，将起始和结束页帧号限制在高端内存以下
 			end_pfn = clamp(end_pfn, 0, high_zone_low);
 #endif
-			nr_kernel_pages += end_pfn - start_pfn;
+			nr_kernel_pages += end_pfn - start_pfn;//计算属于内核使用的页面数量，增加到 nr_kernel_pages 中
 		}
 	}
 }
@@ -1359,25 +1359,25 @@ static void pgdat_init_kcompactd(struct pglist_data *pgdat)
 #else
 static void pgdat_init_kcompactd(struct pglist_data *pgdat) {}
 #endif
-
+/*用于初始化 pglist_data 结构中的内部结构*/
 static void __meminit pgdat_init_internals(struct pglist_data *pgdat)
 {
 	int i;
 
-	pgdat_resize_init(pgdat);
-	pgdat_kswapd_lock_init(pgdat);
+	pgdat_resize_init(pgdat);// 初始化节点的动态调整功能
+	pgdat_kswapd_lock_init(pgdat);//初始化节点的 kswapd 相关锁
 
-	pgdat_init_split_queue(pgdat);
-	pgdat_init_kcompactd(pgdat);
+	pgdat_init_split_queue(pgdat);//初始化节点的页面分裂队列
+	pgdat_init_kcompactd(pgdat);//初始化节点的内存压缩守护进程
 
-	init_waitqueue_head(&pgdat->kswapd_wait);
-	init_waitqueue_head(&pgdat->pfmemalloc_wait);
+	init_waitqueue_head(&pgdat->kswapd_wait);//初始化 kswapd 等待队列，用于页面回收的调度
+	init_waitqueue_head(&pgdat->pfmemalloc_wait);//初始化 pfmemalloc 等待队列，用于内存分配失败时的等待
 
-	for (i = 0; i < NR_VMSCAN_THROTTLE; i++)
+	for (i = 0; i < NR_VMSCAN_THROTTLE; i++)//遍历初始化内存回收等待队列，用于 vmscan 节流
 		init_waitqueue_head(&pgdat->reclaim_wait[i]);
 
-	pgdat_page_ext_init(pgdat);
-	lruvec_init(&pgdat->__lruvec);
+	pgdat_page_ext_init(pgdat);//初始化节点的页面扩展结构
+	lruvec_init(&pgdat->__lruvec);//初始化节点的 LRU（Least Recently Used）向量
 }
 
 static void __meminit zone_init_internals(struct zone *zone, enum zone_type idx, int nid,
@@ -1396,35 +1396,35 @@ static void __meminit zone_init_free_lists(struct zone *zone)
 {
 	unsigned int order, t;
 	for_each_migratetype_order(order, t) {
-		INIT_LIST_HEAD(&zone->free_area[order].free_list[t]);
-		zone->free_area[order].nr_free = 0;
+		INIT_LIST_HEAD(&zone->free_area[order].free_list[t]);//初始化指定阶数和迁移类型的空闲列表
+		zone->free_area[order].nr_free = 0;//设置该阶数的空闲页面数量为 0
 	}
 
 #ifdef CONFIG_UNACCEPTED_MEMORY
 	INIT_LIST_HEAD(&zone->unaccepted_pages);
 #endif
 }
-
+/*用于初始化一个内存区域（zone）。*/
 void __meminit init_currently_empty_zone(struct zone *zone,
 					unsigned long zone_start_pfn,
 					unsigned long size)
 {
-	struct pglist_data *pgdat = zone->zone_pgdat;
-	int zone_idx = zone_idx(zone) + 1;
+	struct pglist_data *pgdat = zone->zone_pgdat;//获取该内存区域所属的节点（pglist_data 结构）
+	int zone_idx = zone_idx(zone) + 1;// 获取该内存区域的索引，并加 1
 
-	if (zone_idx > pgdat->nr_zones)
+	if (zone_idx > pgdat->nr_zones)//如果当前内存区域的索引超过节点的总区域数，更新节点的区域数
 		pgdat->nr_zones = zone_idx;
 
-	zone->zone_start_pfn = zone_start_pfn;
+	zone->zone_start_pfn = zone_start_pfn;// 设置内存区域的起始页帧号
 
 	mminit_dprintk(MMINIT_TRACE, "memmap_init",
 			"Initialising map node %d zone %lu pfns %lu -> %lu\n",
 			pgdat->node_id,
 			(unsigned long)zone_idx(zone),
-			zone_start_pfn, (zone_start_pfn + size));
+			zone_start_pfn, (zone_start_pfn + size));//打印调试信息，显示内存初始化的详细信息，包括节点 ID、区域索引、起始页帧号和大小
 
-	zone_init_free_lists(zone);
-	zone->initialized = 1;
+	zone_init_free_lists(zone);//初始化该区域的空闲列表，用于内存分配器的操作(伙伴系统)
+	zone->initialized = 1;//将该区域标记为已初始化
 }
 
 #ifndef CONFIG_SPARSEMEM
@@ -1437,29 +1437,29 @@ void __meminit init_currently_empty_zone(struct zone *zone,
  */
 static unsigned long __init usemap_size(unsigned long zone_start_pfn, unsigned long zonesize)
 {
-	unsigned long usemapsize;
+	unsigned long usemapsize;//用于存储计算后的 usemap 大小
 
-	zonesize += zone_start_pfn & (pageblock_nr_pages-1);
-	usemapsize = roundup(zonesize, pageblock_nr_pages);
-	usemapsize = usemapsize >> pageblock_order;
-	usemapsize *= NR_PAGEBLOCK_BITS;
-	usemapsize = roundup(usemapsize, BITS_PER_LONG);
+	zonesize += zone_start_pfn & (pageblock_nr_pages-1);// 将区域大小增加 zone_start_pfn 与 pageblock_nr_pages 的对齐偏移量
+	usemapsize = roundup(zonesize, pageblock_nr_pages);// 将区域大小向上对齐到 pageblock_nr_pages 的倍数
+	usemapsize = usemapsize >> pageblock_order;//计算区域中 pageblock 的数量
+	usemapsize *= NR_PAGEBLOCK_BITS;// 计算 usemap 所需的总位数，乘以每个 pageblock 的标记位数
+	usemapsize = roundup(usemapsize, BITS_PER_LONG);//将 usemap 大小向上对齐到长整型（BITS_PER_LONG）的倍数
 
-	return usemapsize / BITS_PER_BYTE;
+	return usemapsize / BITS_PER_BYTE;//将 usemap 大小转换为字节数
 }
 
 static void __ref setup_usemap(struct zone *zone)
 {
 	unsigned long usemapsize = usemap_size(zone->zone_start_pfn,
-					       zone->spanned_pages);
-	zone->pageblock_flags = NULL;
-	if (usemapsize) {
+					       zone->spanned_pages);// 计算 usemap 的大小，基于区域的起始页帧号和跨度页数
+	zone->pageblock_flags = NULL;//初始化 pageblock_flags 为 NULL
+	if (usemapsize) {//如果计算的 usemap 大小不为 0
 		zone->pageblock_flags =
 			memblock_alloc_node(usemapsize, SMP_CACHE_BYTES,
-					    zone_to_nid(zone));
-		if (!zone->pageblock_flags)
+					    zone_to_nid(zone));//为 zone 分配 usemap 内存，按 SMP 缓存行大小对齐，并分配到对应的节点上
+		if (!zone->pageblock_flags)//如果内存分配失败
 			panic("Failed to allocate %ld bytes for zone %s pageblock flags on node %d\n",
-			      usemapsize, zone->name, zone_to_nid(zone));
+			      usemapsize, zone->name, zone_to_nid(zone));// 触发内核 panic，提示分配失败信息
 	}
 }
 #else
@@ -1469,23 +1469,23 @@ static inline void setup_usemap(struct zone *zone) {}
 #ifdef CONFIG_HUGETLB_PAGE_SIZE_VARIABLE
 
 /* Initialise the number of pages represented by NR_PAGEBLOCK_BITS */
-void __init set_pageblock_order(void)
+void __init set_pageblock_order(void)//用于设置内核中 pageblock 的阶数（order），控制内存分配的粒度。
 {
-	unsigned int order = MAX_PAGE_ORDER;
+	unsigned int order = MAX_PAGE_ORDER;// 初始化 order 为最大页面阶数
 
 	/* Check that pageblock_nr_pages has not already been setup */
-	if (pageblock_order)
+	if (pageblock_order)//检查 pageblock_order 是否已设置
 		return;
 
 	/* Don't let pageblocks exceed the maximum allocation granularity. */
-	if (HPAGE_SHIFT > PAGE_SHIFT && HUGETLB_PAGE_ORDER < order)
-		order = HUGETLB_PAGE_ORDER;
+	if (HPAGE_SHIFT > PAGE_SHIFT && HUGETLB_PAGE_ORDER < order)//检查大页是否存在且小于当前 order
+		order = HUGETLB_PAGE_ORDER;//将 order 设置为大页的阶数
 
 	/*
 	 * Assume the largest contiguous order of interest is a huge page.
 	 * This value may be variable depending on boot parameters on powerpc.
 	 */
-	pageblock_order = order;
+	pageblock_order = order;// 将 pageblock_order 设置为当前的 order 值
 }
 #else /* CONFIG_HUGETLB_PAGE_SIZE_VARIABLE */
 
@@ -1551,30 +1551,30 @@ void __ref free_area_init_core_hotplug(struct pglist_data *pgdat)
 	}
 }
 #endif
-
+/*用于初始化指定节点的内存区域（zone）*/
 static void __init free_area_init_core(struct pglist_data *pgdat)
 {
 	enum zone_type j;
-	int nid = pgdat->node_id;
+	int nid = pgdat->node_id;// 获取当前节点的 ID
 
-	pgdat_init_internals(pgdat);
-	pgdat->per_cpu_nodestats = &boot_nodestats;
+	pgdat_init_internals(pgdat);//初始化 pgdat 的内部结构
+	pgdat->per_cpu_nodestats = &boot_nodestats;//将节点的per-CPU统计数据指向初始化的nodestats
 
-	for (j = 0; j < MAX_NR_ZONES; j++) {
-		struct zone *zone = pgdat->node_zones + j;
-		unsigned long size = zone->spanned_pages;
+	for (j = 0; j < MAX_NR_ZONES; j++) {//遍历当前节点的所有内存区域（zone）
+		struct zone *zone = pgdat->node_zones + j;//获取当前节点的第 j 个内存区域
+		unsigned long size = zone->spanned_pages;// 获取当前内存区域的跨度页数
 
 		/*
 		 * Initialize zone->managed_pages as 0 , it will be reset
 		 * when memblock allocator frees pages into buddy system.
 		 */
-		zone_init_internals(zone, j, nid, zone->present_pages);
+		zone_init_internals(zone, j, nid, zone->present_pages);//初始化内存区域的内部结构，设置区域类型、节点ID和初始页数
 
-		if (!size)
+		if (!size)//如果内存区域大小为 0，说明该区域没有页
 			continue;
 
-		setup_usemap(zone);
-		init_currently_empty_zone(zone, zone->zone_start_pfn, size);
+		setup_usemap(zone);//初始化内存区域的usemap，用于管理页面块的分配状态
+		init_currently_empty_zone(zone, zone->zone_start_pfn, size);//继续初始化当前内存区域
 	}
 }
 
@@ -1597,41 +1597,41 @@ void __init *memmap_alloc(phys_addr_t size, phys_addr_t align,
 
 	return ptr;
 }
-
+/*为指定的节点（NUMA 或 FLATMEM）分配page结构映射。*/
 #ifdef CONFIG_FLATMEM
 static void __init alloc_node_mem_map(struct pglist_data *pgdat)
 {
-	unsigned long start, offset, size, end;
-	struct page *map;
+	unsigned long start, offset, size, end;//定义起始页帧号、偏移量、大小和结束页帧号
+	struct page *map;// 定义指针用于存储页表映射
 
 	/* Skip empty nodes */
-	if (!pgdat->node_spanned_pages)
+	if (!pgdat->node_spanned_pages)//如果节点的跨度页数为 0，说明该节点无内存
 		return;
 
-	start = pgdat->node_start_pfn & ~(MAX_ORDER_NR_PAGES - 1);
-	offset = pgdat->node_start_pfn - start;
+	start = pgdat->node_start_pfn & ~(MAX_ORDER_NR_PAGES - 1);// 将节点的起始页帧号对齐到 MAX_ORDER_NR_PAGES 的边界
+	offset = pgdat->node_start_pfn - start;// 计算起始页帧号与对齐后的起始页帧号之间的偏移量
 	/*
 		 * The zone's endpoints aren't required to be MAX_PAGE_ORDER
 	 * aligned but the node_mem_map endpoints must be in order
 	 * for the buddy allocator to function correctly.
 	 */
-	end = ALIGN(pgdat_end_pfn(pgdat), MAX_ORDER_NR_PAGES);
-	size =  (end - start) * sizeof(struct page);
+	end = ALIGN(pgdat_end_pfn(pgdat), MAX_ORDER_NR_PAGES);// 计算节点的结束页帧号，并将其对齐到 MAX_ORDER_NR_PAGES 的边界
+	size =  (end - start) * sizeof(struct page);//计算内存映射表的总大小，单位为 struct page 的大小
 	map = memmap_alloc(size, SMP_CACHE_BYTES, MEMBLOCK_LOW_LIMIT,
-			   pgdat->node_id, false);
-	if (!map)
+			   pgdat->node_id, false);//分配内存映射表，要求按 SMP 缓存线大小对齐，并分配给低地址区域
+	if (!map)// 如果内存映射表分配失败
 		panic("Failed to allocate %ld bytes for node %d memory map\n",
 		      size, pgdat->node_id);
-	pgdat->node_mem_map = map + offset;
+	pgdat->node_mem_map = map + offset;//将节点的内存映射表指针设置为分配的 map 加上偏移量
 	pr_debug("%s: node %d, pgdat %08lx, node_mem_map %08lx\n",
 		 __func__, pgdat->node_id, (unsigned long)pgdat,
-		 (unsigned long)pgdat->node_mem_map);
+		 (unsigned long)pgdat->node_mem_map);//打印调试信息，显示节点的内存映射表地址
 #ifndef CONFIG_NUMA
 	/* the global mem_map is just set as node 0's */
-	if (pgdat == NODE_DATA(0)) {
-		mem_map = NODE_DATA(0)->node_mem_map;
-		if (page_to_pfn(mem_map) != pgdat->node_start_pfn)
-			mem_map -= offset;
+	if (pgdat == NODE_DATA(0)) {//如果当前节点是节点 0
+		mem_map = NODE_DATA(0)->node_mem_map;//将全局的 mem_map 设置为节点 0 的内存映射表
+		if (page_to_pfn(mem_map) != pgdat->node_start_pfn)// 检查全局 mem_map 的页帧号是否匹配
+			mem_map -= offset;// 如果不匹配，调整全局 mem_map 的指针
 	}
 #endif
 }
@@ -1648,70 +1648,71 @@ static inline void alloc_node_mem_map(struct pglist_data *pgdat) { }
  * It returns the start and end page frame of a node based on information
  * provided by memblock_set_node(). If called for a node
  * with no available memory, the start and end PFNs will be 0.
+ * 用于获取指定节点（NUMA 节点）的起始和结束页帧号范围。
  */
 void __init get_pfn_range_for_nid(unsigned int nid,
 			unsigned long *start_pfn, unsigned long *end_pfn)
 {
-	unsigned long this_start_pfn, this_end_pfn;
+	unsigned long this_start_pfn, this_end_pfn;//定义变量用于存储当前内存块的起始和结束页帧号
 	int i;
 
-	*start_pfn = -1UL;
+	*start_pfn = -1UL;//初始化起始页帧号为最大值，以便后续寻找最小值
 	*end_pfn = 0;
 
-	for_each_mem_pfn_range(i, nid, &this_start_pfn, &this_end_pfn, NULL) {
-		*start_pfn = min(*start_pfn, this_start_pfn);
-		*end_pfn = max(*end_pfn, this_end_pfn);
+	for_each_mem_pfn_range(i, nid, &this_start_pfn, &this_end_pfn, NULL) {//遍历指定节点 nid 的每个内存块，获取其起始和结束页帧号
+		*start_pfn = min(*start_pfn, this_start_pfn);//更新 start_pfn 为最小的起始页帧号
+		*end_pfn = max(*end_pfn, this_end_pfn);//更新 end_pfn 为最大的结束页帧号
 	}
 
 	if (*start_pfn == -1UL)
 		*start_pfn = 0;
 }
-
+/*用于初始化指定节点的内存管理结构*/
 static void __init free_area_init_node(int nid)
 {
-	pg_data_t *pgdat = NODE_DATA(nid);
-	unsigned long start_pfn = 0;
-	unsigned long end_pfn = 0;
+	pg_data_t *pgdat = NODE_DATA(nid);//获取与节点ID对应的pg_data_t结构
+	unsigned long start_pfn = 0;//初始化起始页帧号为0
+	unsigned long end_pfn = 0;//初始化结束页帧号为0
 
 	/* pg_data_t should be reset to zero when it's allocated */
-	WARN_ON(pgdat->nr_zones || pgdat->kswapd_highest_zoneidx);
+	WARN_ON(pgdat->nr_zones || pgdat->kswapd_highest_zoneidx);//警告：pgdat结构未重置
 
-	get_pfn_range_for_nid(nid, &start_pfn, &end_pfn);
+	get_pfn_range_for_nid(nid, &start_pfn, &end_pfn);//获取指定节点的起始和结束页帧号范围
 
-	pgdat->node_id = nid;
-	pgdat->node_start_pfn = start_pfn;
-	pgdat->per_cpu_nodestats = NULL;
+	pgdat->node_id = nid;// 设置节点ID
+	pgdat->node_start_pfn = start_pfn;//设置节点起始页帧号
+	pgdat->per_cpu_nodestats = NULL;//初始化节点统计为 NULL
 
-	if (start_pfn != end_pfn) {
+	if (start_pfn != end_pfn) {//如果节点有内存
 		pr_info("Initmem setup node %d [mem %#018Lx-%#018Lx]\n", nid,
 			(u64)start_pfn << PAGE_SHIFT,
-			end_pfn ? ((u64)end_pfn << PAGE_SHIFT) - 1 : 0);
+			end_pfn ? ((u64)end_pfn << PAGE_SHIFT) - 1 : 0);// 打印初始化内存节点的信息，包括节点ID、起始和结束物理地址
 
-		calculate_node_totalpages(pgdat, start_pfn, end_pfn);
-	} else {
-		pr_info("Initmem setup node %d as memoryless\n", nid);
+		calculate_node_totalpages(pgdat, start_pfn, end_pfn);//计算节点的总页数
+	} else {// 如果节点没有内存（memoryless）
+		pr_info("Initmem setup node %d as memoryless\n", nid);//打印节点被设置为无内存的信息
 
-		reset_memoryless_node_totalpages(pgdat);
+		reset_memoryless_node_totalpages(pgdat);//重置无内存节点的总页数
 	}
 
-	alloc_node_mem_map(pgdat);
-	pgdat_set_deferred_range(pgdat);
+	alloc_node_mem_map(pgdat);//为节点分配内存映射数组(保存page结构体的内存空间)
+	pgdat_set_deferred_range(pgdat);//设置节点的延迟范围
 
-	free_area_init_core(pgdat);
-	lru_gen_init_pgdat(pgdat);
+	free_area_init_core(pgdat);//初始化节点的内存区（zone）
+	lru_gen_init_pgdat(pgdat);//初始化节点的LRU（Least Recently Used）页面生成器
 }
 
 /* Any regular or high memory on that node ? */
 static void __init check_for_memory(pg_data_t *pgdat)
 {
-	enum zone_type zone_type;
+	enum zone_type zone_type;//定义变量用于表示内存区域类型
 
-	for (zone_type = 0; zone_type <= ZONE_MOVABLE - 1; zone_type++) {
-		struct zone *zone = &pgdat->node_zones[zone_type];
-		if (populated_zone(zone)) {
-			if (IS_ENABLED(CONFIG_HIGHMEM))
+	for (zone_type = 0; zone_type <= ZONE_MOVABLE - 1; zone_type++) {//遍历从 ZONE_DMA 到 ZONE_NORMAL 之间的所有内存区域类型
+		struct zone *zone = &pgdat->node_zones[zone_type];//获取当前节点的特定内存区域
+		if (populated_zone(zone)) {//检查该内存区域是否有人口，即是否有有效页面
+			if (IS_ENABLED(CONFIG_HIGHMEM))//如果启用了高端内存（CONFIG_HIGHMEM），设置节点状态为有高端内存
 				node_set_state(pgdat->node_id, N_HIGH_MEMORY);
-			if (zone_type <= ZONE_NORMAL)
+			if (zone_type <= ZONE_NORMAL)//如果当前区域是 ZONE_NORMAL 或更小的区域，设置节点状态为有普通内存
 				node_set_state(pgdat->node_id, N_NORMAL_MEMORY);
 			break;
 		}
@@ -1721,13 +1722,14 @@ static void __init check_for_memory(pg_data_t *pgdat)
 #if MAX_NUMNODES > 1
 /*
  * Figure out the number of possible node ids.
+ * 用于设置系统中的节点数量，用于 NUMA（非统一内存访问）架构的初始化。
  */
 void __init setup_nr_node_ids(void)
 {
-	unsigned int highest;
+	unsigned int highest;//定义一个变量用于存储最高节点编号
 
-	highest = find_last_bit(node_possible_map.bits, MAX_NUMNODES);
-	nr_node_ids = highest + 1;
+	highest = find_last_bit(node_possible_map.bits, MAX_NUMNODES);//找到 node_possible_map 中可能节点的最高位位置.node_possible_map.bits是一个位图，表示系统中可能存在的节点。
+	nr_node_ids = highest + 1;//设置 nr_node_ids 为最高节点编号加 1
 }
 #endif
 
@@ -1752,6 +1754,14 @@ static bool arch_has_descending_max_zone_pfns(void)
  * that arch_max_dma32_pfn has no pages. It is also assumed that a zone
  * starts where the previous one ended. For example, ZONE_DMA32 starts
  * at arch_max_dma_pfn.
+ * free_area_init - 初始化所有 pg_data_t 和区域数据
+ * @max_zone_pfn: 每个区域的最大 PFN 数组
+ *
+ * 这将为系统中每个活动节点调用 free_area_init_node()。使用 memblock_set_node() 提
+ * 供的页面范围，计算每个节点中每个区域的大小及其空洞。如果两个相邻区域之间的最大 
+ * PFN 匹配，则假定该区域为空。例如，如果 arch_max_dma_pfn == arch_max_dma32_pfn，
+ * 则假定 arch_max_dma32_pfn 没有页面。还假定一个区域从上一个区域结束的地方开始。
+ * 例如，ZONE_DMA32 从arch_max_dma_pfn 开始。
  */
 void __init free_area_init(unsigned long *max_zone_pfn)
 {
@@ -1829,7 +1839,7 @@ void __init free_area_init(unsigned long *max_zone_pfn)
 	/* 初始化每个节点的内存管理数据结构 */
 	mminit_verify_pageflags_layout();// 验证页面标志的布局
 	setup_nr_node_ids();// 设置节点 ID 的数量
-	set_pageblock_order();//设置页面块的顺序
+	set_pageblock_order();//用于设置内核中 pageblock 的大小阶数(order)
 
 	for_each_node(nid) {//遍历所有节点，初始化每个节点的内存管理数据
 		pg_data_t *pgdat;
@@ -1840,7 +1850,7 @@ void __init free_area_init(unsigned long *max_zone_pfn)
 			if (!pgdat)//如果分配失败，打印错误信息并触发 panic
 				panic("Cannot allocate %zuB for node %d.\n",
 				       sizeof(*pgdat), nid);
-			arch_refresh_nodedata(nid, pgdat);//刷新内存节点的数据结构
+			arch_refresh_nodedata(nid, pgdat);//刷新内存节点的数据结构状态
 		}
 
 		pgdat = NODE_DATA(nid);//获取节点的数据结构
@@ -1861,7 +1871,7 @@ void __init free_area_init(unsigned long *max_zone_pfn)
 	}
 
 	calc_nr_kernel_pages();//计算内核页的数量
-	memmap_init();//初始化内存映射
+	memmap_init();//初始化内存页page结构
 
 	/* 如果系统只有一个节点，禁用内存哈希分布 */
 	fixup_hashdist();//修复哈希分布
@@ -2390,7 +2400,10 @@ void __init page_alloc_init_late(void)
  * allocate a large system hash table from bootmem
  * - it is assumed that the hash table must contain an exact power-of-2
  *   quantity of entries
- * - limit is the number of hash buckets, not the total allocation size
+ * - limit is the number of hash buckets, not the total allocation sizea
+ * 从启动内存中分配一个大的哈希表
+ * - 假设哈希表必须包含确切的 2 的幂的条目数量
+ * - 限制是哈希桶的数量，而不是总分配大小
  */
 void *__init alloc_large_system_hash(const char *tablename,
 				     unsigned long bucketsize,
@@ -2402,96 +2415,96 @@ void *__init alloc_large_system_hash(const char *tablename,
 				     unsigned long low_limit,
 				     unsigned long high_limit)
 {
-	unsigned long long max = high_limit;
-	unsigned long log2qty, size;
-	void *table;
-	gfp_t gfp_flags;
-	bool virt;
-	bool huge;
+	unsigned long long max = high_limit;//设置最大值为 high_limit，用于限制分配的最大数量
+	unsigned long log2qty, size;//log2qty 存储条目数量的对数值，size 存储哈希表的总大小
+	void *table;// 定义指针用于存储哈希表的基地址
+	gfp_t gfp_flags;//定义 GFP 标志，用于内存分配的控制
+	bool virt;//标识是否使用虚拟内存分配
+	bool huge;// 标识是否使用大页分配
 
 	/* allow the kernel cmdline to have a say */
-	if (!numentries) {
+	if (!numentries) {//如果 numentries 为 0，则由系统自动决定条目数量
 		/* round applicable memory size up to nearest megabyte */
-		numentries = nr_kernel_pages;
+		numentries = nr_kernel_pages;//默认使用系统内核页数作为条目数量
 
 		/* It isn't necessary when PAGE_SIZE >= 1MB */
-		if (PAGE_SIZE < SZ_1M)
-			numentries = round_up(numentries, SZ_1M / PAGE_SIZE);
+		if (PAGE_SIZE < SZ_1M)// 如果页面大小小于 1MB
+			numentries = round_up(numentries, SZ_1M / PAGE_SIZE);//将页面数量向上调整到 1MB 的倍数
 
 #if __BITS_PER_LONG > 32
-		if (!high_limit) {
-			unsigned long adapt;
+		if (!high_limit) {// 如果 high_limit 未设置
+			unsigned long adapt;//定义变量用于调整比例
 
 			for (adapt = ADAPT_SCALE_NPAGES; adapt < numentries;
-			     adapt <<= ADAPT_SCALE_SHIFT)
+			     adapt <<= ADAPT_SCALE_SHIFT)//根据系统规模调整比例
 				scale++;
 		}
 #endif
 
 		/* limit to 1 bucket per 2^scale bytes of low memory */
-		if (scale > PAGE_SHIFT)
+		if (scale > PAGE_SHIFT)//根据scale调整条目数量，限制每个桶的大小
 			numentries >>= (scale - PAGE_SHIFT);
 		else
 			numentries <<= (PAGE_SHIFT - scale);
 
-		if (unlikely((numentries * bucketsize) < PAGE_SIZE))
-			numentries = PAGE_SIZE / bucketsize;
+		if (unlikely((numentries * bucketsize) < PAGE_SIZE))//如果总大小小于一页
+			numentries = PAGE_SIZE / bucketsize;// 调整条目数量，至少保证一页
 	}
-	numentries = roundup_pow_of_two(numentries);
+	numentries = roundup_pow_of_two(numentries);//将条目数量调整为2的幂
 
 	/* limit allocation size to 1/16 total memory by default */
-	if (max == 0) {
-		max = ((unsigned long long)nr_all_pages << PAGE_SHIFT) >> 4;
-		do_div(max, bucketsize);
+	if (max == 0) {//如果最大值未设置
+		max = ((unsigned long long)nr_all_pages << PAGE_SHIFT) >> 4;//默认限制为总内存的 1/16
+		do_div(max, bucketsize);//计算最大条目数量
 	}
-	max = min(max, 0x80000000ULL);
+	max = min(max, 0x80000000ULL);// 限制最大值不超过 2GB
 
-	if (numentries < low_limit)
+	if (numentries < low_limit)// 确保条目数量不少于低限制
 		numentries = low_limit;
-	if (numentries > max)
+	if (numentries > max)// 确保条目数量不超过最大限制
 		numentries = max;
 
-	log2qty = ilog2(numentries);
+	log2qty = ilog2(numentries);// 计算条目数量的对数值
 
-	gfp_flags = (flags & HASH_ZERO) ? GFP_ATOMIC | __GFP_ZERO : GFP_ATOMIC;
+	gfp_flags = (flags & HASH_ZERO) ? GFP_ATOMIC | __GFP_ZERO : GFP_ATOMIC;// 设置 GFP 标志，根据是否需要零初始化
 	do {
-		virt = false;
-		size = bucketsize << log2qty;
-		if (flags & HASH_EARLY) {
-			if (flags & HASH_ZERO)
-				table = memblock_alloc(size, SMP_CACHE_BYTES);
+		virt = false;//初始化为非虚拟内存分配
+		size = bucketsize << log2qty;// 计算哈希表的总大小
+		if (flags & HASH_EARLY) {//如果设置了 HASH_EARLY 标志
+			if (flags & HASH_ZERO)//根据 HASH_ZERO 标志选择内存分配方式
+				table = memblock_alloc(size, SMP_CACHE_BYTES);//分配并初始化内存块
 			else
 				table = memblock_alloc_raw(size,
-							   SMP_CACHE_BYTES);
-		} else if (get_order(size) > MAX_PAGE_ORDER || hashdist) {
-			table = vmalloc_huge(size, gfp_flags);
-			virt = true;
+							   SMP_CACHE_BYTES);//仅分配内存块，不初始化
+		} else if (get_order(size) > MAX_PAGE_ORDER || hashdist) {//如果大小超过最大页面阶数或启用了哈希分布
+			table = vmalloc_huge(size, gfp_flags);//使用虚拟内存分配大页
+			virt = true;//标记为虚拟分配
 			if (table)
-				huge = is_vm_area_hugepages(table);
+				huge = is_vm_area_hugepages(table);//检查是否为大页分配
 		} else {
 			/*
 			 * If bucketsize is not a power-of-two, we may free
 			 * some pages at the end of hash table which
 			 * alloc_pages_exact() automatically does
 			 */
-			table = alloc_pages_exact(size, gfp_flags);
-			kmemleak_alloc(table, size, 1, gfp_flags);
+			table = alloc_pages_exact(size, gfp_flags);//精确分配页面大小
+			kmemleak_alloc(table, size, 1, gfp_flags);// 记录内存泄漏信息
 		}
-	} while (!table && size > PAGE_SIZE && --log2qty);
+	} while (!table && size > PAGE_SIZE && --log2qty);//如果分配失败且大小大于一页，则减小 log2qty 重试
 
-	if (!table)
-		panic("Failed to allocate %s hash table\n", tablename);
+	if (!table)//如果最终分配仍失败
+		panic("Failed to allocate %s hash table\n", tablename);//触发内核 panic 错误
 
 	pr_info("%s hash table entries: %ld (order: %d, %lu bytes, %s)\n",
 		tablename, 1UL << log2qty, ilog2(size) - PAGE_SHIFT, size,
-		virt ? (huge ? "vmalloc hugepage" : "vmalloc") : "linear");
+		virt ? (huge ? "vmalloc hugepage" : "vmalloc") : "linear");//打印哈希表的分配信息，包括条目数、内存分配方式等
 
-	if (_hash_shift)
-		*_hash_shift = log2qty;
-	if (_hash_mask)
-		*_hash_mask = (1 << log2qty) - 1;
+	if (_hash_shift)//如果传入了 hash_shift 指针
+		*_hash_shift = log2qty;// 设置为条目数量的对数值
+	if (_hash_mask)//如果传入了 hash_mask 指针
+		*_hash_mask = (1 << log2qty) - 1;//设置为条目数量掩码
 
-	return table;
+	return table;//返回分配的哈希表指针
 }
 
 void __init memblock_free_pages(struct page *page, unsigned long pfn,

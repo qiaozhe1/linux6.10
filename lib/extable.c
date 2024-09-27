@@ -64,7 +64,7 @@ void sort_extable(struct exception_table_entry *start,
 		  struct exception_table_entry *finish)
 {
 	sort(start, finish - start, sizeof(struct exception_table_entry),
-	     cmp_ex_sort, swap_ex);
+	     cmp_ex_sort, swap_ex);//调用 sort 函数对异常表进行排序
 }
 
 #ifdef CONFIG_MODULES

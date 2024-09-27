@@ -5247,14 +5247,14 @@ static int calculate_sizes(struct kmem_cache *s)
 
 static int kmem_cache_open(struct kmem_cache *s, slab_flags_t flags)
 {
-	s->flags = kmem_cache_flags(flags, s->name);
+	s->flags = kmem_cache_flags(flags, s->name);//设置 kmem_cache 的标志
 #ifdef CONFIG_SLAB_FREELIST_HARDENED
-	s->random = get_random_long();
+	s->random = get_random_long();//获取随机值，用于随机化空闲列表
 #endif
 
-	if (!calculate_sizes(s))
+	if (!calculate_sizes(s))//计算缓存的大小和其他相关参数
 		goto error;
-	if (disable_higher_order_debug) {
+	if (disable_higher_order_debug) {// 检查是否禁用了高阶调试
 		/*
 		 * Disable debugging flags that store metadata if the min slab
 		 * order increased.
@@ -5279,28 +5279,28 @@ static int kmem_cache_open(struct kmem_cache *s, slab_flags_t flags)
 	 * list to avoid pounding the page allocator excessively.
 	 */
 	s->min_partial = min_t(unsigned long, MAX_PARTIAL, ilog2(s->size) / 2);
-	s->min_partial = max_t(unsigned long, MIN_PARTIAL, s->min_partial);
+	s->min_partial = max_t(unsigned long, MIN_PARTIAL, s->min_partial);//
 
-	set_cpu_partial(s);
+	set_cpu_partial(s);// 设置 CPU 的部分缓存
 
 #ifdef CONFIG_NUMA
-	s->remote_node_defrag_ratio = 1000;
+	s->remote_node_defrag_ratio = 1000;//设置远程节点的碎片化比率
 #endif
 
 	/* Initialize the pre-computed randomized freelist if slab is up */
-	if (slab_state >= UP) {
-		if (init_cache_random_seq(s))
+	if (slab_state >= UP) {// 如果 slab 已启动，则初始化预计算的随机空闲列表
+		if (init_cache_random_seq(s))//初始化缓存的随机序列
 			goto error;
 	}
 
-	if (!init_kmem_cache_nodes(s))
+	if (!init_kmem_cache_nodes(s))//初始化 kmem_cache 的节点
 		goto error;
 
-	if (alloc_kmem_cache_cpus(s))
+	if (alloc_kmem_cache_cpus(s))//为 CPU 分配 kmem_cache
 		return 0;
 
 error:
-	__kmem_cache_release(s);
+	__kmem_cache_release(s);// 释放缓存
 	return -EINVAL;
 }
 
@@ -5743,86 +5743,86 @@ static int slab_memory_callback(struct notifier_block *self,
 static struct kmem_cache * __init bootstrap(struct kmem_cache *static_cache)
 {
 	int node;
-	struct kmem_cache *s = kmem_cache_zalloc(kmem_cache, GFP_NOWAIT);
-	struct kmem_cache_node *n;
+	struct kmem_cache *s = kmem_cache_zalloc(kmem_cache, GFP_NOWAIT);//从全局 kmem_cache 中分配新的 kmem_cache
+	struct kmem_cache_node *n;// 定义指向节点缓存的指针
 
-	memcpy(s, static_cache, kmem_cache->object_size);
+	memcpy(s, static_cache, kmem_cache->object_size);//复制静态缓存的内容到新分配的缓存中
 
 	/*
 	 * This runs very early, and only the boot processor is supposed to be
 	 * up.  Even if it weren't true, IRQs are not up so we couldn't fire
 	 * IPIs around.
 	 */
-	__flush_cpu_slab(s, smp_processor_id());
-	for_each_kmem_cache_node(s, node, n) {
-		struct slab *p;
+	__flush_cpu_slab(s, smp_processor_id());//清空当前 CPU 的 SLAB，以确保没有过期的页面
+	for_each_kmem_cache_node(s, node, n) {//遍历与 kmem_cache 关联的所有 NUMA 节点
+		struct slab *p;// 定义指向 SLAB 的指针
 
-		list_for_each_entry(p, &n->partial, slab_list)
-			p->slab_cache = s;
+		list_for_each_entry(p, &n->partial, slab_list)//遍历节点的部分列表
+			p->slab_cache = s;// 将 SLAB 的缓存指向新创建的缓存
 
 #ifdef CONFIG_SLUB_DEBUG
-		list_for_each_entry(p, &n->full, slab_list)
-			p->slab_cache = s;
+		list_for_each_entry(p, &n->full, slab_list)// 遍历节点的完整列表
+			p->slab_cache = s;//将 SLAB 的缓存指向新创建的缓存
 #endif
 	}
-	list_add(&s->list, &slab_caches);
-	return s;
+	list_add(&s->list, &slab_caches);//将新创建的缓存添加到全局缓存列表中
+	return s;//返回新创建的 kmem_cache 指针
 }
 
 void __init kmem_cache_init(void)
 {
 	static __initdata struct kmem_cache boot_kmem_cache,
-		boot_kmem_cache_node;
-	int node;
+		boot_kmem_cache_node;//定义启动时的 kmem_cache 和节点 kmem_cache
+	int node;//定义节点变量
 
-	if (debug_guardpage_minorder())
-		slub_max_order = 0;
+	if (debug_guardpage_minorder())//检查调试标志
+		slub_max_order = 0;//如果启用调试，设置最大阶数为0
 
 	/* Print slub debugging pointers without hashing */
-	if (__slub_debug_enabled())
-		no_hash_pointers_enable(NULL);
+	if (__slub_debug_enabled())//检查是否启用了 slub 调试
+		no_hash_pointers_enable(NULL);//启用无哈希指针调试
 
-	kmem_cache_node = &boot_kmem_cache_node;
-	kmem_cache = &boot_kmem_cache;
+	kmem_cache_node = &boot_kmem_cache_node;//设置节点 kmem_cache 指针
+	kmem_cache = &boot_kmem_cache;//设置全局 kmem_cache 指针
 
 	/*
 	 * Initialize the nodemask for which we will allocate per node
 	 * structures. Here we don't need taking slab_mutex yet.
 	 */
-	for_each_node_state(node, N_NORMAL_MEMORY)
-		node_set(node, slab_nodes);
+	for_each_node_state(node, N_NORMAL_MEMORY)//遍历正常内存状态的内存节点
+		node_set(node, slab_nodes);//将内存节点设置为slab管理的节点
 
 	create_boot_cache(kmem_cache_node, "kmem_cache_node",
 			sizeof(struct kmem_cache_node),
-			SLAB_HWCACHE_ALIGN | SLAB_NO_OBJ_EXT, 0, 0);
+			SLAB_HWCACHE_ALIGN | SLAB_NO_OBJ_EXT, 0, 0);//创建用于节点的 kmem_cache
 
-	hotplug_memory_notifier(slab_memory_callback, SLAB_CALLBACK_PRI);
+	hotplug_memory_notifier(slab_memory_callback, SLAB_CALLBACK_PRI);//注册内存热插拔回调
 
 	/* Able to allocate the per node structures */
-	slab_state = PARTIAL;
+	slab_state = PARTIAL;//设置 slab 状态为部分可用
 
 	create_boot_cache(kmem_cache, "kmem_cache",
 			offsetof(struct kmem_cache, node) +
 				nr_node_ids * sizeof(struct kmem_cache_node *),
-			SLAB_HWCACHE_ALIGN | SLAB_NO_OBJ_EXT, 0, 0);
+			SLAB_HWCACHE_ALIGN | SLAB_NO_OBJ_EXT, 0, 0);//创建主 kmem_cache
 
-	kmem_cache = bootstrap(&boot_kmem_cache);
-	kmem_cache_node = bootstrap(&boot_kmem_cache_node);
+	kmem_cache = bootstrap(&boot_kmem_cache);//启动 kmem_cache
+	kmem_cache_node = bootstrap(&boot_kmem_cache_node);//启动节点 kmem_cache
 
 	/* Now we can use the kmem_cache to allocate kmalloc slabs */
-	setup_kmalloc_cache_index_table();
-	create_kmalloc_caches();
+	setup_kmalloc_cache_index_table();// 设置 kmalloc 缓存索引表.以提高内存分配的效率。
+	create_kmalloc_caches();//创建 kmalloc 缓存.允许通过 kmalloc 进行内存分配
 
 	/* Setup random freelists for each cache */
-	init_freelist_randomization();
+	init_freelist_randomization();//为每个缓存设置随机空闲列表，减少内存分配时的碎片化，优化性能。
 
 	cpuhp_setup_state_nocalls(CPUHP_SLUB_DEAD, "slub:dead", NULL,
-				  slub_cpu_dead);
+				  slub_cpu_dead);//设置 SLUB 的 CPU 热插拔状态，确保系统能够正确处理在线和离线 CPU 的内存管理。
 
 	pr_info("SLUB: HWalign=%d, Order=%u-%u, MinObjects=%u, CPUs=%u, Nodes=%u\n",
 		cache_line_size(),
 		slub_min_order, slub_max_order, slub_min_objects,
-		nr_cpu_ids, nr_node_ids);
+		nr_cpu_ids, nr_node_ids);//打印 SLUB 配置信息
 }
 
 void __init kmem_cache_init_late(void)
@@ -5856,29 +5856,29 @@ __kmem_cache_alias(const char *name, unsigned int size, unsigned int align,
 
 	return s;
 }
-
+/*用于创建并初始化一个新的kmem_cache，负责将内存缓存的相关信息注册到系统中*/
 int __kmem_cache_create(struct kmem_cache *s, slab_flags_t flags)
 {
 	int err;
 
-	err = kmem_cache_open(s, flags);
-	if (err)
+	err = kmem_cache_open(s, flags);//尝试打开指定的kmem_cache
+	if (err)//如果失败，返回错误代码
 		return err;
 
 	/* Mutex is not taken during early boot */
-	if (slab_state <= UP)
-		return 0;
+	if (slab_state <= UP)// 检查当前的 slab 状态
+		return 0;//如果状态为 UP，直接返回成功
 
-	err = sysfs_slab_add(s);
-	if (err) {
-		__kmem_cache_release(s);
+	err = sysfs_slab_add(s);//将缓存信息添加到 sysfs
+	if (err) {//检查是否成功
+		__kmem_cache_release(s);//如果失败，释放kmem_cache
 		return err;
 	}
 
-	if (s->flags & SLAB_STORE_USER)
-		debugfs_slab_add(s);
+	if (s->flags & SLAB_STORE_USER)//检查缓存是否存储用户信息
+		debugfs_slab_add(s);//如果是，将缓存信息添加到 debugfs
 
-	return 0;
+	return 0;// 返回成功
 }
 
 #ifdef SLAB_SUPPORTS_SYSFS

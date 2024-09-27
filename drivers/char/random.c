@@ -837,42 +837,43 @@ static struct notifier_block pm_notifier = { .notifier_call = random_pm_notifica
 /*
  * This is called extremely early, before time keeping functionality is
  * available, but arch randomness is. Interrupts are not yet enabled.
+ * 用于在系统初始化的早期阶段为熵池（entropy pool）提供随机数种子
  */
 void __init random_init_early(const char *command_line)
 {
-	unsigned long entropy[BLAKE2S_BLOCK_SIZE / sizeof(long)];
-	size_t i, longs, arch_bits;
+	unsigned long entropy[BLAKE2S_BLOCK_SIZE / sizeof(long)];//定义用于存储熵值的数组
+	size_t i, longs, arch_bits;//定义循环变量、长整数数量和架构位数
 
 #if defined(LATENT_ENTROPY_PLUGIN)
-	static const u8 compiletime_seed[BLAKE2S_BLOCK_SIZE] __initconst __latent_entropy;
-	_mix_pool_bytes(compiletime_seed, sizeof(compiletime_seed));
+	static const u8 compiletime_seed[BLAKE2S_BLOCK_SIZE] __initconst __latent_entropy;//定义编译时的熵种子，带有潜在熵
+	_mix_pool_bytes(compiletime_seed, sizeof(compiletime_seed));//将编译时的熵种子混合到熵池中
 #endif
 
-	for (i = 0, arch_bits = sizeof(entropy) * 8; i < ARRAY_SIZE(entropy);) {
-		longs = arch_get_random_seed_longs(entropy, ARRAY_SIZE(entropy) - i);
-		if (longs) {
-			_mix_pool_bytes(entropy, sizeof(*entropy) * longs);
-			i += longs;
-			continue;
+	for (i = 0, arch_bits = sizeof(entropy) * 8; i < ARRAY_SIZE(entropy);) {//遍历获取并混合架构特定的随机数种子
+		longs = arch_get_random_seed_longs(entropy, ARRAY_SIZE(entropy) - i);//尝试获取硬件提供的随机种子
+		if (longs) {//如果获取到了随机种子
+			_mix_pool_bytes(entropy, sizeof(*entropy) * longs);//将获取的种子混合到熵池中
+			i += longs;//更新获取的种子数量
+			continue;//继续下一次获取
 		}
-		longs = arch_get_random_longs(entropy, ARRAY_SIZE(entropy) - i);
-		if (longs) {
-			_mix_pool_bytes(entropy, sizeof(*entropy) * longs);
-			i += longs;
-			continue;
+		longs = arch_get_random_longs(entropy, ARRAY_SIZE(entropy) - i);//尝试获取硬件随机数
+		if (longs) {//如果获取到了随机数
+			_mix_pool_bytes(entropy, sizeof(*entropy) * longs);//将获取的随机数混合到熵池中
+			i += longs;//更新获取的种子数量
+			continue;//继续下一次获取
 		}
-		arch_bits -= sizeof(*entropy) * 8;
-		++i;
+		arch_bits -= sizeof(*entropy) * 8;//减少架构位数，表示未获取到的位数
+		++i;//继续到下一次迭代
 	}
 
-	_mix_pool_bytes(init_utsname(), sizeof(*(init_utsname())));
-	_mix_pool_bytes(command_line, strlen(command_line));
+	_mix_pool_bytes(init_utsname(), sizeof(*(init_utsname())));//将系统的 uname 信息混合到熵池中
+	_mix_pool_bytes(command_line, strlen(command_line));// 将命令行参数混合到熵池中
 
 	/* Reseed if already seeded by earlier phases. */
-	if (crng_ready())
-		crng_reseed(NULL);
+	if (crng_ready())//如果熵源已经准备好，则重新播种；否则，如果信任 CPU，则为熵池增加信任的位数
+		crng_reseed(NULL);//重新播种随机数生成器
 	else if (trust_cpu)
-		_credit_init_bits(arch_bits);
+		_credit_init_bits(arch_bits);//为初始熵池增加信用位数
 }
 
 /*

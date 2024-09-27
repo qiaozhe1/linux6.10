@@ -2429,34 +2429,35 @@ phys_addr_t per_cpu_ptr_to_phys(void *addr)
  * RETURNS:
  * Pointer to the allocated pcpu_alloc_info on success, NULL on
  * failure.
+ * 用于为 pcpu_alloc_info 结构分配内存并初始化相关字段
  */
 struct pcpu_alloc_info * __init pcpu_alloc_alloc_info(int nr_groups,
 						      int nr_units)
 {
-	struct pcpu_alloc_info *ai;
-	size_t base_size, ai_size;
-	void *ptr;
-	int unit;
+	struct pcpu_alloc_info *ai;//定义指向分配信息结构的指针
+	size_t base_size, ai_size;//定义基本大小和总大小
+	void *ptr;//通用指针用于内存分配
+	int unit;//循环变量，用于遍历单位
 
 	base_size = ALIGN(struct_size(ai, groups, nr_groups),
-			  __alignof__(ai->groups[0].cpu_map[0]));
-	ai_size = base_size + nr_units * sizeof(ai->groups[0].cpu_map[0]);
+			  __alignof__(ai->groups[0].cpu_map[0]));//计算基本大小，包括 pcpu_alloc_info 结构体和组数组的大小，并对齐到 CPU 映射元素的对齐要求
+	ai_size = base_size + nr_units * sizeof(ai->groups[0].cpu_map[0]);//计算完整的分配大小，包含基本大小和所有单元的CPU映射大小
 
-	ptr = memblock_alloc(PFN_ALIGN(ai_size), PAGE_SIZE);
-	if (!ptr)
+	ptr = memblock_alloc(PFN_ALIGN(ai_size), PAGE_SIZE);//分配对齐的内存块，大小对齐到页面大小
+	if (!ptr)//分配失败时返回 NULL
 		return NULL;
-	ai = ptr;
-	ptr += base_size;
+	ai = ptr;//将起始地址指针转换为 pcpu_alloc_info 类型
+	ptr += base_size;//更新指针以跳过基本大小部分
 
-	ai->groups[0].cpu_map = ptr;
+	ai->groups[0].cpu_map = ptr;// 将 CPU 映射指针指向新的内存区域
 
-	for (unit = 0; unit < nr_units; unit++)
+	for (unit = 0; unit < nr_units; unit++)// 初始化 CPU 映射数组中的所有单位为 NR_CPUS，表示未使用状态
 		ai->groups[0].cpu_map[unit] = NR_CPUS;
 
-	ai->nr_groups = nr_groups;
-	ai->__ai_size = PFN_ALIGN(ai_size);
+	ai->nr_groups = nr_groups;// 设置组的数量
+	ai->__ai_size = PFN_ALIGN(ai_size);//设置对齐后的分配大小
 
-	return ai;
+	return ai;// 返回分配好的分配信息结构指针
 }
 
 /**
@@ -2842,171 +2843,178 @@ static struct pcpu_alloc_info * __init __flatten pcpu_build_alloc_info(
 				size_t atom_size,
 				pcpu_fc_cpu_distance_fn_t cpu_distance_fn)
 {
-	static int group_map[NR_CPUS] __initdata;
-	static int group_cnt[NR_CPUS] __initdata;
-	static struct cpumask mask __initdata;
-	const size_t static_size = __per_cpu_end - __per_cpu_start;
-	int nr_groups = 1, nr_units = 0;
-	size_t size_sum, min_unit_size, alloc_size;
-	int upa, max_upa, best_upa;	/* units_per_alloc */
-	int last_allocs, group, unit;
-	unsigned int cpu, tcpu;
-	struct pcpu_alloc_info *ai;
-	unsigned int *cpu_map;
+	static int group_map[NR_CPUS] __initdata;//用于存储每个 CPU 对应的组编号
+	static int group_cnt[NR_CPUS] __initdata;//记录每个组中包含的 CPU 数量
+	static struct cpumask mask __initdata;//用于跟踪尚未分组的 CPU
+	const size_t static_size = __per_cpu_end - __per_cpu_start;//静态分配的 per-CPU 数据大小
+	int nr_groups = 1, nr_units = 0;//初始化组数量和单元数量
+	size_t size_sum, min_unit_size, alloc_size;// 用于存储总大小、最小单元大小和分配大小
+	int upa, max_upa, best_upa;//每次分配的单元数量，最大单元数量，最佳单元数量
+	int last_allocs, group, unit;//最后一次分配的数量，组索引，单位索引
+	unsigned int cpu, tcpu;// CPU 和目标 CPU 的编号
+	struct pcpu_alloc_info *ai;//分配信息结构体指针
+	unsigned int *cpu_map;//CPU 映射指针
 
-	/* this function may be called multiple times */
-	memset(group_map, 0, sizeof(group_map));
-	memset(group_cnt, 0, sizeof(group_cnt));
-	cpumask_clear(&mask);
+	/*  该函数可能会被多次调用，因此需要重置数据 */
+	memset(group_map, 0, sizeof(group_map));// 将 group_map 初始化为 0
+	memset(group_cnt, 0, sizeof(group_cnt));//将 group_cnt 初始化为 0
+	cpumask_clear(&mask);//清除 CPU 掩码
 
-	/* calculate size_sum and ensure dyn_size is enough for early alloc */
+	/* 计算一个单元的总大小，并确保动态大小足够进行早期分配 */
 	size_sum = PFN_ALIGN(static_size + reserved_size +
 			    max_t(size_t, dyn_size, PERCPU_DYNAMIC_EARLY_SIZE));
-	dyn_size = size_sum - static_size - reserved_size;
+	dyn_size = size_sum - static_size - reserved_size;//更新动态大小
 
 	/*
 	 * Determine min_unit_size, alloc_size and max_upa such that
 	 * alloc_size is multiple of atom_size and is the smallest
 	 * which can accommodate 4k aligned segments which are equal to
 	 * or larger than min_unit_size.
+	 *  确定最小单元大小、分配大小和最大单位数量
+	 *  使得分配大小是 atom_size 的倍数，且可以容纳4k对齐的段
 	 */
-	min_unit_size = max_t(size_t, size_sum, PCPU_MIN_UNIT_SIZE);
+	min_unit_size = max_t(size_t, size_sum, PCPU_MIN_UNIT_SIZE);// 获取最小单元大小
 
-	/* determine the maximum # of units that can fit in an allocation */
-	alloc_size = roundup(min_unit_size, atom_size);
-	upa = alloc_size / min_unit_size;
-	while (alloc_size % upa || (offset_in_page(alloc_size / upa)))
+	/*  确定一个分配中可以容纳的最大单元数量 */
+	alloc_size = roundup(min_unit_size, atom_size);// 对分配大小按 atom_size 向上取整
+	upa = alloc_size / min_unit_size;//计算每次分配的单元数量
+	while (alloc_size % upa || (offset_in_page(alloc_size / upa)))//调整单元数量直到满足对齐要求
 		upa--;
-	max_upa = upa;
+	max_upa = upa;//记录最大单元数量
 
-	cpumask_copy(&mask, cpu_possible_mask);
+	cpumask_copy(&mask, cpu_possible_mask);//复制所有可能的CPU到掩码中
 
-	/* group cpus according to their proximity */
+	/* 根据 CPU 的距离将它们分组 */
 	for (group = 0; !cpumask_empty(&mask); group++) {
 		/* pop the group's first cpu */
-		cpu = cpumask_first(&mask);
-		group_map[cpu] = group;
-		group_cnt[group]++;
-		cpumask_clear_cpu(cpu, &mask);
+		cpu = cpumask_first(&mask);//获取组的第一个CPU
+		group_map[cpu] = group;//将该 CPU 标记为属于当前组
+		group_cnt[group]++;//增加当前组的 CPU 数量
+		cpumask_clear_cpu(cpu, &mask);//从掩码中移除该CPU
 
-		for_each_cpu(tcpu, &mask) {
+		for_each_cpu(tcpu, &mask) {//遍历掩码中的其他CPU
 			if (!cpu_distance_fn ||
 			    (cpu_distance_fn(cpu, tcpu) == LOCAL_DISTANCE &&
-			     cpu_distance_fn(tcpu, cpu) == LOCAL_DISTANCE)) {
-				group_map[tcpu] = group;
-				group_cnt[group]++;
-				cpumask_clear_cpu(tcpu, &mask);
+			     cpu_distance_fn(tcpu, cpu) == LOCAL_DISTANCE)) {//如果没有距离函数或CPU之间的距离是本地距离
+				group_map[tcpu] = group;//将目标CPU也分配到当前组
+				group_cnt[group]++;//增加当前组的CPU数量
+				cpumask_clear_cpu(tcpu, &mask);//从掩码中移除该CPU
 			}
 		}
-	}
-	nr_groups = group;
+	} 
+	nr_groups = group;// 记录组的总数量
 
 	/*
 	 * Wasted space is caused by a ratio imbalance of upa to group_cnt.
 	 * Expand the unit_size until we use >= 75% of the units allocated.
 	 * Related to atom_size, which could be much larger than the unit_size.
+	 * 根据单元与组数量的比率不平衡会导致空间浪费。
+	 * 扩展单元大小直到使用的单元数达到分配单位的 75% 以上。
 	 */
-	last_allocs = INT_MAX;
-	best_upa = 0;
+	last_allocs = INT_MAX;//初始化最后分配次数为最大值
+	best_upa = 0;// 初始化最佳单元数量为 0
 	for (upa = max_upa; upa; upa--) {
-		int allocs = 0, wasted = 0;
+		int allocs = 0, wasted = 0;//初始化当前分配次数和浪费数量
 
-		if (alloc_size % upa || (offset_in_page(alloc_size / upa)))
+		if (alloc_size % upa || (offset_in_page(alloc_size / upa)))//检查分配大小与单位数量是否对齐
 			continue;
 
-		for (group = 0; group < nr_groups; group++) {
-			int this_allocs = DIV_ROUND_UP(group_cnt[group], upa);
-			allocs += this_allocs;
-			wasted += this_allocs * upa - group_cnt[group];
+		for (group = 0; group < nr_groups; group++) {//计算当前单元数量的分配和浪费
+			int this_allocs = DIV_ROUND_UP(group_cnt[group], upa);//计算当前组的分配次数
+			allocs += this_allocs;//累加到总分配次数
+			wasted += this_allocs * upa - group_cnt[group];//计算浪费的单位数量
 		}
 
 		/*
 		 * Don't accept if wastage is over 1/3.  The
 		 * greater-than comparison ensures upa==1 always
 		 * passes the following check.
+		 * 如果浪费的单元数量超过1/3则跳过，确保单元数量为1时总是通过
 		 */
 		if (wasted > num_possible_cpus() / 3)
 			continue;
 
 		/* and then don't consume more memory */
-		if (allocs > last_allocs)
+		if (allocs > last_allocs)// 确保不消耗更多内存
 			break;
-		last_allocs = allocs;
-		best_upa = upa;
+		last_allocs = allocs;// 更新最后分配次数
+		best_upa = upa;//更新最佳单元数量
 	}
-	BUG_ON(!best_upa);
-	upa = best_upa;
+	BUG_ON(!best_upa);//确保找到最佳单位数量，否则报bug
+	upa = best_upa;//选择最佳单元数量
 
 	/* allocate and fill alloc_info */
-	for (group = 0; group < nr_groups; group++)
-		nr_units += roundup(group_cnt[group], upa);
+	for (group = 0; group < nr_groups; group++)//分配并填充分配信息
+		nr_units += roundup(group_cnt[group], upa);//计算总单元数量
 
-	ai = pcpu_alloc_alloc_info(nr_groups, nr_units);
+	ai = pcpu_alloc_alloc_info(nr_groups, nr_units);// 为分配信息结构分配内存
 	if (!ai)
-		return ERR_PTR(-ENOMEM);
-	cpu_map = ai->groups[0].cpu_map;
+		return ERR_PTR(-ENOMEM);//如果分配失败，返回内存不足错误
+	cpu_map = ai->groups[0].cpu_map;//获取 CPU 映射指针
 
-	for (group = 0; group < nr_groups; group++) {
-		ai->groups[group].cpu_map = cpu_map;
-		cpu_map += roundup(group_cnt[group], upa);
+	for (group = 0; group < nr_groups; group++) {//初始化每个组的 CPU 映射
+		ai->groups[group].cpu_map = cpu_map;//设置当前组的 CPU 映射
+		cpu_map += roundup(group_cnt[group], upa);//更新 CPU 映射指针
 	}
 
-	ai->static_size = static_size;
-	ai->reserved_size = reserved_size;
-	ai->dyn_size = dyn_size;
-	ai->unit_size = alloc_size / upa;
-	ai->atom_size = atom_size;
-	ai->alloc_size = alloc_size;
+	ai->static_size = static_size;//设置静态大小
+	ai->reserved_size = reserved_size;//设置保留大小
+	ai->dyn_size = dyn_size;//设置动态大小
+	ai->unit_size = alloc_size / upa;//设置每个单元的大小
+	ai->atom_size = atom_size;// 设置原子大小
+	ai->alloc_size = alloc_size;// 设置分配大小
 
-	for (group = 0, unit = 0; group < nr_groups; group++) {
-		struct pcpu_group_info *gi = &ai->groups[group];
+	for (group = 0, unit = 0; group < nr_groups; group++) {//初始化每个组的信息
+		struct pcpu_group_info *gi = &ai->groups[group];//获取当前组信息
 
 		/*
 		 * Initialize base_offset as if all groups are located
-		 * back-to-back.  The caller should update this to
+		 * back-to-back. The caller should update this to
 		 * reflect actual allocation.
+		 * 初始化基偏移量，假设所有组是背靠背排列的。
+		 * 调用者应该更新此偏移量以反映实际分配情况。
 		 */
-		gi->base_offset = unit * ai->unit_size;
+		gi->base_offset = unit * ai->unit_size;//设置基偏移量
 
-		for_each_possible_cpu(cpu)
-			if (group_map[cpu] == group)
-				gi->cpu_map[gi->nr_units++] = cpu;
-		gi->nr_units = roundup(gi->nr_units, upa);
-		unit += gi->nr_units;
+		for_each_possible_cpu(cpu)//遍历所有可能的CPU
+			if (group_map[cpu] == group)//如果CPU属于当前组
+				gi->cpu_map[gi->nr_units++] = cpu;//将CPU添加到当前组
+		gi->nr_units = roundup(gi->nr_units, upa);//将单位数量对齐到最佳单元数量
+		unit += gi->nr_units;//增加总单元数量
 	}
-	BUG_ON(unit != nr_units);
+	BUG_ON(unit != nr_units);//确保总单元数量正确
 
-	return ai;
+	return ai;//返回构建好的分配信息
 }
-
+/* 用于为指定的 CPU 分配 per-CPU 内存块。根据是否启用了 NUMA，决定内存分配策略。 */
 static void * __init pcpu_fc_alloc(unsigned int cpu, size_t size, size_t align,
 				   pcpu_fc_cpu_to_node_fn_t cpu_to_nd_fn)
 {
-	const unsigned long goal = __pa(MAX_DMA_ADDRESS);
+	const unsigned long goal = __pa(MAX_DMA_ADDRESS);//设置内存分配的目标地址为物理地址 MAX_DMA_ADDRESS
 #ifdef CONFIG_NUMA
-	int node = NUMA_NO_NODE;
-	void *ptr;
+	int node = NUMA_NO_NODE;// 初始化节点为 NUMA_NO_NODE，表示无节点
+	void *ptr;// 指针用于存储分配的内存地址
 
-	if (cpu_to_nd_fn)
+	if (cpu_to_nd_fn)//如果提供了CPU到节点的映射函数，则获取当前 CPU 所属的节点
 		node = cpu_to_nd_fn(cpu);
 
-	if (node == NUMA_NO_NODE || !node_online(node) || !NODE_DATA(node)) {
-		ptr = memblock_alloc_from(size, align, goal);
+	if (node == NUMA_NO_NODE || !node_online(node) || !NODE_DATA(node)) {// 检查节点是否有效（节点存在且在线）
+		ptr = memblock_alloc_from(size, align, goal);//分配内存从指定的目标地址，忽略节点本地性
 		pr_info("cpu %d has no node %d or node-local memory\n",
-			cpu, node);
+			cpu, node);//打印信息，表示当前 CPU 没有关联的节点或没有本地内存
 		pr_debug("per cpu data for cpu%d %zu bytes at 0x%llx\n",
-			 cpu, size, (u64)__pa(ptr));
+			 cpu, size, (u64)__pa(ptr));//打印调试信息，显示分配的内存地址
 	} else {
 		ptr = memblock_alloc_try_nid(size, align, goal,
 					     MEMBLOCK_ALLOC_ACCESSIBLE,
-					     node);
+					     node);// 尝试从指定节点分配内存，确保分配是可访问的
 
 		pr_debug("per cpu data for cpu%d %zu bytes on node%d at 0x%llx\n",
-			 cpu, size, node, (u64)__pa(ptr));
+			 cpu, size, node, (u64)__pa(ptr));//打印调试信息，显示从节点分配的内存地址
 	}
-	return ptr;
+	return ptr;//返回分配的内存指针
 #else
-	return memblock_alloc_from(size, align, goal);
+	return memblock_alloc_from(size, align, goal);//如果未启用 NUMA，从默认目标地址分配内存
 #endif
 }
 
@@ -3062,7 +3070,7 @@ int __init pcpu_embed_first_chunk(size_t reserved_size, size_t dyn_size,
 	size_t size_sum, areas_size;//总大小和区域指针数组大小
 	unsigned long max_distance;//最大距离，用于检测内存布局合理性
 	int group, i, highest_group, rc = 0;//group 和 i 用于循环，highest_group 用于记录最大的组，rc 存储返回代码
-	
+
 	ai = pcpu_build_alloc_info(reserved_size, dyn_size, atom_size,
 				   cpu_distance_fn);//构建分配信息结构体，包括静态大小、保留大小、动态大小和距离函数
 	if (IS_ERR(ai))//如果分配信息构建失败，返回错误代码

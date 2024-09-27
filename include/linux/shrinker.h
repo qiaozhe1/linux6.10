@@ -79,42 +79,39 @@ struct shrink_control {
  *
  * @flags determine the shrinker abilities, like numa awareness
  */
-struct shrinker {
+struct shrinker {//用于内存回收机制，管理内存对象的回收和清理。
 	unsigned long (*count_objects)(struct shrinker *,
-				       struct shrink_control *sc);
+				       struct shrink_control *sc);//指向函数的指针，用于计算待回收对象的数量
 	unsigned long (*scan_objects)(struct shrinker *,
-				      struct shrink_control *sc);
+				      struct shrink_control *sc);//指向函数的指针，用于扫描并回收对象
 
-	long batch;	/* reclaim batch size, 0 = default */
-	int seeks;	/* seeks to recreate an obj */
-	unsigned flags;
+	long batch;// 每次回收的对象数量，0表示使用默认值
+	int seeks;// 对象重建时需要的寻址次数
+	unsigned flags;//额外的标志位
 
 	/*
-	 * The reference count of this shrinker. Registered shrinker have an
-	 * initial refcount of 1, then the lookup operations are now allowed
-	 * to use it via shrinker_try_get(). Later in the unregistration step,
-	 * the initial refcount will be discarded, and will free the shrinker
-	 * asynchronously via RCU after its refcount reaches 0.
+	 * shrinker 的引用计数。注册的 shrinker 初始引用计数为 1，然后可以通过 shrinker_try_get() 进行查找操作。
+	 * 在注销步骤中，将丢弃初始引用计数，并在引用计数降到 0 后通过 RCU 异步释放 shrinker。
 	 */
-	refcount_t refcount;
-	struct completion done;	/* use to wait for refcount to reach 0 */
-	struct rcu_head rcu;
+	refcount_t refcount;//引用计数
+	struct completion done;	//用于同步操作，确保在释放 shrinker 时等待所有引用计数达到 0。
+	struct rcu_head rcu;//用于 RCU 的头部信息
 
-	void *private_data;
+	void *private_data;//私有数据指针，用户自定义数据
 
-	/* These are for internal use */
-	struct list_head list;
+	/* 内部使用 */
+	struct list_head list;//连接到 shrinker 列表的链表头
 #ifdef CONFIG_MEMCG
-	/* ID in shrinker_idr */
-	int id;
+	/*  在 shrinker_idr 中的 ID */
+	int id;//用于内存控制组（Memory Control Group）功能的 ID
 #endif
 #ifdef CONFIG_SHRINKER_DEBUG
-	int debugfs_id;
-	const char *name;
-	struct dentry *debugfs_entry;
+	int debugfs_id;//用于调试文件系统的 ID
+	const char *name;//shrinker 的名称
+	struct dentry *debugfs_entry;//debugfs 条目
 #endif
-	/* objs pending delete, per node */
-	atomic_long_t *nr_deferred;
+	/* 每个节点待删除的对象数量 */
+	atomic_long_t *nr_deferred;//记录每个节点待回收对象的数量
 };
 #define DEFAULT_SEEKS 2 /* A good number if you don't know better. */
 

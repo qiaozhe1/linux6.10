@@ -23,9 +23,9 @@
  * reinit_completion(), and macros DECLARE_COMPLETION(),
  * DECLARE_COMPLETION_ONSTACK().
  */
-struct completion {
-	unsigned int done;
-	struct swait_queue_head wait;
+struct completion {//用于实现事件的完成通知机制，常用于内核中的同步操作。它允许一个或多个任务等待某个事件的发生。
+	unsigned int done;//用于记录已完成的事件数量。当这个值达到预期数量时，等待该事件的任务会被唤醒。
+	struct swait_queue_head wait;//等待队列头，用于管理那些在此 completion 结构上等待的任务。当 done 达到目标值时，这些任务会被唤醒，从而继续执行。
 };
 
 #define init_completion_map(x, m) init_completion(x)

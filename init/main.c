@@ -891,7 +891,7 @@ static void __init print_unknown_bootoptions(void)
 		&unknown_options[1]);
 	memblock_free(unknown_options, len);
 }
-
+/*用于在系统初始化早期设置每个 CPU 的 NUMA 节点 ID，从而优化 NUMA 环境下的内存访问。*/
 static void __init early_numa_node_init(void)
 {
 #ifdef CONFIG_USE_PERCPU_NUMA_NODE_ID
@@ -899,8 +899,8 @@ static void __init early_numa_node_init(void)
 	int cpu;
 
 	/* The early_cpu_to_node() should be ready here. */
-	for_each_possible_cpu(cpu)
-		set_cpu_numa_node(cpu, early_cpu_to_node(cpu));
+	for_each_possible_cpu(cpu)//遍历系统中所有可能的 CPU
+		set_cpu_numa_node(cpu, early_cpu_to_node(cpu));//将每个 CPU 的 NUMA 节点 ID 设置为 early_cpu_to_node(cpu) 返回的值。early_cpu_to_node(cpu) 通常会返回在系统初始化早期检测到的 CPU 对应的 NUMA 节点 ID，确保在内存分配和访问时尽量使用本地节点的内存，从而优化内存访问性能。
 #endif
 #endif
 }

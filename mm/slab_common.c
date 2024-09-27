@@ -605,37 +605,39 @@ bool kmem_dump_obj(void *object)
 EXPORT_SYMBOL_GPL(kmem_dump_obj);
 #endif
 
-/* Create a cache during boot when no slab services are available yet */
+/* Create a cache during boot when no slab services are available yet
+ * 负责在内核启动时创建并初始化新的 kmem_cache
+ */
 void __init create_boot_cache(struct kmem_cache *s, const char *name,
 		unsigned int size, slab_flags_t flags,
 		unsigned int useroffset, unsigned int usersize)
 {
 	int err;
-	unsigned int align = ARCH_KMALLOC_MINALIGN;
+	unsigned int align = ARCH_KMALLOC_MINALIGN;//定义对齐要求，初始化为架构最小对齐
 
-	s->name = name;
-	s->size = s->object_size = size;
+	s->name = name;//设置缓存的名称
+	s->size = s->object_size = size;//设置缓存的大小和对象大小
 
 	/*
 	 * For power of two sizes, guarantee natural alignment for kmalloc
 	 * caches, regardless of SL*B debugging options.
 	 */
 	if (is_power_of_2(size))
-		align = max(align, size);
-	s->align = calculate_alignment(flags, align, size);
+		align = max(align, size);//如果大小是 2 的幂次，更新对齐值
+	s->align = calculate_alignment(flags, align, size);//计算最终的对齐值
 
 #ifdef CONFIG_HARDENED_USERCOPY
-	s->useroffset = useroffset;
-	s->usersize = usersize;
+	s->useroffset = useroffset;//如果启用了硬化用户拷贝，设置用户偏移
+	s->usersize = usersize;//设置用户大小
 #endif
 
-	err = __kmem_cache_create(s, flags);
+	err = __kmem_cache_create(s, flags);//调用创建函数，实际创建缓存
 
 	if (err)
 		panic("Creation of kmalloc slab %s size=%u failed. Reason %d\n",
-					name, size, err);
+					name, size, err);//如果创建失败，打印错误信息并触发内核崩溃
 
-	s->refcount = -1;	/* Exempt from merging for now */
+	s->refcount = -1;//设置引用计数，表示暂时不合并
 }
 
 static struct kmem_cache *__init create_kmalloc_cache(const char *name,

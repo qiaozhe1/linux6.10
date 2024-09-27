@@ -873,22 +873,22 @@ struct vmap_pool {
  * of a global heap. It allows to balance an access and mitigate
  * contention.
  */
-static struct vmap_node {
+static struct vmap_node {//用于管理虚拟内存映射节点的状态和数据
 	/* Simple size segregated storage. */
-	struct vmap_pool pool[MAX_VA_SIZE_PAGES];
-	spinlock_t pool_lock;
-	bool skip_populate;
+	struct vmap_pool pool[MAX_VA_SIZE_PAGES];//存储池，用于管理不同大小的虚拟内存区域
+	spinlock_t pool_lock;//用于保护 pool 的自旋锁，确保并发安全
+	bool skip_populate;//标志，指示是否跳过内存填充
 
 	/* Bookkeeping data of this node. */
-	struct rb_list busy;
-	struct rb_list lazy;
+	struct rb_list busy;//用于跟踪繁忙的 vmap 区域的红黑树
+	struct rb_list lazy;//用于跟踪懒惰释放的 vmap 区域的红黑树
 
 	/*
 	 * Ready-to-free areas.
 	 */
-	struct list_head purge_list;
-	struct work_struct purge_work;
-	unsigned long nr_purged;
+	struct list_head purge_list;// 准备释放的内存区域的链表
+	struct work_struct purge_work;//用于处理释放工作（延迟处理）
+	unsigned long nr_purged;// 已释放的区域数量
 } single;
 
 /*
@@ -2477,16 +2477,16 @@ static struct vmap_area *find_unlink_vmap_area(unsigned long addr)
 #define VMAP_BLOCK		0x2 /* mark out the vmap_block sub-type*/
 #define VMAP_FLAGS_MASK		0x3
 
-struct vmap_block_queue {
-	spinlock_t lock;
-	struct list_head free;
+struct vmap_block_queue {//用于管理虚拟内存块的队列
+	spinlock_t lock;// 自旋锁，保护对队列的并发访问
+	struct list_head free;//链表头，存储当前空闲的 vmap 块。这允许快速的分配和释放操作。
 
 	/*
 	 * An xarray requires an extra memory dynamically to
 	 * be allocated. If it is an issue, we can use rb-tree
 	 * instead.
 	 */
-	struct xarray vmap_blocks;
+	struct xarray vmap_blocks;//使用 xarray 结构来管理 vmap 块
 };
 
 struct vmap_block {
@@ -4958,11 +4958,11 @@ static int __init proc_vmalloc_init(void)
 module_init(proc_vmalloc_init);
 
 #endif
-
+/*初始化虚拟内存映射（vmap）中的空闲空间*/
 static void __init vmap_init_free_space(void)
 {
-	unsigned long vmap_start = 1;
-	const unsigned long vmap_end = ULONG_MAX;
+	unsigned long vmap_start = 1;//空闲空间的起始地址，初始化为 1
+	const unsigned long vmap_end = ULONG_MAX;// 空闲空间的结束地址，最大无符号长整型
 	struct vmap_area *free;
 	struct vm_struct *busy;
 
@@ -4972,38 +4972,38 @@ static void __init vmap_init_free_space(void)
 	 *  |           The KVA space           |
 	 *  |<--------------------------------->|
 	 */
-	for (busy = vmlist; busy; busy = busy->next) {
-		if ((unsigned long) busy->addr - vmap_start > 0) {
-			free = kmem_cache_zalloc(vmap_area_cachep, GFP_NOWAIT);
-			if (!WARN_ON_ONCE(!free)) {
-				free->va_start = vmap_start;
-				free->va_end = (unsigned long) busy->addr;
+	for (busy = vmlist; busy; busy = busy->next) {// 遍历已分配的 vmlist
+		if ((unsigned long) busy->addr - vmap_start > 0) {//检查空闲空间
+			free = kmem_cache_zalloc(vmap_area_cachep, GFP_NOWAIT);// 分配一个 vmap_area
+			if (!WARN_ON_ONCE(!free)) {//检查分配是否成功
+				free->va_start = vmap_start;//设置空闲区域的开始地址
+				free->va_end = (unsigned long) busy->addr;//设置空闲区域的结束地址
 
 				insert_vmap_area_augment(free, NULL,
 					&free_vmap_area_root,
-						&free_vmap_area_list);
+						&free_vmap_area_list);//插入空闲区域到 vmap 树
 			}
 		}
 
-		vmap_start = (unsigned long) busy->addr + busy->size;
+		vmap_start = (unsigned long) busy->addr + busy->size;// 更新下一个空闲区域的开始地址
 	}
 
-	if (vmap_end - vmap_start > 0) {
-		free = kmem_cache_zalloc(vmap_area_cachep, GFP_NOWAIT);
+	if (vmap_end - vmap_start > 0) {// 检查最后一个空闲区域
+		free = kmem_cache_zalloc(vmap_area_cachep, GFP_NOWAIT);// 分配一个 vmap_area
 		if (!WARN_ON_ONCE(!free)) {
-			free->va_start = vmap_start;
-			free->va_end = vmap_end;
+			free->va_start = vmap_start;// 设置最后一个空闲区域的开始地址
+			free->va_end = vmap_end;//设置结束地址为 vmap_end
 
 			insert_vmap_area_augment(free, NULL,
 				&free_vmap_area_root,
-					&free_vmap_area_list);
+					&free_vmap_area_list);//插入最后一个空闲区域到 vmap 树
 		}
 	}
 }
 
 static void vmap_init_nodes(void)
 {
-	struct vmap_node *vn;
+	struct vmap_node *vn;// 指向 vmap_node 结构的指针
 	int i, n;
 
 #if BITS_PER_LONG == 64
@@ -5021,37 +5021,37 @@ static void vmap_init_nodes(void)
 	 * set of cores. Therefore a per-domain purging is supposed to
 	 * be added as well as a per-domain balancing.
 	 */
-	n = clamp_t(unsigned int, num_possible_cpus(), 1, 128);
+	n = clamp_t(unsigned int, num_possible_cpus(), 1, 128);//限制节点数在 1 到 128 之间
 
 	if (n > 1) {
-		vn = kmalloc_array(n, sizeof(*vn), GFP_NOWAIT | __GFP_NOWARN);
+		vn = kmalloc_array(n, sizeof(*vn), GFP_NOWAIT | __GFP_NOWARN);//分配 vmap_node 数组
 		if (vn) {
 			/* Node partition is 16 pages. */
-			vmap_zone_size = (1 << 4) * PAGE_SIZE;
-			nr_vmap_nodes = n;
-			vmap_nodes = vn;
+			vmap_zone_size = (1 << 4) * PAGE_SIZE;// 每个节点的区块大小设置为 16 页
+			nr_vmap_nodes = n;// 更新 vmap 节点数量
+			vmap_nodes = vn;// 保存分配的节点指针
 		} else {
-			pr_err("Failed to allocate an array. Disable a node layer\n");
+			pr_err("Failed to allocate an array. Disable a node layer\n");//分配失败的错误处理
 		}
 	}
 #endif
 
-	for (n = 0; n < nr_vmap_nodes; n++) {
-		vn = &vmap_nodes[n];
-		vn->busy.root = RB_ROOT;
-		INIT_LIST_HEAD(&vn->busy.head);
-		spin_lock_init(&vn->busy.lock);
+	for (n = 0; n < nr_vmap_nodes; n++) {//初始化每个 vmap 节点
+		vn = &vmap_nodes[n];//获取当前 vmap_node
+		vn->busy.root = RB_ROOT;// 初始化忙节点的红黑树根
+		INIT_LIST_HEAD(&vn->busy.head);//初始化忙节点链表头
+		spin_lock_init(&vn->busy.lock);//初始化忙节点锁
+ 
+		vn->lazy.root = RB_ROOT;// 初始化懒节点的红黑树根
+		INIT_LIST_HEAD(&vn->lazy.head);// 初始化懒节点链表头
+		spin_lock_init(&vn->lazy.lock);// 初始化懒节点锁
 
-		vn->lazy.root = RB_ROOT;
-		INIT_LIST_HEAD(&vn->lazy.head);
-		spin_lock_init(&vn->lazy.lock);
-
-		for (i = 0; i < MAX_VA_SIZE_PAGES; i++) {
-			INIT_LIST_HEAD(&vn->pool[i].head);
-			WRITE_ONCE(vn->pool[i].len, 0);
+		for (i = 0; i < MAX_VA_SIZE_PAGES; i++) {//初始化 vmap_pool
+			INIT_LIST_HEAD(&vn->pool[i].head);//初始化每个 pool 的链表头
+			WRITE_ONCE(vn->pool[i].len, 0);//设置 pool 长度为 0
 		}
 
-		spin_lock_init(&vn->pool_lock);
+		spin_lock_init(&vn->pool_lock);//初始化 pool 的自旋锁
 	}
 }
 
@@ -5085,62 +5085,62 @@ vmap_node_shrink_scan(struct shrinker *shrink, struct shrink_control *sc)
 
 void __init vmalloc_init(void)
 {
-	struct shrinker *vmap_node_shrinker;
+	struct shrinker *vmap_node_shrinker;//定义一个指向 shrinker 的指针，用于管理 vmap 节点
 	struct vmap_area *va;
 	struct vmap_node *vn;
 	struct vm_struct *tmp;
 	int i;
 
 	/*
-	 * Create the cache for vmap_area objects.
+	 * 创建 vmap_area 对象的缓存。
 	 */
-	vmap_area_cachep = KMEM_CACHE(vmap_area, SLAB_PANIC);
+	vmap_area_cachep = KMEM_CACHE(vmap_area, SLAB_PANIC);// 创建 vmap_area 缓存，发生错误时内核崩溃
 
-	for_each_possible_cpu(i) {
-		struct vmap_block_queue *vbq;
-		struct vfree_deferred *p;
+	for_each_possible_cpu(i) {//遍历每个可能的 CPU
+		struct vmap_block_queue *vbq;//定义指向 vmap_block_queue 的指针
+		struct vfree_deferred *p;//定义指向 vfree_deferred 的指针
 
-		vbq = &per_cpu(vmap_block_queue, i);
-		spin_lock_init(&vbq->lock);
-		INIT_LIST_HEAD(&vbq->free);
-		p = &per_cpu(vfree_deferred, i);
-		init_llist_head(&p->list);
-		INIT_WORK(&p->wq, delayed_vfree_work);
-		xa_init(&vbq->vmap_blocks);
+		vbq = &per_cpu(vmap_block_queue, i);//获取每个 CPU 的 vmap_block_queue
+		spin_lock_init(&vbq->lock);// 初始化自旋锁
+		INIT_LIST_HEAD(&vbq->free);//初始化自由列表
+		p = &per_cpu(vfree_deferred, i);// 获取每个 CPU 的 vfree_deferred
+		init_llist_head(&p->list);//初始化延迟释放列表
+		INIT_WORK(&p->wq, delayed_vfree_work);//初始化工作队列
+		xa_init(&vbq->vmap_blocks);// 初始化 vmap 块的扩展数组
 	}
 
 	/*
-	 * Setup nodes before importing vmlist.
+	 * 在导入 vmlist 之前设置节点。
 	 */
-	vmap_init_nodes();
+	vmap_init_nodes();// 初始化 vmap 节点
 
-	/* Import existing vmlist entries. */
-	for (tmp = vmlist; tmp; tmp = tmp->next) {
-		va = kmem_cache_zalloc(vmap_area_cachep, GFP_NOWAIT);
-		if (WARN_ON_ONCE(!va))
-			continue;
+	/* 导入现有的 vmlist 条目。 */
+	for (tmp = vmlist; tmp; tmp = tmp->next) {//遍历 vmlist
+		va = kmem_cache_zalloc(vmap_area_cachep, GFP_NOWAIT);// 从 vmap_area 缓存中分配空间
+		if (WARN_ON_ONCE(!va))// 检查是否分配成功
+			continue;// 如果失败，继续下一个循环
 
-		va->va_start = (unsigned long)tmp->addr;
-		va->va_end = va->va_start + tmp->size;
-		va->vm = tmp;
+		va->va_start = (unsigned long)tmp->addr;// 设置 vmap_area 的起始地址
+		va->va_end = va->va_start + tmp->size;// 计算 vmap_area 的结束地址
+		va->vm = tmp;//将当前 vm_struct 关联到 vmap_area
 
-		vn = addr_to_node(va->va_start);
-		insert_vmap_area(va, &vn->busy.root, &vn->busy.head);
+		vn = addr_to_node(va->va_start);//获取起始地址对应的节点
+		insert_vmap_area(va, &vn->busy.root, &vn->busy.head);//将vmap_area插入到节点的忙碌链表中
 	}
 
 	/*
-	 * Now we can initialize a free vmap space.
+	 * 现在我们可以初始化一个空闲的 vmap 空间。
 	 */
-	vmap_init_free_space();
-	vmap_initialized = true;
+	vmap_init_free_space();//初始化可用的 vmap 空间
+	vmap_initialized = true;//设置初始化标志为 true
 
-	vmap_node_shrinker = shrinker_alloc(0, "vmap-node");
-	if (!vmap_node_shrinker) {
-		pr_err("Failed to allocate vmap-node shrinker!\n");
+	vmap_node_shrinker = shrinker_alloc(0, "vmap-node");//分配 vmap 节点的 shrinker
+	if (!vmap_node_shrinker) {// 检查是否成功分配
+		pr_err("Failed to allocate vmap-node shrinker!\n");//打印错误信息
 		return;
 	}
 
-	vmap_node_shrinker->count_objects = vmap_node_shrink_count;
-	vmap_node_shrinker->scan_objects = vmap_node_shrink_scan;
-	shrinker_register(vmap_node_shrinker);
+	vmap_node_shrinker->count_objects = vmap_node_shrink_count;//设置对象计数函数
+	vmap_node_shrinker->scan_objects = vmap_node_shrink_scan;//设置扫描对象的函数
+	shrinker_register(vmap_node_shrinker);//注册 shrinker
 }

@@ -1288,35 +1288,36 @@ void __init_memblock __next_mem_range_rev(u64 *idx, int nid,
 
 /*
  * Common iterator interface used to define for_each_mem_pfn_range().
+ * 用于遍历系统中的内存块区域（memblock），查找符合条件的页帧范围。
  */
 void __init_memblock __next_mem_pfn_range(int *idx, int nid,
 				unsigned long *out_start_pfn,
 				unsigned long *out_end_pfn, int *out_nid)
 {
-	struct memblock_type *type = &memblock.memory;
-	struct memblock_region *r;
-	int r_nid;
+	struct memblock_type *type = &memblock.memory;//获取系统的内存块类型，表示物理内存区域
+	struct memblock_region *r;//定义指针用于存储当前内存块区域
+	int r_nid;//定义变量用于存储当前内存块的节点ID
 
-	while (++*idx < type->cnt) {
-		r = &type->regions[*idx];
-		r_nid = memblock_get_region_node(r);
+	while (++*idx < type->cnt) {//循环遍历内存块区域，直到 idx 超过总区域数
+		r = &type->regions[*idx];//获取当前索引对应的内存区域
+		r_nid = memblock_get_region_node(r);//获取当前内存区域的节点ID
 
-		if (PFN_UP(r->base) >= PFN_DOWN(r->base + r->size))
+		if (PFN_UP(r->base) >= PFN_DOWN(r->base + r->size))// 如果内存区域的起始页帧号大于等于结束页帧号，跳过该区域
 			continue;
-		if (!numa_valid_node(nid) || nid == r_nid)
+		if (!numa_valid_node(nid) || nid == r_nid)//如果节点ID无效或节点ID匹配，则跳出循环
 			break;
 	}
-	if (*idx >= type->cnt) {
+	if (*idx >= type->cnt) {//如果 idx 超过了内存区域的数量，表示已遍历完所有区域
 		*idx = -1;
 		return;
 	}
 
 	if (out_start_pfn)
-		*out_start_pfn = PFN_UP(r->base);
+		*out_start_pfn = PFN_UP(r->base);// 如果 out_start_pfn 非空，设置为当前内存区域的起始页帧号
 	if (out_end_pfn)
-		*out_end_pfn = PFN_DOWN(r->base + r->size);
+		*out_end_pfn = PFN_DOWN(r->base + r->size);// 如果 out_end_pfn 非空，设置为当前内存区域的结束页帧号
 	if (out_nid)
-		*out_nid = r_nid;
+		*out_nid = r_nid;// 如果 out_nid 非空，设置为当前内存区域的节点ID
 }
 
 /**
@@ -2229,16 +2230,19 @@ void __init reset_all_zones_managed_pages(void)
 
 /**
  * memblock_free_all - release free pages to the buddy allocator
+ * 负责在系统启动阶段释放之前通过 memblock 内存分配器分配的内存。memblock 是内核
+ * 启动时的临时内存分配器，负责分配内存块，主要用于初始化阶段。该函数的作用是释放
+ * 未使用的 memblock 内存块并更新系统的内存管理数据结构。
  */
 void __init memblock_free_all(void)
 {
-	unsigned long pages;
+	unsigned long pages;//用于存储释放的页帧数
 
-	free_unused_memmap();
-	reset_all_zones_managed_pages();
+	free_unused_memmap();//释放未使用的内存映射页结构。内存映射（memmap）是内核为每个物理内存页分配的 struct page 结构，跟踪每个内存页的状态。此函数确保不再需要的页表结构被释放，以减少内存浪费。
+	reset_all_zones_managed_pages();//重置所有内存区域的管理页面数。
 
-	pages = free_low_memory_core_early();
-	totalram_pages_add(pages);
+	pages = free_low_memory_core_early();//释放内存分配器中的低地址内存（通常是 memblock 分配器用于启动的临时内存），并返回释放的页面数
+	totalram_pages_add(pages);//将释放的页面数添加到系统总内存页数中
 }
 
 #if defined(CONFIG_DEBUG_FS) && defined(CONFIG_ARCH_KEEP_MEMBLOCK)

@@ -685,23 +685,23 @@ enum zone_watermarks {
  */
 #define	PCPF_PREV_FREE_HIGH_ORDER	BIT(0)
 #define	PCPF_FREE_HIGH_BATCH		BIT(1)
-
+/*用于在内核中管理per_CPU 的页面信息*/
 struct per_cpu_pages {
-	spinlock_t lock;	/* Protects lists field */
-	int count;		/* number of pages in the list */
-	int high;		/* high watermark, emptying needed */
-	int high_min;		/* min high watermark */
-	int high_max;		/* max high watermark */
-	int batch;		/* chunk size for buddy add/remove */
-	u8 flags;		/* protected by pcp->lock */
-	u8 alloc_factor;	/* batch scaling factor during allocate */
+	spinlock_t lock;	/* Protects lists field 自旋锁，用于保护页面列表*/
+	int count;		/* number of pages in the list 列表中页面的数量*/
+	int high;		/* high watermark, emptying needed 高水位线，当页面数达到该值时需要清空*/
+	int high_min;		/* min high watermark 最小高水位线*/
+	int high_max;		/* max high watermark 最大高水位线*/
+	int batch;		/* chunk size for buddy add/remove 伙伴系统添加/移除的块大小*/
+	u8 flags;		/* protected by pcp->lock 状态标志，受自旋锁保护*/
+	u8 alloc_factor;	/* batch scaling factor during allocate 分配时的批量缩放因子*/
 #ifdef CONFIG_NUMA
-	u8 expire;		/* When 0, remote pagesets are drained */
+	u8 expire;		/* When 0, remote pagesets are drained  过期计数器，当为 0 时远程页面集被清空*/
 #endif
-	short free_count;	/* consecutive free count */
+	short free_count;	/* consecutive free count 连续空闲页面计数 */
 
 	/* Lists of pages, one per migrate type stored on the pcp-lists */
-	struct list_head lists[NR_PCP_LISTS];
+	struct list_head lists[NR_PCP_LISTS];//存储每种迁移类型的页面列表
 } ____cacheline_aligned_in_smp;
 
 struct per_cpu_zonestat {
@@ -720,8 +720,8 @@ struct per_cpu_zonestat {
 };
 
 struct per_cpu_nodestat {
-	s8 stat_threshold;
-	s8 vm_node_stat_diff[NR_VM_NODE_STAT_ITEMS];
+	s8 stat_threshold;//统计阈值，用于控制节点统计数据的更新频率
+	s8 vm_node_stat_diff[NR_VM_NODE_STAT_ITEMS];// 虚拟内存节点统计差异数组
 };
 
 #endif /* !__GENERATING_BOUNDS.H */
@@ -1188,13 +1188,13 @@ static inline bool zone_intersects(struct zone *zone,
 #define MAX_ZONES_PER_ZONELIST (MAX_NUMNODES * MAX_NR_ZONES)
 
 enum {
-	ZONELIST_FALLBACK,	/* zonelist with fallback */
+	ZONELIST_FALLBACK,	//表示具有后备功能的 zonelist。当内存分配失败时，可以回退到其他区域进行分配
 #ifdef CONFIG_NUMA
 	/*
 	 * The NUMA zonelists are doubled because we need zonelists that
 	 * restrict the allocations to a single node for __GFP_THISNODE.
 	 */
-	ZONELIST_NOFALLBACK,	/* zonelist without fallback (__GFP_THISNODE) */
+	ZONELIST_NOFALLBACK,	//该 zonelist 不具有后备功能，专用于 __GFP_THISNODE 分配标志。此标志表示分配器应仅从当前节点分配内存，确保内存分配局限于特定的 NUMA 节点，从而优化访问速度和延迟。
 #endif
 	MAX_ZONELISTS
 };

@@ -3109,26 +3109,31 @@ static int __init set_dhash_entries(char *str)
 	return 1;
 }
 __setup("dhash_entries=", set_dhash_entries);
-
+/*
+ * 用于在系统初始化的早期阶段初始化目录缓存（dcache）的哈希表。
+ * 目录缓存是用于加速文件名到 inode 映射的重要数据结构。该函数
+ * 主要负责分配和配置早期的 dcache 哈希表。
+ * */
 static void __init dcache_init_early(void)
 {
 	/* If hashes are distributed across NUMA nodes, defer
 	 * hash allocation until vmalloc space is available.
+	 * 如果哈希表分布在 NUMA 节点上，则推迟哈希分配, 直到 vmalloc 空间可用
 	 */
 	if (hashdist)
 		return;
-
+	/* 分配用于目录项缓存的哈希表 */
 	dentry_hashtable =
-		alloc_large_system_hash("Dentry cache",
-					sizeof(struct hlist_bl_head),
-					dhash_entries,
-					13,
-					HASH_EARLY | HASH_ZERO,
-					&d_hash_shift,
-					NULL,
-					0,
-					0);
-	d_hash_shift = 32 - d_hash_shift;
+		alloc_large_system_hash("Dentry cache",			//哈希表名称
+					sizeof(struct hlist_bl_head),	//每个哈希桶的大小
+					dhash_entries,			//预计哈希表的大小
+					13,				//最小位移
+					HASH_EARLY | HASH_ZERO,		//标志，表示早期分配并清零
+					&d_hash_shift,			//返回的哈希位移
+					NULL,				// NUMA 节点选择
+					0,				//初始大小
+					0);				//预留空间
+	d_hash_shift = 32 - d_hash_shift;//计算哈希位移量
 }
 
 static void __init dcache_init(void)
@@ -3162,16 +3167,16 @@ static void __init dcache_init(void)
 /* SLAB cache for __getname() consumers */
 struct kmem_cache *names_cachep __ro_after_init;
 EXPORT_SYMBOL(names_cachep);
-
+/*用于在系统启动的早期阶段初始化虚拟文件系统（VFS）的相关缓存结构。这包括目录缓存（dcache）、inode（文件索引节点） 缓存等，*/
 void __init vfs_caches_init_early(void)
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(in_lookup_hashtable); i++)
+	for (i = 0; i < ARRAY_SIZE(in_lookup_hashtable); i++)//初始化 in_lookup_hashtable 数组中的每个哈希表头部
 		INIT_HLIST_BL_HEAD(&in_lookup_hashtable[i]);
 
-	dcache_init_early();
-	inode_init_early();
+	dcache_init_early();// 早期初始化目录缓存（dcache）
+	inode_init_early();//早期初始化 inode 缓存
 }
 
 void __init vfs_caches_init(void)

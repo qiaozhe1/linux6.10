@@ -552,9 +552,9 @@ unsigned int cpumask_nth_and_andnot(unsigned int cpu, const struct cpumask *srcp
 static __always_inline void cpumask_set_cpu(unsigned int cpu, struct cpumask *dstp)
 {
 	/*
-	 * 调用 set_bit 函数设置掩码 dstp 中与 CPU 对应的位置为 1
+	 * 调用 set_bit 函数设置dstp指针中与CPU对应的位置为1
 	 * cpumask_check(cpu)：检查给定的 CPU 编号是否有效，并返回经过检查的 CPU 索引值。
-	 * cpumask_bits(dstp)：返回目标 CPU 掩码 dstp 的位数组指针，表示 CPU 位图。
+	 * cpumask_bits(dstp)：返回目标CPU掩码 dstp 的位数组指针，表示 CPU 位图。
 	 */
 	set_bit(cpumask_check(cpu), cpumask_bits(dstp));
 }
@@ -791,7 +791,7 @@ static inline bool cpumask_subset(const struct cpumask *src1p,
  */
 static inline bool cpumask_empty(const struct cpumask *srcp)
 {
-	return bitmap_empty(cpumask_bits(srcp), small_cpumask_bits);
+	return bitmap_empty(cpumask_bits(srcp), small_cpumask_bits);//检查 CPU 掩码中的位图是否为空，即所有位都为 0
 }
 
 /**

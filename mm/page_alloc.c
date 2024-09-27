@@ -5076,18 +5076,18 @@ static void zoneref_set_zone(struct zone *zone, struct zoneref *zoneref)
  */
 static int build_zonerefs_node(pg_data_t *pgdat, struct zoneref *zonerefs)
 {
-	struct zone *zone;
-	enum zone_type zone_type = MAX_NR_ZONES;
-	int nr_zones = 0;
+	struct zone *zone;//定义指向 zone 结构的指针
+	enum zone_type zone_type = MAX_NR_ZONES;// 定义区域类型，初始化为最大区域数量
+	int nr_zones = 0;// 初始化当前节点的区域数量
 
 	do {
-		zone_type--;
-		zone = pgdat->node_zones + zone_type;
-		if (populated_zone(zone)) {
-			zoneref_set_zone(zone, &zonerefs[nr_zones++]);
-			check_highest_zone(zone_type);
+		zone_type--;//递减区域类型
+		zone = pgdat->node_zones + zone_type;//获取当前区域
+		if (populated_zone(zone)) {//用于检查给定的内存区域（zone）是否有可用的内存
+			zoneref_set_zone(zone, &zonerefs[nr_zones++]);//设置 zoneref，并增加区域数量
+			check_highest_zone(zone_type);// 检查当前最高区域
 		}
-	} while (zone_type);
+	} while (zone_type);// 继续遍历直到所有区域都处理完成
 
 	return nr_zones;
 }
@@ -5191,25 +5191,26 @@ int find_next_best_node(int node, nodemask_t *used_node_mask)
  * Build zonelists ordered by node and zones within node.
  * This results in maximum locality--normal zone overflows into local
  * DMA zone, if any--but risks exhausting DMA zone.
+ * 根据节点顺序构建内存区域列表（zonelists）。通过遍历每个节点并调用相关函数初始化zonerefs
  */
 static void build_zonelists_in_node_order(pg_data_t *pgdat, int *node_order,
 		unsigned nr_nodes)
 {
-	struct zoneref *zonerefs;
+	struct zoneref *zonerefs;//定义指向 zoneref 结构的指针
 	int i;
 
-	zonerefs = pgdat->node_zonelists[ZONELIST_FALLBACK]._zonerefs;
+	zonerefs = pgdat->node_zonelists[ZONELIST_FALLBACK]._zonerefs;// 获取当前节点的后备 zonerefs
 
-	for (i = 0; i < nr_nodes; i++) {
-		int nr_zones;
+	for (i = 0; i < nr_nodes; i++) {//遍历内存节点
+		int nr_zones;//定义变量用于存储当前节点的区域数量
 
-		pg_data_t *node = NODE_DATA(node_order[i]);
+		pg_data_t *node = NODE_DATA(node_order[i]);//获取当前节点的数据结构
 
-		nr_zones = build_zonerefs_node(node, zonerefs);
-		zonerefs += nr_zones;
+		nr_zones = build_zonerefs_node(node, zonerefs);//为当前节点构建 zonerefs
+		zonerefs += nr_zones;//移动 zonerefs 指针，指向下一个区域
 	}
-	zonerefs->zone = NULL;
-	zonerefs->zone_idx = 0;
+	zonerefs->zone = NULL;//设置最后一个 zoneref 的 zone 为 NULL
+	zonerefs->zone_idx = 0;//设置最后一个 zoneref 的 zone_idx 为 0
 }
 
 /*
@@ -5232,39 +5233,42 @@ static void build_thisnode_zonelists(pg_data_t *pgdat)
  * This results in conserving DMA zone[s] until all Normal memory is
  * exhausted, but results in overflowing to remote node while memory
  * may still exist in local DMA zone.
+ *
+ * 构建和初始化 NUMA 系统中的内存区域列表（zonelists），确保内存分配能够根据节点间的距离关系优化
  */
 
 static void build_zonelists(pg_data_t *pgdat)
 {
-	static int node_order[MAX_NUMNODES];
-	int node, nr_nodes = 0;
-	nodemask_t used_mask = NODE_MASK_NONE;
-	int local_node, prev_node;
+	static int node_order[MAX_NUMNODES];//用于存储节点的顺序
+	int node, nr_nodes = 0;//定义节点变量和节点数量
+	nodemask_t used_mask = NODE_MASK_NONE;//初始化节点掩码，用于跟踪已使用的节点
+	int local_node, prev_node;//定义本地节点和前一个节点
 
 	/* NUMA-aware ordering of nodes */
-	local_node = pgdat->node_id;
-	prev_node = local_node;
+	local_node = pgdat->node_id;//获取当前节点的 ID
+	prev_node = local_node;// 将前一个节点初始化为本地节点
 
-	memset(node_order, 0, sizeof(node_order));
+	memset(node_order, 0, sizeof(node_order));//清空节点顺序数组
 	while ((node = find_next_best_node(local_node, &used_mask)) >= 0) {
 		/*
 		 * We don't want to pressure a particular node.
 		 * So adding penalty to the first node in same
 		 * distance group to make it round-robin.
+		 * 为了避免对特定节点施加压力， 在同一距离组中的第一个节点上添加惩罚，以实现轮询
 		 */
 		if (node_distance(local_node, node) !=
 		    node_distance(local_node, prev_node))
-			node_load[node] += 1;
+			node_load[node] += 1;//增加节点负载，以实现轮询调度
 
-		node_order[nr_nodes++] = node;
-		prev_node = node;
+		node_order[nr_nodes++] = node;// 将节点添加到顺序数组
+		prev_node = node;// 更新前一个节点
 	}
 
-	build_zonelists_in_node_order(pgdat, node_order, nr_nodes);
-	build_thisnode_zonelists(pgdat);
-	pr_info("Fallback order for Node %d: ", local_node);
+	build_zonelists_in_node_order(pgdat, node_order, nr_nodes);//根据节点顺序构建 zonelists
+	build_thisnode_zonelists(pgdat);//构建当前节点的 zonelists
+	pr_info("Fallback order for Node %d: ", local_node);// 打印当前节点的回退顺序
 	for (node = 0; node < nr_nodes; node++)
-		pr_cont("%d ", node_order[node]);
+		pr_cont("%d ", node_order[node]);//连续打印节点顺序
 	pr_cont("\n");
 }
 
@@ -5337,35 +5341,35 @@ static void __build_all_zonelists(void *data)
 	/*
 	 * The zonelist_update_seq must be acquired with irqsave because the
 	 * reader can be invoked from IRQ with GFP_ATOMIC.
+	 * zonelist_update_seq 必须在 irqsave 保护下获取，因为读取器可能在 IRQ 中调用，使用 GFP_ATOMIC
 	 */
-	write_seqlock_irqsave(&zonelist_update_seq, flags);
+	write_seqlock_irqsave(&zonelist_update_seq, flags);//获取 zonelist 的写锁
 	/*
-	 * Also disable synchronous printk() to prevent any printk() from
-	 * trying to hold port->lock, for
-	 * tty_insert_flip_string_and_push_buffer() on other CPU might be
-	 * calling kmalloc(GFP_ATOMIC | __GFP_NOWARN) with port->lock held.
+	 * 还要禁用同步 printk()，以防止任何 printk() 尝试持有 port->lock，因为其他 CPU 可能在调
+	 * 用 kmalloc(GFP_ATOMIC | __GFP_NOWARN)时持有 port->lock。
 	 */
-	printk_deferred_enter();
+	printk_deferred_enter();//进入延迟打印模式
 
 #ifdef CONFIG_NUMA
-	memset(node_load, 0, sizeof(node_load));
+	memset(node_load, 0, sizeof(node_load));//清空节点负载数组
 #endif
 
 	/*
 	 * This node is hotadded and no memory is yet present.   So just
 	 * building zonelists is fine - no need to touch other nodes.
+	 * 如果该节点是热添加的且尚未有内存，则仅构建 zonelists是合适的——不需要接触其他节点。
 	 */
 	if (self && !node_online(self->node_id)) {
-		build_zonelists(self);
+		build_zonelists(self);//构建当前节点的 zonelist
 	} else {
 		/*
 		 * All possible nodes have pgdat preallocated
 		 * in free_area_init
 		 */
-		for_each_node(nid) {
-			pg_data_t *pgdat = NODE_DATA(nid);
+		for_each_node(nid) {// 遍历所有节点
+			pg_data_t *pgdat = NODE_DATA(nid);//获取当前节点的数据结构
 
-			build_zonelists(pgdat);
+			build_zonelists(pgdat);//构建每个节点的 zonelists
 		}
 
 #ifdef CONFIG_HAVE_MEMORYLESS_NODES
@@ -5377,21 +5381,21 @@ static void __build_all_zonelists(void *data)
 		 * secondary cpus' numa_mem as they come on-line.  During
 		 * node/memory hotplug, we'll fixup all on-line cpus.
 		 */
-		for_each_online_cpu(cpu)
-			set_cpu_numa_mem(cpu, local_memory_node(cpu_to_node(cpu)));
+		for_each_online_cpu(cpu)//遍历所有在线的CPU
+			set_cpu_numa_mem(cpu, local_memory_node(cpu_to_node(cpu)));//设置每个 CPU 的 NUMA 内存节点
 #endif
 	}
 
-	printk_deferred_exit();
-	write_sequnlock_irqrestore(&zonelist_update_seq, flags);
+	printk_deferred_exit();//退出延迟打印模式
+	write_sequnlock_irqrestore(&zonelist_update_seq, flags);//释放 zonelist 的写锁并恢复中断状态
 }
-
+/*用于初始化内存区域列表（zonelists）和引导页集（boot pagesets）*/
 static noinline void __init
 build_all_zonelists_init(void)
 {
 	int cpu;
 
-	__build_all_zonelists(NULL);
+	__build_all_zonelists(NULL);//构建所有内存区域的 zonelist，传入 NULL 表示不指定任何特定的 CPU
 
 	/*
 	 * Initialize the boot_pagesets that are going to be used
@@ -5406,11 +5410,11 @@ build_all_zonelists_init(void)
 	 * needs the percpu allocator in order to allocate its pagesets
 	 * (a chicken-egg dilemma).
 	 */
-	for_each_possible_cpu(cpu)
-		per_cpu_pages_init(&per_cpu(boot_pageset, cpu), &per_cpu(boot_zonestats, cpu));
+	for_each_possible_cpu(cpu)// 遍历系统中所有可能的 CPU
+		per_cpu_pages_init(&per_cpu(boot_pageset, cpu), &per_cpu(boot_zonestats, cpu));//初始化每个 CPU 的 boot_pageset 和 boot_zonestats
 
-	mminit_verify_zonelist();
-	cpuset_init_current_mems_allowed();
+	mminit_verify_zonelist();//验证 zonelist 是否正确
+	cpuset_init_current_mems_allowed();//初始化当前允许的内存集
 }
 
 /*

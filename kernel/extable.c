@@ -36,9 +36,9 @@ u32 __initdata __visible main_extable_sort_needed = 1;
 void __init sort_main_extable(void)
 {
 	if (main_extable_sort_needed &&
-	    &__stop___ex_table > &__start___ex_table) {
-		pr_notice("Sorting __ex_table...\n");
-		sort_extable(__start___ex_table, __stop___ex_table);
+	    &__stop___ex_table > &__start___ex_table) {//检查是否需要排序和异常表的结束位置是否大于起始位置
+		pr_notice("Sorting __ex_table...\n");//打印通知信息，表明正在排序异常表
+		sort_extable(__start___ex_table, __stop___ex_table);//调用 sort_extable 函数进行排序
 	}
 }
 

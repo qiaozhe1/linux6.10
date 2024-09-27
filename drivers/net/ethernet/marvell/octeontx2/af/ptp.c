@@ -69,9 +69,9 @@
 
 /* PTP atomic update operation type */
 enum atomic_opcode {
-	ATOMIC_SET = 1,
-	ATOMIC_INC = 3,
-	ATOMIC_DEC = 4
+	ATOMIC_SET = 1,//表示原子设置操作，用于将一个变量直接设置为一个指定的值。此操作在执行过程中不会被其他线程或 CPU 干扰，因此是安全的。
+	ATOMIC_INC = 3,//表示原子递增操作，用于将变量的值增加 1。此操作保证了即使在多个线程同时尝试递增同一变量时，也能安全地更新变量的值，而不会导致竞争条件或数据不一致。
+	ATOMIC_DEC = 4//表示原子递减操作，用于将变量的值减少 1。与递增操作类似，递减操作也保证在并发环境下的安全性，避免数据竞争问题。
 };
 
 static struct ptp *first_ptp_block;

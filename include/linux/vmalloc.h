@@ -49,7 +49,7 @@ struct iov_iter;		/* in uio.h */
 #define IOREMAP_MAX_ORDER	(7 + PAGE_SHIFT)	/* 128 pages */
 #endif
 
-struct vm_struct {
+struct vm_struct {//在内核中表示虚拟内存块，用于管理虚拟地址和物理页之间的映射关系
 	struct vm_struct	*next;
 	void			*addr;
 	unsigned long		size;
@@ -63,7 +63,7 @@ struct vm_struct {
 	const void		*caller;
 };
 
-struct vmap_area {
+struct vmap_area {//描述虚拟内存映射区域的结构
 	unsigned long va_start;
 	unsigned long va_end;
 

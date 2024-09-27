@@ -280,12 +280,12 @@ static bool cpuhp_is_atomic_state(enum cpuhp_state state)
 
 /* Synchronization state management */
 enum cpuhp_sync_state {
-	SYNC_STATE_DEAD,
-	SYNC_STATE_KICKED,
-	SYNC_STATE_SHOULD_DIE,
-	SYNC_STATE_ALIVE,
-	SYNC_STATE_SHOULD_ONLINE,
-	SYNC_STATE_ONLINE,
+	SYNC_STATE_DEAD,//表示 CPU 当前处于死亡状态，即不可用状态，不能参与任务调度或其他系统活动。此状态通常用于表示 CPU 已经被禁用或在热插拔过程中处于关闭状态。
+	SYNC_STATE_KICKED,//表示 CPU 已经被触发启动，可能是从 DEAD 状态被唤醒或重新激活。此状态表示 CPU 正在准备进入活跃状态。
+	SYNC_STATE_SHOULD_DIE,//表示CPU应该被关闭或禁用，通常用于热插拔过程中准备将CPU移出工作状态。这是一个过渡状态，表示CPU将从活跃状态进入死亡状态。
+	SYNC_STATE_ALIVE,//表示CPU当前处于活跃状态，但尚未完全准备好进入在线状态。这是一个中间状态，CPU可能还在进行一些初始化或同步操作。
+	SYNC_STATE_SHOULD_ONLINE,//表示CPU应该上线，准备进入可用状态。此状态用于指示CPU的预期状态是上线，通常是活跃状态的下一步。
+	SYNC_STATE_ONLINE,//表示CPU已经完全上线，处于可用状态，能够正常参与系统调度和任务处理。
 };
 
 #ifdef CONFIG_HOTPLUG_CORE_SYNC
@@ -3138,15 +3138,16 @@ void __init boot_cpu_init(void)
 
 /*
  * Must be called _AFTER_ setting up the per_cpu areas
+ * 用于在系统初始化期间设置引导 CPU（启动 CPU）的热插拔状态。
  */
 void __init boot_cpu_hotplug_init(void)
 {
 #ifdef CONFIG_SMP
-	cpumask_set_cpu(smp_processor_id(), &cpus_booted_once_mask);
-	atomic_set(this_cpu_ptr(&cpuhp_state.ap_sync_state), SYNC_STATE_ONLINE);
+	cpumask_set_cpu(smp_processor_id(), &cpus_booted_once_mask);//将当前启动的CPU添加到cpus_booted_once_mask掩码中，表示该CPU已经启动过一次
+	atomic_set(this_cpu_ptr(&cpuhp_state.ap_sync_state), SYNC_STATE_ONLINE);//将当前CPU的同步状态设置为SYNC_STATE_ONLINE，表示CPU已经同步到在线状态。这在CPU启动和热插拔过程中有助于确保同步操作的正确性。
 #endif
-	this_cpu_write(cpuhp_state.state, CPUHP_ONLINE);
-	this_cpu_write(cpuhp_state.target, CPUHP_ONLINE);
+	this_cpu_write(cpuhp_state.state, CPUHP_ONLINE);//将当前CPU的热插拔状态设置为在线状态(CPUHP_ONLINE)，表示当前CPU在热插拔状态下处于正常工作中。
+	this_cpu_write(cpuhp_state.target, CPUHP_ONLINE);//将当前CPU的热插拔目标状态设置为在线状态(CPUHP_ONLINE)。目标状态用于指示CPU预期的工作状态，并确保在热插拔操作中朝着正确的状态进行。
 }
 
 #ifdef CONFIG_CPU_MITIGATIONS
