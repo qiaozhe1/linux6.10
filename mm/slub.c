@@ -5794,7 +5794,7 @@ void __init kmem_cache_init(void)
 
 	create_boot_cache(kmem_cache_node, "kmem_cache_node",
 			sizeof(struct kmem_cache_node),
-			SLAB_HWCACHE_ALIGN | SLAB_NO_OBJ_EXT, 0, 0);//创建用于节点的 kmem_cache
+			SLAB_HWCACHE_ALIGN | SLAB_NO_OBJ_EXT, 0, 0);//创建用于节点的静态kmem_cache
 
 	hotplug_memory_notifier(slab_memory_callback, SLAB_CALLBACK_PRI);//注册内存热插拔回调
 
@@ -5804,7 +5804,7 @@ void __init kmem_cache_init(void)
 	create_boot_cache(kmem_cache, "kmem_cache",
 			offsetof(struct kmem_cache, node) +
 				nr_node_ids * sizeof(struct kmem_cache_node *),
-			SLAB_HWCACHE_ALIGN | SLAB_NO_OBJ_EXT, 0, 0);//创建主 kmem_cache
+			SLAB_HWCACHE_ALIGN | SLAB_NO_OBJ_EXT, 0, 0);//创建主kmem_cache（静态）
 
 	kmem_cache = bootstrap(&boot_kmem_cache);//启动 kmem_cache
 	kmem_cache_node = bootstrap(&boot_kmem_cache_node);//启动节点 kmem_cache

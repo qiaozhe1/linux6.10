@@ -39,10 +39,10 @@ __setup("irqaffinity=", irq_affinity_setup);
 
 static void __init init_irq_default_affinity(void)
 {
-	if (!cpumask_available(irq_default_affinity))
-		zalloc_cpumask_var(&irq_default_affinity, GFP_NOWAIT);
-	if (cpumask_empty(irq_default_affinity))
-		cpumask_setall(irq_default_affinity);
+	if (!cpumask_available(irq_default_affinity))//检查中断默认亲和性掩码（irq_default_affinity）是否可用。
+		zalloc_cpumask_var(&irq_default_affinity, GFP_NOWAIT);//不可用则分配一个新的CPU掩码。
+	if (cpumask_empty(irq_default_affinity))//检查 irq_default_affinity 是否为空，即没有CPU被设置为可以处理中断。
+		cpumask_setall(irq_default_affinity);//调用 cpumask_setall 函数将所有 CPU 标记为可处理中断，即设置 irq_default_affinity 掩码中的所有位。
 }
 #else
 static void __init init_irq_default_affinity(void)
@@ -189,28 +189,28 @@ static int init_desc(struct irq_desc *desc, int irq, int node,
 		     const struct cpumask *affinity,
 		     struct module *owner)
 {
-	desc->kstat_irqs = alloc_percpu(struct irqstat);
+	desc->kstat_irqs = alloc_percpu(struct irqstat);//为每个 CPU 分配中断统计信息的 percpu 数据结构
 	if (!desc->kstat_irqs)
-		return -ENOMEM;
+		return -ENOMEM;//分配失败，返回内存不足错误
 
-	if (alloc_masks(desc, node)) {
-		free_percpu(desc->kstat_irqs);
-		return -ENOMEM;
+	if (alloc_masks(desc, node)) {//为中断描述符分配必要的掩码数据
+		free_percpu(desc->kstat_irqs);//如果分配失败，释放之前分配的 percpu 数据
+		return -ENOMEM;//返回内存不足错误
 	}
 
-	raw_spin_lock_init(&desc->lock);
-	lockdep_set_class(&desc->lock, &irq_desc_lock_class);
-	mutex_init(&desc->request_mutex);
-	init_waitqueue_head(&desc->wait_for_threads);
-	desc_set_defaults(irq, desc, node, affinity, owner);
-	irqd_set(&desc->irq_data, flags);
-	irq_resend_init(desc);
+	raw_spin_lock_init(&desc->lock);//初始化原始自旋锁，用于保护中断描述符的并发访问
+	lockdep_set_class(&desc->lock, &irq_desc_lock_class);//设置锁的锁依赖性类，用于调试锁的依赖关系
+	mutex_init(&desc->request_mutex);//初始化请求互斥锁，保护中断请求和释放操作
+	init_waitqueue_head(&desc->wait_for_threads);//初始化等待队列，用于等待中断处理线程完成
+	desc_set_defaults(irq, desc, node, affinity, owner);//设置中断描述符的默认值
+	irqd_set(&desc->irq_data, flags);//设置中断数据的标志位
+	irq_resend_init(desc);//初始化中断重发设置
 #ifdef CONFIG_SPARSE_IRQ
-	kobject_init(&desc->kobj, &irq_kobj_type);
-	init_rcu_head(&desc->rcu);
+	kobject_init(&desc->kobj, &irq_kobj_type);//初始化 kobject，用于与用户空间交互
+	init_rcu_head(&desc->rcu);//初始化 RCU 头，用于安全地释放中断描述符
 #endif
 
-	return 0;
+	return 0;// 初始化成功，返回 0
 }
 
 #ifdef CONFIG_SPARSE_IRQ
@@ -446,20 +446,20 @@ static struct irq_desc *alloc_desc(int irq, int node, unsigned int flags,
 				   const struct cpumask *affinity,
 				   struct module *owner)
 {
-	struct irq_desc *desc;
+	struct irq_desc *desc;//定义指向中断描述符的指针
 	int ret;
 
-	desc = kzalloc_node(sizeof(*desc), GFP_KERNEL, node);
+	desc = kzalloc_node(sizeof(*desc), GFP_KERNEL, node);//为中断描述符分配内存,并将其初始化为 0
 	if (!desc)
 		return NULL;
 
-	ret = init_desc(desc, irq, node, flags, affinity, owner);
-	if (unlikely(ret)) {
+	ret = init_desc(desc, irq, node, flags, affinity, owner);// 初始化中断描述符
+	if (unlikely(ret)) {//如果初始化失败，释放之前分配的内存，并返回 NULL
 		kfree(desc);
 		return NULL;
 	}
 
-	return desc;
+	return desc;//如果初始化成功，返回分配的中断描述符
 }
 
 static void irq_kobj_release(struct kobject *kobj)
@@ -560,30 +560,30 @@ static int irq_expand_nr_irqs(unsigned int nr)
 
 int __init early_irq_init(void)
 {
-	int i, initcnt, node = first_online_node;
-	struct irq_desc *desc;
+	int i, initcnt, node = first_online_node;//定义循环变量 i，预分配的 IRQ 数量 initcnt，以及第一个在线节点 node
+	struct irq_desc *desc;//指向 IRQ 描述符的指针
 
-	init_irq_default_affinity();
+	init_irq_default_affinity();//初始化 IRQ 的默认亲和性设置
 
 	/* Let arch update nr_irqs and return the nr of preallocated irqs */
-	initcnt = arch_probe_nr_irqs();
+	initcnt = arch_probe_nr_irqs();//让架构特定代码更新 nr_irqs，并返回预分配的 IRQ 数量(返回0)
 	printk(KERN_INFO "NR_IRQS: %d, nr_irqs: %d, preallocated irqs: %d\n",
-	       NR_IRQS, nr_irqs, initcnt);
+	       NR_IRQS, nr_irqs, initcnt);//打印系统支持的 IRQ 信息，包括总数、已分配的 IRQ 数量和预分配数量
 
-	if (WARN_ON(nr_irqs > MAX_SPARSE_IRQS))
+	if (WARN_ON(nr_irqs > MAX_SPARSE_IRQS))//检查并确保 nr_irqs 不超过最大稀疏 IRQ 数量限制
 		nr_irqs = MAX_SPARSE_IRQS;
 
-	if (WARN_ON(initcnt > MAX_SPARSE_IRQS))
+	if (WARN_ON(initcnt > MAX_SPARSE_IRQS))//检查并确保预分配数量 initcnt 不超过最大稀疏 IRQ 数量限制
 		initcnt = MAX_SPARSE_IRQS;
 
-	if (initcnt > nr_irqs)
+	if (initcnt > nr_irqs)//如果 initcnt 大于当前的 nr_irqs，则更新 nr_irqs 为 initcnt
 		nr_irqs = initcnt;
 
-	for (i = 0; i < initcnt; i++) {
-		desc = alloc_desc(i, node, 0, NULL, NULL);
-		irq_insert_desc(i, desc);
+	for (i = 0; i < initcnt; i++) {//为每个 IRQ 分配描述符并插入到描述符表中
+		desc = alloc_desc(i, node, 0, NULL, NULL);//为 IRQ 号 i 分配描述符
+		irq_insert_desc(i, desc);//将描述符插入到 IRQ 描述符表中
 	}
-	return arch_early_irq_init();
+	return arch_early_irq_init();//调用架构特定的早期 IRQ 初始化函数
 }
 
 #else /* !CONFIG_SPARSE_IRQ */

@@ -64,58 +64,58 @@ struct irqstat {
  * @debugfs_file:	dentry for the debugfs file
  * @name:		flow handler name for /proc/interrupts output
  */
-struct irq_desc {
-	struct irq_common_data	irq_common_data;
-	struct irq_data		irq_data;
-	struct irqstat __percpu	*kstat_irqs;
-	irq_flow_handler_t	handle_irq;
-	struct irqaction	*action;	/* IRQ action list */
-	unsigned int		status_use_accessors;
-	unsigned int		core_internal_state__do_not_mess_with_it;
-	unsigned int		depth;		/* nested irq disables */
-	unsigned int		wake_depth;	/* nested wake enables */
-	unsigned int		tot_count;
-	unsigned int		irq_count;	/* For detecting broken IRQs */
-	unsigned long		last_unhandled;	/* Aging timer for unhandled count */
-	unsigned int		irqs_unhandled;
-	atomic_t		threads_handled;
-	int			threads_handled_last;
+struct irq_desc {//用于描述每个中断的信息的结构体
+	struct irq_common_data	irq_common_data;//包含中断的共享数据，例如中断处理器的亲和性和触发方式。
+	struct irq_data		irq_data;//包含中断控制器特定的中断数据，例如中断号和触发配置。
+	struct irqstat __percpu	*kstat_irqs;//存储per_CPU的中断统计信息，用于跟踪per_CPU中断的触发次数。
+	irq_flow_handler_t	handle_irq;//指向中断流处理程序的函数指针，用于处理特定类型的中断。
+	struct irqaction	*action;//指向中断的动作链表，链表中包含了处理该中断的函数列表。
+	unsigned int		status_use_accessors;//存储中断的状态标志，通过访问器函数进行读取或修改。
+	unsigned int		core_internal_state__do_not_mess_with_it;//内部状态标志，用于管理中断的内部状态，不建议外部代码修改。
+	unsigned int		depth;//表示中断的嵌套禁用深度，指示中断被禁用的层级数。
+	unsigned int		wake_depth;//表示唤醒的嵌套深度，用于管理中断的唤醒状态。
+	unsigned int		tot_count;//用于统计中断的触发次数
+	unsigned int		irq_count;//用于检测中断是否出错，尤其是在中断不能正常处理时会增加计数。
+	unsigned long		last_unhandled;//存储上一次未处理中断的时间戳，用于跟踪中断问题。
+	unsigned int		irqs_unhandled;//记录未处理中断的数量，用于统计和诊断中断的问题。
+	atomic_t		threads_handled;//处理此中断的线程数量（原子计数）
+	int			threads_handled_last;//上一次处理中断的线程数量
 	raw_spinlock_t		lock;
-	struct cpumask		*percpu_enabled;
-	const struct cpumask	*percpu_affinity;
+	struct cpumask		*percpu_enabled;//指向per_CPU启用中断的掩码
+	const struct cpumask	*percpu_affinity;//指向per_CPU中断亲和性掩码,指定哪些 CPU 可以处理此中断。
 #ifdef CONFIG_SMP
-	const struct cpumask	*affinity_hint;
-	struct irq_affinity_notify *affinity_notify;
+	const struct cpumask	*affinity_hint;//中断亲和性提示掩码
+	struct irq_affinity_notify *affinity_notify;//中断亲和性改变的通知结构体
 #ifdef CONFIG_GENERIC_PENDING_IRQ
-	cpumask_var_t		pending_mask;
+	cpumask_var_t		pending_mask;//用于跟踪挂起的中断，防止中断被过早处理
 #endif
 #endif
-	unsigned long		threads_oneshot;
-	atomic_t		threads_active;
-	wait_queue_head_t       wait_for_threads;
+	unsigned long		threads_oneshot;//用于标记是否为 oneshot 线程处理模式
+	atomic_t		threads_active;//正在活跃处理的线程数量
+	wait_queue_head_t       wait_for_threads;//用于等待中断处理线程完成的等待队列
 #ifdef CONFIG_PM_SLEEP
-	unsigned int		nr_actions;
-	unsigned int		no_suspend_depth;
-	unsigned int		cond_suspend_depth;
-	unsigned int		force_resume_depth;
+	unsigned int		nr_actions;//动作数量计数，用于睡眠相关的中断管理
+	unsigned int		no_suspend_depth;//禁止挂起的深度
+	unsigned int		cond_suspend_depth;//条件挂起深度
+	unsigned int		force_resume_depth;//强制恢复的深度
 #endif
 #ifdef CONFIG_PROC_FS
-	struct proc_dir_entry	*dir;
+	struct proc_dir_entry	*dir;//在 `/proc` 文件系统中与中断相关联的目录
 #endif
 #ifdef CONFIG_GENERIC_IRQ_DEBUGFS
-	struct dentry		*debugfs_file;
-	const char		*dev_name;
+	struct dentry		*debugfs_file;//`debugfs` 中的调试文件
+	const char		*dev_name;//设备名称
 #endif
 #ifdef CONFIG_SPARSE_IRQ
-	struct rcu_head		rcu;
-	struct kobject		kobj;
+	struct rcu_head		rcu;//RCU 机制头，用于安全释放 `irq_desc` 结构体
+	struct kobject		kobj;//设备模型中的 `kobject`，用于与用户空间进行交互
 #endif
-	struct mutex		request_mutex;
-	int			parent_irq;
-	struct module		*owner;
-	const char		*name;
+	struct mutex		request_mutex;//请求互斥锁，用于请求和释放 IRQ
+	int			parent_irq;//父中断编号，用于中断级联
+	struct module		*owner;//拥有此中断的模块
+	const char		*name;//中断名称
 #ifdef CONFIG_HARDIRQS_SW_RESEND
-	struct hlist_node	resend_node;
+	struct hlist_node	resend_node;//用于重新发送中断的节点
 #endif
 } ____cacheline_internodealigned_in_smp;
 

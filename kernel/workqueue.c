@@ -255,15 +255,17 @@ enum pool_workqueue_stats {
  * point to the pwq; thus, pwqs need to be aligned at two's power of the
  * number of flag bits.
  */
-struct pool_workqueue {
-	struct worker_pool	*pool;		/* I: the associated pool */
-	struct workqueue_struct *wq;		/* I: the owning workqueue */
-	int			work_color;	/* L: current color */
-	int			flush_color;	/* L: flushing color */
-	int			refcnt;		/* L: reference count */
-	int			nr_in_flight[WORK_NR_COLORS];
+struct pool_workqueue {//用于管理与工作队列相关联的工作池,以便将工作分配到 worker_pool 中进行执行。它管理与具体 worker_pool 相关联的工作状态、执行情况以及调度信息。
+	struct worker_pool	*pool;		/* 指向关联的工作池的指针。每个 pool_workqueue 都对应一个特定的 worker_pool，用于执行实际的工作任务。 */
+	struct workqueue_struct *wq;		/* 指向所属工作队列（workqueue_struct）的指针，表示该 pool_workqueue 是属于哪个工作队列的。 */
+
+	/*work_color 和 flush_color 用于区分不同的工作阶段和刷新阶段。用途是确保在某些情况下（如工作队列刷新）能够正确地对工作进行分类和处理，以避免相同类型的工作互相干扰。*/
+	int			work_color;	/* 当前工作的颜色，用于区分不同阶段 */
+	int			flush_color;	/* 刷新的颜色，用于协调工作队列刷新的状态 */
+	int			refcnt;		/* refcnt 是引用计数，用于管理 pool_workqueue 的生命周期。只有当引用计数为零时，pool_workqueue 才会被释放 */
+	int			nr_in_flight[WORK_NR_COLORS];//记录了当前不同颜色（阶段）的工作数量，表示正在执行的工作项。
 						/* L: nr of in_flight works */
-	bool			plugged;	/* L: execution suspended */
+	bool			plugged;	/* 表示是否暂停执行。通常用于在某些特殊场景下临时暂停 pool_workqueue 中的任务执行。 */
 
 	/*
 	 * nr_active management and WORK_STRUCT_INACTIVE:
@@ -281,13 +283,13 @@ struct pool_workqueue {
 	 * in nr_active. For non-barrier work item, it is marked with
 	 * WORK_STRUCT_INACTIVE iff it is in pwq->inactive_works.
 	 */
-	int			nr_active;	/* L: nr of active works */
-	struct list_head	inactive_works;	/* L: inactive works */
-	struct list_head	pending_node;	/* LN: node on wq_node_nr_active->pending_pwqs */
-	struct list_head	pwqs_node;	/* WR: node on wq->pwqs */
-	struct list_head	mayday_node;	/* MD: node on wq->maydays */
+	int			nr_active;	/* 表示当前活跃的工作数量 */
+	struct list_head	inactive_works;	/* 用于存储处于非活动状态的工作项，当达到最大活跃工作限制时，新任务会被加入此链表。 */
+	struct list_head	pending_node;	/* 表示pool_workqueue在wq_node_nr_active->pending_pwqs链表中的节点，用于跟踪处于挂起状态的 pwq */
+	struct list_head	pwqs_node;	/* 表示 pool_workqueue 在其所属工作队列（wq->pwqs）链表中的节点*/
+	struct list_head	mayday_node;	/* 当资源不足（例如系统负载过高或没有足够的 worker）时，该节点用于将 pwq 加入 wq->maydays 链表，向系统求助更多资源。 */
 
-	u64			stats[PWQ_NR_STATS];
+	u64			stats[PWQ_NR_STATS];//用于存储与该 pwq 相关的统计数据，例如执行次数、失败次数等。这些数据用于帮助调优和监控工作队列的运行情况。
 
 	/*
 	 * Release of unbound pwq is punted to a kthread_worker. See put_pwq()
@@ -295,8 +297,8 @@ struct pool_workqueue {
 	 * RCU protected so that the first pwq can be determined without
 	 * grabbing wq->mutex.
 	 */
-	struct kthread_work	release_work;
-	struct rcu_head		rcu;
+	struct kthread_work	release_work;//用于处理 pool_workqueue 的释放。为了安全地释放 pwq，它会被推迟到一个 kthread_worker 中执行，防止与其他操作发生冲突。
+	struct rcu_head		rcu;//用于 RCU（Read-Copy Update）机制，以确保在使用过程中 pwq 不会被释放，RCU 可以保证即使在不获取锁的情况下也可以安全地访问。
 } __aligned(1 << WORK_STRUCT_PWQ_SHIFT);
 
 /*
@@ -7682,106 +7684,110 @@ static void __init init_cpu_worker_pool(struct worker_pool *pool, int cpu, int n
  */
 void __init workqueue_init_early(void)
 {
-	struct wq_pod_type *pt = &wq_pod_types[WQ_AFFN_SYSTEM];
-	int std_nice[NR_STD_WORKER_POOLS] = { 0, HIGHPRI_NICE_LEVEL };
+	struct wq_pod_type *pt = &wq_pod_types[WQ_AFFN_SYSTEM];//获取工作队列的系统pod类型，表示该pod属于系统级别
+	int std_nice[NR_STD_WORKER_POOLS] = { 0, HIGHPRI_NICE_LEVEL };//定义标准worker池的nice值数组，其中包含默认优先级和高优先级的nice值
 	void (*irq_work_fns[2])(struct irq_work *) = { bh_pool_kick_normal,
-						       bh_pool_kick_highpri };
+						       bh_pool_kick_highpri };//定义中断工作处理函数的数组，用于处理不同优先级的软中断工作池
 	int i, cpu;
 
-	BUILD_BUG_ON(__alignof__(struct pool_workqueue) < __alignof__(long long));
+	BUILD_BUG_ON(__alignof__(struct pool_workqueue) < __alignof__(long long));//编译时检查结构对齐，确保pool_workqueue的对齐不小于long long，以防止对齐问题
 
-	BUG_ON(!alloc_cpumask_var(&wq_unbound_cpumask, GFP_KERNEL));
-	BUG_ON(!alloc_cpumask_var(&wq_requested_unbound_cpumask, GFP_KERNEL));
-	BUG_ON(!zalloc_cpumask_var(&wq_isolated_cpumask, GFP_KERNEL));
+	BUG_ON(!alloc_cpumask_var(&wq_unbound_cpumask, GFP_KERNEL));//分配wq_unbound_cpumask变量，用于保存非绑定工作队列的CPU掩码，如果分配失败则触发BUG
+	BUG_ON(!alloc_cpumask_var(&wq_requested_unbound_cpumask, GFP_KERNEL));//分配 wq_requested_unbound_cpumask 变量，用于保存请求的非绑定工作队列的 CPU 掩码，如果分配失败则触发 BUG
+	BUG_ON(!zalloc_cpumask_var(&wq_isolated_cpumask, GFP_KERNEL));//分配 wq_isolated_cpumask 变量，并初始化为 0，用于保存隔离的 CPU 掩码，如果分配失败则触发 BUG
 
-	cpumask_copy(wq_unbound_cpumask, cpu_possible_mask);
-	restrict_unbound_cpumask("HK_TYPE_WQ", housekeeping_cpumask(HK_TYPE_WQ));
-	restrict_unbound_cpumask("HK_TYPE_DOMAIN", housekeeping_cpumask(HK_TYPE_DOMAIN));
-	if (!cpumask_empty(&wq_cmdline_cpumask))
-		restrict_unbound_cpumask("workqueue.unbound_cpus", &wq_cmdline_cpumask);
+	cpumask_copy(wq_unbound_cpumask, cpu_possible_mask);//将所有可能的 CPU 掩码复制到 wq_unbound_cpumask 中，表示所有可能的 CPU 都可以用于非绑定工作队列
+	restrict_unbound_cpumask("HK_TYPE_WQ", housekeeping_cpumask(HK_TYPE_WQ));//限制非绑定的 CPU 掩码，排除掉 housekeeping 任务(负责维护系统资源、优化性能以及处理系统状态的后台任务集合)专用的 CPU
+	restrict_unbound_cpumask("HK_TYPE_DOMAIN", housekeeping_cpumask(HK_TYPE_DOMAIN));//限制非绑定的 CPU 掩码，排除掉域相关的 housekeeping CPU
+	if (!cpumask_empty(&wq_cmdline_cpumask))//如果命令行中指定了 CPU 掩码
+		restrict_unbound_cpumask("workqueue.unbound_cpus", &wq_cmdline_cpumask);//进一步限制非绑定的 CPU 掩码，按照命令行的设置进行限制
 
-	cpumask_copy(wq_requested_unbound_cpumask, wq_unbound_cpumask);
+	cpumask_copy(wq_requested_unbound_cpumask, wq_unbound_cpumask);//将请求的非绑定 CPU 掩码复制为当前的非绑定 CPU 掩码，表示请求的掩码和实际使用的掩码一致
 
-	pwq_cache = KMEM_CACHE(pool_workqueue, SLAB_PANIC);
+	pwq_cache = KMEM_CACHE(pool_workqueue, SLAB_PANIC);//创建 pool_workqueue 的 kmem 缓存，用于池化管理，如果发生错误则触发 panic
 
-	wq_update_pod_attrs_buf = alloc_workqueue_attrs();
-	BUG_ON(!wq_update_pod_attrs_buf);
+	wq_update_pod_attrs_buf = alloc_workqueue_attrs();//分配用于更新 pod 属性的工作队列属性缓存
+	BUG_ON(!wq_update_pod_attrs_buf);//分配失败时触发 BUG，确保属性缓存分配成功
 
 	/*
 	 * If nohz_full is enabled, set power efficient workqueue as unbound.
 	 * This allows workqueue items to be moved to HK CPUs.
+	 *  如果启用了 nohz_full，则设置省电工作队列为非绑定的。
+	 *  这样允许工作队列项被移动到 housekeeping CPU，减少对非 housekeeping CPU 的打扰。
 	 */
-	if (housekeeping_enabled(HK_TYPE_TICK))
-		wq_power_efficient = true;
+	if (housekeeping_enabled(HK_TYPE_TICK))//如果启用 nohz_full，则允许省电工作队列移动到 housekeeping CPU，提升系统的功耗效率
+		wq_power_efficient = true;//
 
 	/* initialize WQ_AFFN_SYSTEM pods */
-	pt->pod_cpus = kcalloc(1, sizeof(pt->pod_cpus[0]), GFP_KERNEL);
-	pt->pod_node = kcalloc(1, sizeof(pt->pod_node[0]), GFP_KERNEL);
-	pt->cpu_pod = kcalloc(nr_cpu_ids, sizeof(pt->cpu_pod[0]), GFP_KERNEL);
-	BUG_ON(!pt->pod_cpus || !pt->pod_node || !pt->cpu_pod);
+	pt->pod_cpus = kcalloc(1, sizeof(pt->pod_cpus[0]), GFP_KERNEL);//为 pod CPU 分配一个元素的内存，用于存储系统 pod 的 CPU 信息
+	pt->pod_node = kcalloc(1, sizeof(pt->pod_node[0]), GFP_KERNEL);//为 pod 节点分配一个元素的内存，用于存储系统 pod 的节点信息
+	pt->cpu_pod = kcalloc(nr_cpu_ids, sizeof(pt->cpu_pod[0]), GFP_KERNEL);//为每个 CPU 分配内存，用于存储每个 CPU 所属的 pod 信息
+	BUG_ON(!pt->pod_cpus || !pt->pod_node || !pt->cpu_pod);//如果内存分配失败则触发BUG，确保所有pod相关的内存分配成功
 
-	BUG_ON(!zalloc_cpumask_var_node(&pt->pod_cpus[0], GFP_KERNEL, NUMA_NO_NODE));
+	BUG_ON(!zalloc_cpumask_var_node(&pt->pod_cpus[0], GFP_KERNEL, NUMA_NO_NODE));//为pod_cpus[0]分配并初始化为0，表示该pod可以使用所有CPU
 
-	pt->nr_pods = 1;
-	cpumask_copy(pt->pod_cpus[0], cpu_possible_mask);
-	pt->pod_node[0] = NUMA_NO_NODE;
-	pt->cpu_pod[0] = 0;
+	pt->nr_pods = 1;//设置pod数量为1，表示只有一个系统pod
+	cpumask_copy(pt->pod_cpus[0], cpu_possible_mask);//将所有可能的 CPU 掩码复制到 pod_cpus[0] 中，表示该 pod 可以使用所有 CPU
+	pt->pod_node[0] = NUMA_NO_NODE;//设置 pod 节点为 NUMA_NO_NODE，表示该 pod 没有特定的 NUMA 节点
+	pt->cpu_pod[0] = 0;//设置第一个 CPU pod 的值为 0，表示所有 CPU 都属于第一个 pod
 
 	/* initialize BH and CPU pools */
-	for_each_possible_cpu(cpu) {
-		struct worker_pool *pool;
+	for_each_possible_cpu(cpu) {//遍历每个可能的CPU，初始化cpu对应的 BH 和 CPU 工作池
+		struct worker_pool *pool;//定义 worker 池指针
 
 		i = 0;
-		for_each_bh_worker_pool(pool, cpu) {
-			init_cpu_worker_pool(pool, cpu, std_nice[i]);
-			pool->flags |= POOL_BH;
-			init_irq_work(bh_pool_irq_work(pool), irq_work_fns[i]);
-			i++;
+		for_each_bh_worker_pool(pool, cpu) {//遍历每个BH工作池,用于软中断的工作池，每个cpu两个：normal和highpri
+			init_cpu_worker_pool(pool, cpu, std_nice[i]);//初始化CPU工作池，设置池的nice值为标准的nice值
+			pool->flags |= POOL_BH;//设置工作池的BH标志，表示该池是用于软中断处理的工作池
+			init_irq_work(bh_pool_irq_work(pool), irq_work_fns[i]);// 初始化中断工作结构，设置对应的中断处理函数
+			i++;//增加索引，处理下一个工作池
 		}
 
 		i = 0;
-		for_each_cpu_worker_pool(pool, cpu)
-			init_cpu_worker_pool(pool, cpu, std_nice[i++]);
+		for_each_cpu_worker_pool(pool, cpu)//遍历每个 BH 工作池
+			init_cpu_worker_pool(pool, cpu, std_nice[i++]);//初始化 CPU 工作池，设置池的 nice 值为标准的 nice 值
 	}
 
-	/* create default unbound and ordered wq attrs */
-	for (i = 0; i < NR_STD_WORKER_POOLS; i++) {
+	/* 创建默认的非绑定和有序工作队列属性 */
+	for (i = 0; i < NR_STD_WORKER_POOLS; i++) {//遍历标准 worker 池的数量，创建相应的工作队列属性
 		struct workqueue_attrs *attrs;
 
-		BUG_ON(!(attrs = alloc_workqueue_attrs()));
-		attrs->nice = std_nice[i];
-		unbound_std_wq_attrs[i] = attrs;
+		BUG_ON(!(attrs = alloc_workqueue_attrs()));//分配工作队列属性，失败则触发BUG
+		attrs->nice = std_nice[i];//设置 nice 值，表示该工作队列的优先级
+		unbound_std_wq_attrs[i] = attrs;//保存非绑定工作队列属性，供后续使用
 
 		/*
 		 * An ordered wq should have only one pwq as ordering is
 		 * guaranteed by max_active which is enforced by pwqs.
+		 * 有序的工作队列应该只有一个 pwq，因为通过 max_active 保证了
+		 * 顺序性，确保工作项按顺序执行
 		 */
-		BUG_ON(!(attrs = alloc_workqueue_attrs()));
-		attrs->nice = std_nice[i];
-		attrs->ordered = true;
-		ordered_wq_attrs[i] = attrs;
+		BUG_ON(!(attrs = alloc_workqueue_attrs()));//分配工作队列属性，失败则触发 BUG
+		attrs->nice = std_nice[i];//设置 nice 值，表示该工作队列的优先级
+		attrs->ordered = true;//设置有序属性，确保工作项按顺序执行
+		ordered_wq_attrs[i] = attrs;//保存有序工作队列属性，供后续使用
 	}
-
-	system_wq = alloc_workqueue("events", 0, 0);
-	system_highpri_wq = alloc_workqueue("events_highpri", WQ_HIGHPRI, 0);
-	system_long_wq = alloc_workqueue("events_long", 0, 0);
+	/* 创建系统工作队列 */
+	system_wq = alloc_workqueue("events", 0, 0);//分配系统工作队列，用于处理一般事件
+	system_highpri_wq = alloc_workqueue("events_highpri", WQ_HIGHPRI, 0);//分配高优先级系统工作队列，用于处理高优先级事件
+	system_long_wq = alloc_workqueue("events_long", 0, 0);//分配长时间系统工作队列，用于处理需要较长时间的任务
 	system_unbound_wq = alloc_workqueue("events_unbound", WQ_UNBOUND,
-					    WQ_MAX_ACTIVE);
+					    WQ_MAX_ACTIVE);//分配非绑定系统工作队列，允许在所有 CPU 上调度
 	system_freezable_wq = alloc_workqueue("events_freezable",
-					      WQ_FREEZABLE, 0);
+					      WQ_FREEZABLE, 0);//分配可冻结系统工作队列，在系统进入冻结状态时可以被暂停
 	system_power_efficient_wq = alloc_workqueue("events_power_efficient",
-					      WQ_POWER_EFFICIENT, 0);
+					      WQ_POWER_EFFICIENT, 0);//分配省电系统工作队列，用于减少功耗的任务
 	system_freezable_power_efficient_wq = alloc_workqueue("events_freezable_pwr_efficient",
 					      WQ_FREEZABLE | WQ_POWER_EFFICIENT,
-					      0);
-	system_bh_wq = alloc_workqueue("events_bh", WQ_BH, 0);
+					      0);//分配可冻结且省电的系统工作队列，用于减少功耗且可以被冻结的任务
+	system_bh_wq = alloc_workqueue("events_bh", WQ_BH, 0);// 分配 BH 系统工作队列，用于处理软中断任务
 	system_bh_highpri_wq = alloc_workqueue("events_bh_highpri",
-					       WQ_BH | WQ_HIGHPRI, 0);
+					       WQ_BH | WQ_HIGHPRI, 0);//分配高优先级 BH 系统工作队列，用于处理高优先级的软中断任务
 	BUG_ON(!system_wq || !system_highpri_wq || !system_long_wq ||
 	       !system_unbound_wq || !system_freezable_wq ||
 	       !system_power_efficient_wq ||
 	       !system_freezable_power_efficient_wq ||
-	       !system_bh_wq || !system_bh_highpri_wq);
+	       !system_bh_wq || !system_bh_highpri_wq);//检查所有系统工作队列是否成功分配，如果有分配失败则触发 BUG
 }
 
 static void __init wq_cpu_intensive_thresh_init(void)

@@ -126,14 +126,18 @@ struct rcu_work {
 	/* target workqueue ->rcu uses to queue ->work */
 	struct workqueue_struct *wq;
 };
-
+/*
+ * 用于定义工作队列（Work Queue，WQ）在不同层级上的亲和性（affinity）范围。
+ * 亲和性设置决定了工作队列中任务与系统硬件（如 CPU、缓存、NUMA 节点等）之
+ * 间的绑定策略。
+ * */
 enum wq_affn_scope {
-	WQ_AFFN_DFL,			/* use system default */
-	WQ_AFFN_CPU,			/* one pod per CPU */
-	WQ_AFFN_SMT,			/* one pod poer SMT */
-	WQ_AFFN_CACHE,			/* one pod per LLC */
-	WQ_AFFN_NUMA,			/* one pod per NUMA node */
-	WQ_AFFN_SYSTEM,			/* one pod across the whole system */
+	WQ_AFFN_DFL,			/* 使用系统默认的工作队列亲和性设置 */
+	WQ_AFFN_CPU,			/* 每个 CPU 一个 pod（pod 是执行单元） */
+	WQ_AFFN_SMT,			/* 每个 SMT（超线程）一个 pod */
+	WQ_AFFN_CACHE,			/* 每个 LLC（最后一级缓存）一个 pod */
+	WQ_AFFN_NUMA,			/* 每个 NUMA 节点一个 pod */
+	WQ_AFFN_SYSTEM,			/* 整个系统使用一个 pod */
 
 	WQ_AFFN_NR_TYPES,
 };

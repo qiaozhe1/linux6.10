@@ -3248,29 +3248,29 @@ struct kfree_rcu_cpu_work {
  * the RCU files.  Such extraction could allow further optimization of
  * the interactions with the slab allocators.
  */
-struct kfree_rcu_cpu {
+struct kfree_rcu_cpu {//用于管理每个 CPU 上与 kfree_rcu 相关的延迟内存释放任务
 	// Objects queued on a linked list
 	// through their rcu_head structures.
-	struct rcu_head *head;
-	unsigned long head_gp_snap;
-	atomic_t head_count;
+	struct rcu_head *head;//一个指向 RCU 头部的指针，用于管理那些需要在 RCU 宽限期结束后进行延迟释放的内存对象。
+	unsigned long head_gp_snap;//保存当前的 RCU grace period（宽限期）快照，用于跟踪何时可以安全释放对象
+	atomic_t head_count;// 计数器，记录 head 链表中待释放对象的数量，使用原子操作保证线程安全
 
 	// Objects queued on a bulk-list.
-	struct list_head bulk_head[FREE_N_CHANNELS];
-	atomic_t bulk_count[FREE_N_CHANNELS];
+	struct list_head bulk_head[FREE_N_CHANNELS];//用于管理批量待释放的内存对象，每个链表对应一个释放通道。
+	atomic_t bulk_count[FREE_N_CHANNELS];//记录了每个释放通道中待释放对象的数量。
 
-	struct kfree_rcu_cpu_work krw_arr[KFREE_N_BATCHES];
+	struct kfree_rcu_cpu_work krw_arr[KFREE_N_BATCHES];//存储了多个批处理工作，每个批处理工作用于管理不同的内存释放任务。
 	raw_spinlock_t lock;
-	struct delayed_work monitor_work;
-	bool initialized;
+	struct delayed_work monitor_work;//延迟工作，用于监控并处理延迟释放的 RCU 对象
+	bool initialized;//标志，表示当前 `kfree_rcu_cpu` 结构是否已经完成初始化
 
-	struct delayed_work page_cache_work;
-	atomic_t backoff_page_cache_fill;
-	atomic_t work_in_progress;
-	struct hrtimer hrtimer;
+	struct delayed_work page_cache_work;//延迟工作，用于管理页面缓存的填充，确保内存管理的稳定性
+	atomic_t backoff_page_cache_fill;//原子计数器，用于跟踪页面缓存的回退填充次数，以控制填充节奏
+	atomic_t work_in_progress;//原子计数器，表示当前有多少内存释放任务正在进行，防止资源冲突
+	struct hrtimer hrtimer;// 高精度定时器，用于在特定时间点触发操作，确保延迟任务在预期时间执行
 
-	struct llist_head bkvcache;
-	int nr_bkv_objs;
+	struct llist_head bkvcache;//用于快速访问的链表头部，存储备用缓存对象的列表
+	int nr_bkv_objs;//备用缓存中的对象数量，帮助快速访问和管理内存对象
 };
 
 static DEFINE_PER_CPU(struct kfree_rcu_cpu, krc) = {
@@ -5415,22 +5415,24 @@ static void __init sanitize_kthread_prio(void)
  */
 void rcu_init_geometry(void)
 {
-	ulong d;
+	ulong d;//定义一个用于保存 jiffies 值的变量
 	int i;
-	static unsigned long old_nr_cpu_ids;
-	int rcu_capacity[RCU_NUM_LVLS];
-	static bool initialized;
+	static unsigned long old_nr_cpu_ids;//记录上一次初始化时的 CPU 数量
+	int rcu_capacity[RCU_NUM_LVLS];//用于存储 RCU 树中每一层的容量
+	static bool initialized;//标志位，表示是否已经初始化过
 
-	if (initialized) {
+	if (initialized) {//如果已经初始化过，检查 CPU ID 的数量是否与之前相同，然后返回
 		/*
 		 * Warn if setup_nr_cpu_ids() had not yet been invoked,
 		 * unless nr_cpus_ids == NR_CPUS, in which case who cares?
+		 * 如果 `setup_nr_cpu_ids()` 尚未被调用，而 `nr_cpu_ids` 不是 `NR_CPUS`，则发出警告。
+		 * 因为 `nr_cpu_ids` 是系统中的 CPU 数量，而 `NR_CPUS` 是编译时最大 CPU 数量。
 		 */
 		WARN_ON_ONCE(old_nr_cpu_ids != nr_cpu_ids);
 		return;
 	}
 
-	old_nr_cpu_ids = nr_cpu_ids;
+	old_nr_cpu_ids = nr_cpu_ids;//保存当前CPU的数量，并将初始化标志设置为 true
 	initialized = true;
 
 	/*
@@ -5442,42 +5444,47 @@ void rcu_init_geometry(void)
 	 */
 	d = RCU_JIFFIES_TILL_FORCE_QS + nr_cpu_ids / RCU_JIFFIES_FQS_DIV;
 	if (jiffies_till_first_fqs == ULONG_MAX)
-		jiffies_till_first_fqs = d;
-	if (jiffies_till_next_fqs == ULONG_MAX)
+		jiffies_till_first_fqs = d;//如果 `jiffies_till_first_fqs` 未被指定，使用计算值
+	if (jiffies_till_next_fqs == ULONG_MAX)//如果 `jiffies_till_next_fqs` 未被指定，使用计算值
 		jiffies_till_next_fqs = d;
-	adjust_jiffies_till_sched_qs();
+	adjust_jiffies_till_sched_qs();//调整与调度相关的jiffies值
 
 	/* If the compile-time values are accurate, just leave. */
 	if (rcu_fanout_leaf == RCU_FANOUT_LEAF &&
-	    nr_cpu_ids == NR_CPUS)
+	    nr_cpu_ids == NR_CPUS)//如果编译时的值已经满足系统当前的需求，直接返回
 		return;
 	pr_info("Adjusting geometry for rcu_fanout_leaf=%d, nr_cpu_ids=%u\n",
-		rcu_fanout_leaf, nr_cpu_ids);
+		rcu_fanout_leaf, nr_cpu_ids);//打印信息，表明正在调整 RCU 几何配置，包括叶节点扇出和 CPU 数量
 
 	/*
 	 * The boot-time rcu_fanout_leaf parameter must be at least two
 	 * and cannot exceed the number of bits in the rcu_node masks.
 	 * Complain and fall back to the compile-time values if this
 	 * limit is exceeded.
+	 * 检查启动参数 `rcu_fanout_leaf` 是否有效，必须至少为 2，且不能超过 `unsigned long` 的位数。
+	 * 如果无效，回退到编译时的默认值，并发出警告。
 	 */
 	if (rcu_fanout_leaf < 2 ||
 	    rcu_fanout_leaf > sizeof(unsigned long) * 8) {
-		rcu_fanout_leaf = RCU_FANOUT_LEAF;
-		WARN_ON(1);
+		rcu_fanout_leaf = RCU_FANOUT_LEAF;//回退到默认值
+		WARN_ON(1);//发出警告
 		return;
 	}
 
 	/*
 	 * Compute number of nodes that can be handled an rcu_node tree
 	 * with the given number of levels.
+	 * 计算 RCU 树中各个层次节点能够容纳的 CPU 数量。
+	 * 每一层的容量等于上一层容量乘以 `RCU_FANOUT`。
 	 */
-	rcu_capacity[0] = rcu_fanout_leaf;
+	rcu_capacity[0] = rcu_fanout_leaf;//第一层节点容量为叶节点扇出数
 	for (i = 1; i < RCU_NUM_LVLS; i++)
 		rcu_capacity[i] = rcu_capacity[i - 1] * RCU_FANOUT;
 
 	/*
 	 * The tree must be able to accommodate the configured number of CPUs.
 	 * If this limit is exceeded, fall back to the compile-time values.
+	 * 确保 RCU 树能够容纳系统中的所有 CPU。如果不能容纳，则回退到编译时默认值并发出警告。
 	 */
 	if (nr_cpu_ids > rcu_capacity[RCU_NUM_LVLS - 1]) {
 		rcu_fanout_leaf = RCU_FANOUT_LEAF;
@@ -5485,21 +5492,23 @@ void rcu_init_geometry(void)
 		return;
 	}
 
-	/* Calculate the number of levels in the tree. */
+	/* Calculate the number of levels in the tree.
+	 * 计算 RCU 树的层级数，使得树能够容纳所有的 CPU
+	 */
 	for (i = 0; nr_cpu_ids > rcu_capacity[i]; i++) {
 	}
 	rcu_num_lvls = i + 1;
 
-	/* Calculate the number of rcu_nodes at each level of the tree. */
+	/* 计算 RCU 树每一层的 `rcu_node` 节点数量 */
 	for (i = 0; i < rcu_num_lvls; i++) {
-		int cap = rcu_capacity[(rcu_num_lvls - 1) - i];
-		num_rcu_lvl[i] = DIV_ROUND_UP(nr_cpu_ids, cap);
+		int cap = rcu_capacity[(rcu_num_lvls - 1) - i];//获取当前层级的容量
+		num_rcu_lvl[i] = DIV_ROUND_UP(nr_cpu_ids, cap);//计算该层需要的节点数量
 	}
 
-	/* Calculate the total number of rcu_node structures. */
+	/* 计算 RCU 树的 `rcu_node` 结构总数 */
 	rcu_num_nodes = 0;
 	for (i = 0; i < rcu_num_lvls; i++)
-		rcu_num_nodes += num_rcu_lvl[i];
+		rcu_num_nodes += num_rcu_lvl[i];//累加每一层的节点数量，得到总节点数
 }
 
 /*
@@ -5530,98 +5539,102 @@ static void __init kfree_rcu_batch_init(void)
 {
 	int cpu;
 	int i, j;
-	struct shrinker *kfree_rcu_shrinker;
+	struct shrinker *kfree_rcu_shrinker;//定义 shrinker 结构指针，用于管理内存回收器
 
-	/* Clamp it to [0:100] seconds interval. */
+	/* 将 `rcu_delay_page_cache_fill_msec` 限制在 [0, 100] 秒的范围内 */
 	if (rcu_delay_page_cache_fill_msec < 0 ||
 		rcu_delay_page_cache_fill_msec > 100 * MSEC_PER_SEC) {
 
 		rcu_delay_page_cache_fill_msec =
 			clamp(rcu_delay_page_cache_fill_msec, 0,
-				(int) (100 * MSEC_PER_SEC));
+				(int) (100 * MSEC_PER_SEC));//使用 `clamp()` 将 `rcu_delay_page_cache_fill_msec` 限制在合理的范围内
 
 		pr_info("Adjusting rcutree.rcu_delay_page_cache_fill_msec to %d ms.\n",
-			rcu_delay_page_cache_fill_msec);
+			rcu_delay_page_cache_fill_msec);//打印信息，表明对 `rcu_delay_page_cache_fill_msec` 进行了调整
 	}
 
-	for_each_possible_cpu(cpu) {
-		struct kfree_rcu_cpu *krcp = per_cpu_ptr(&krc, cpu);
+	for_each_possible_cpu(cpu) {//遍历系统中的每一个可能的 CPU，进行 RCU 批处理的初始化
+		struct kfree_rcu_cpu *krcp = per_cpu_ptr(&krc, cpu);//获取当前 CPU 的 `kfree_rcu_cpu` 结构指针
 
-		for (i = 0; i < KFREE_N_BATCHES; i++) {
-			INIT_RCU_WORK(&krcp->krw_arr[i].rcu_work, kfree_rcu_work);
-			krcp->krw_arr[i].krcp = krcp;
+		for (i = 0; i < KFREE_N_BATCHES; i++) {//初始化 kfree RCU 的批处理工作数组
+			INIT_RCU_WORK(&krcp->krw_arr[i].rcu_work, kfree_rcu_work);//初始化 RCU 工作，用于延迟的内存释放操作
+			krcp->krw_arr[i].krcp = krcp;//关联 `kfree_rcu_cpu` 结构指针
 
-			for (j = 0; j < FREE_N_CHANNELS; j++)
-				INIT_LIST_HEAD(&krcp->krw_arr[i].bulk_head_free[j]);
+			for (j = 0; j < FREE_N_CHANNELS; j++)//初始化每个批处理工作中的自由链表
+				INIT_LIST_HEAD(&krcp->krw_arr[i].bulk_head_free[j]);//初始化链表头，用于批量内存释放
 		}
 
-		for (i = 0; i < FREE_N_CHANNELS; i++)
-			INIT_LIST_HEAD(&krcp->bulk_head[i]);
-
-		INIT_DELAYED_WORK(&krcp->monitor_work, kfree_rcu_monitor);
-		INIT_DELAYED_WORK(&krcp->page_cache_work, fill_page_cache_func);
-		krcp->initialized = true;
+		for (i = 0; i < FREE_N_CHANNELS; i++)//初始化每个 CPU 的自由链表，用于管理内存释放
+			INIT_LIST_HEAD(&krcp->bulk_head[i]);//初始化自由链表头
+		/*初始化延迟工作，用于监控 RCU 释放和页面缓存的填充*/
+		INIT_DELAYED_WORK(&krcp->monitor_work, kfree_rcu_monitor);//初始化监控工作，监视延迟的 RCU 释放
+		INIT_DELAYED_WORK(&krcp->page_cache_work, fill_page_cache_func);//初始化页面缓存填充工作
+		krcp->initialized = true;//标记该 `kfree_rcu_cpu` 结构已完成初始化
 	}
 
-	kfree_rcu_shrinker = shrinker_alloc(0, "rcu-kfree");
-	if (!kfree_rcu_shrinker) {
+	kfree_rcu_shrinker = shrinker_alloc(0, "rcu-kfree");//分配一个 shrinker 对象，用于管理延迟的内存释放（kfree_rcu() 的内存回收）
+	if (!kfree_rcu_shrinker) {//如果 shrinker 分配失败，打印错误信息并返回
 		pr_err("Failed to allocate kfree_rcu() shrinker!\n");
 		return;
 	}
+	/*设置 shrinker 的对象计数函数和扫描函数，用于内存管理*/
+	kfree_rcu_shrinker->count_objects = kfree_rcu_shrink_count;//设置用于计数待释放对象的函数
+	kfree_rcu_shrinker->scan_objects = kfree_rcu_shrink_scan;//设置用于扫描和释放对象的函数
 
-	kfree_rcu_shrinker->count_objects = kfree_rcu_shrink_count;
-	kfree_rcu_shrinker->scan_objects = kfree_rcu_shrink_scan;
-
-	shrinker_register(kfree_rcu_shrinker);
+	shrinker_register(kfree_rcu_shrinker);//注册 shrinker，使得它可以被内核内存管理系统使用
 }
 
 void __init rcu_init(void)
 {
-	int cpu = smp_processor_id();
+	int cpu = smp_processor_id();//获取当前 CPU 的 ID，这是在系统启动时初始化 RCU 的一部分。
 
-	rcu_early_boot_tests();
+	rcu_early_boot_tests();//执行 RCU 的早期启动测试，用于检查基础设施是否能够正常工作，确保 RCU 能在早期阶段运行良好。
 
-	kfree_rcu_batch_init();
-	rcu_bootup_announce();
-	sanitize_kthread_prio();
-	rcu_init_geometry();
-	rcu_init_one();
-	if (dump_tree)
+	kfree_rcu_batch_init();//初始化延迟 kfree 的批处理结构。 kfree 是一种用于释放内核对象内存的操作。由于在中断上下文中无法直接调用 kfree，RCU 通过批处理方式延迟释放这些内存。
+	rcu_bootup_announce();//在启动日志中打印与 RCU 相关的信息，方便后续系统调试和问题追踪。
+	sanitize_kthread_prio();//校正 kthread（内核线程）的优先级，以确保 RCU 相关的线程能够按照预期的优先级进行调度。
+	rcu_init_geometry();//初始化 RCU 树的几何结构，包括RCU树的节点数量、层次和其他参数。RCU 树用于将多个 CPU 的同步信息组织起来，便于高效处理。
+	rcu_init_one();//初始化单个 RCU 实例，配置与 RCU 同步相关的数据结构，确保 RCU 子系统能正确地启动并进行后续操作。
+	if (dump_tree)//如果启用了 `dump_tree` 选项，则将 RCU 节点树的结构打印到系统日志中。
 		rcu_dump_rcu_node_tree();
-	if (use_softirq)
+	if (use_softirq)//如果启用了软中断处理 RCU 的模式，则注册 RCU 的软中断。 软中断允许在合适的时机中断并快速执行 RCU 的任务，适合需要低延迟的操作。
 		open_softirq(RCU_SOFTIRQ, rcu_core_si);
 
 	/*
 	 * We don't need protection against CPU-hotplug here because
 	 * this is called early in boot, before either interrupts
 	 * or the scheduler are operational.
+	 * 注册电源管理通知程序 `rcu_pm_notify`，以便在系统的电源状态发生变
+	 * 化（如进入低功耗模式或唤醒）时，通知 RCU 做出相应的调整。此时不需
+	 * 要对 CPU 热插拔进行保护，因为这是在内核启动早期调用的，此时还没有
+	 * 启用中断，也没有调度程序在运行，因此无需担心 CPU 上下线对这些初始化的影响。
 	 */
 	pm_notifier(rcu_pm_notify, 0);
-	WARN_ON(num_online_cpus() > 1); // Only one CPU this early in boot.
-	rcutree_prepare_cpu(cpu);
-	rcutree_report_cpu_starting(cpu);
-	rcutree_online_cpu(cpu);
+	WARN_ON(num_online_cpus() > 1); //发出警告，如果此时系统中在线的 CPU 数量超过 1，则有可能出现异常。 因为在启动的这个阶段，通常只有一个 CPU 应该是在线的（即引导 CPU）。
+	rcutree_prepare_cpu(cpu);//为当前CPU准备RCU树相关的信息，设置该CPU在RCU中的初始化状态。RCU 树用于管理多CPU之间的数据同步，因此每个CPU都需要在树中进行初始化。
+	rcutree_report_cpu_starting(cpu);//报告当前 CPU 已经完成启动过程，标记其状态为已启动，使其能被 RCU 子系统正确管理。
+	rcutree_online_cpu(cpu);//标记当前 CPU 已经上线，使其能够参与到 RCU 操作中，包括数据的同步和更新。
 
 	/* Create workqueue for Tree SRCU and for expedited GPs. */
-	rcu_gp_wq = alloc_workqueue("rcu_gp", WQ_MEM_RECLAIM, 0);
-	WARN_ON(!rcu_gp_wq);
+	rcu_gp_wq = alloc_workqueue("rcu_gp", WQ_MEM_RECLAIM, 0);//创建名为 "rcu_gp" 的工作队列，用于 Tree SRCU（用于隔离的 RCU）和加速 GP（Grace Period）处理。工作队列允许将一些任务推迟到稍后执行，这对于内核的异步操作尤为重要。
+	WARN_ON(!rcu_gp_wq);//如果创建工作队列失败，发出警告
 
-	sync_wq = alloc_workqueue("sync_wq", WQ_MEM_RECLAIM, 0);
-	WARN_ON(!sync_wq);
+	sync_wq = alloc_workqueue("sync_wq", WQ_MEM_RECLAIM, 0);//创建名为 "sync_wq" 的工作队列，用于处理 RCU 的同步操作。例如同步原语的处理，这些操作涉及到多个 CPU 的协同工作。
+	WARN_ON(!sync_wq);//如果创建工作队列失败，发出警告。
 
 	/* Fill in default value for rcutree.qovld boot parameter. */
 	/* -After- the rcu_node ->lock fields are initialized! */
-	if (qovld < 0)
-		qovld_calc = DEFAULT_RCU_QOVLD_MULT * qhimark;
+	if (qovld < 0)//设置 RCU 树溢出的默认值。RCU 树溢出是指 RCU 队列中积压的任务达到一定数量时的处理机制。`qovld` 为用户设置的阈值
+		qovld_calc = DEFAULT_RCU_QOVLD_MULT * qhimark;//如果用户没有设置值，则使用默认倍数计算溢出阈值。
 	else
-		qovld_calc = qovld;
+		qovld_calc = qovld;//如果用户设置了值，则使用用户定义的值。
 
 	// Kick-start in case any polled grace periods started early.
-	(void)start_poll_synchronize_rcu_expedited();
+	(void)start_poll_synchronize_rcu_expedited();//如果有 Grace Period（GP）在系统早期启动时开始，则调用 `start_poll_synchronize_rcu_expedited()` 来启动它。这用于加速 RCU 的同步过程，以确保系统在初始化阶段的同步状态一致。
 
-	rcu_test_sync_prims();
+	rcu_test_sync_prims();//测试 RCU 的同步原语，以确保这些原语能够正常工作。同步原语是指 RCU 用于管理和等待同步操作的基本构建块。
 
-	tasks_cblist_init_generic();
+	tasks_cblist_init_generic();//初始化与任务相关的回调列表，这些回调是 RCU 用于管理延迟任务的机制。它确保任务在适当的时机得到处理。
 }
 
 #include "tree_stall.h"

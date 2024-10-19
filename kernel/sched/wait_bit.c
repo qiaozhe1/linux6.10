@@ -247,5 +247,5 @@ void __init wait_bit_init(void)
 	int i;
 
 	for (i = 0; i < WAIT_TABLE_SIZE; i++)
-		init_waitqueue_head(bit_wait_table + i);
+		init_waitqueue_head(bit_wait_table + i);//bit_wait_table数组有256个等待队列元素
 }

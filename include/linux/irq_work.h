@@ -14,10 +14,11 @@
  * busy      NULL, 2 -> {free, claimed} : callback in progress, can be claimed
  */
 
-struct irq_work {
-	struct __call_single_node node;
-	void (*func)(struct irq_work *);
-	struct rcuwait irqwait;
+struct irq_work {//表示中断工作（IRQ Work）任务的结构体，适用于需要在中断上下文中或在调度延迟执行的任务。
+	struct __call_single_node node;//该字段是一个单节点结构，用于在多个 CPU 之间进行调用和调度操作。它帮助在 SMP（对称多处理器）系统中调度中断工作，使得特定的工作可以在特定的 CPU 上执行。
+	void (*func)(struct irq_work *);//用于指向中断工作执行的函数。当中断工作被触发时，会调用该函数来执行具体的工作
+	struct rcuwait irqwait;//用于等待中断工作完成的 RCU 同步等待结构。在中断工作系统中，irqwait 用于确保在一些工作完成之前，不会进行冲突的操作。
+
 };
 
 #define __IRQ_WORK_INIT(_func, _flags) (struct irq_work){	\

@@ -390,18 +390,18 @@ struct cfs_bandwidth {
 };
 
 /* Task group related information */
-struct task_group {
-	struct cgroup_subsys_state css;
+struct task_group {//结构体用于描述一个任务组
+	struct cgroup_subsys_state css;//任务组的控制组子系统状态，表示该任务组在控制组中的状态
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	/* schedulable entities of this group on each CPU */
-	struct sched_entity	**se;
+	struct sched_entity	**se;//指向per_CPU上此任务组的可调度实体的指针数组，用于表示任务组在完全公平调度（CFS）中的各个调度实体
 	/* runqueue "owned" by this group on each CPU */
-	struct cfs_rq		**cfs_rq;
-	unsigned long		shares;
+	struct cfs_rq		**cfs_rq;//指向per_CPU 上属于此任务组的 CFS 运行队列的指针数组，表示此任务组在各个 CPU 上拥有的 CFS 调度队列
+	unsigned long		shares;//任务组的权重，用于公平调度时分配 CPU 资源，表示该任务组在整个系统中的资源份额
 
 	/* A positive value indicates that this is a SCHED_IDLE group. */
-	int			idle;
+	int			idle;//指示此任务组是否为 SCHED_IDLE 组，正值表示此任务组属于 SCHED_IDLE 类型，优先级非常低
 
 #ifdef	CONFIG_SMP
 	/*
@@ -409,43 +409,43 @@ struct task_group {
 	 * it in its own cacheline separated from the fields above which
 	 * will also be accessed at each tick.
 	 */
-	atomic_long_t		load_avg ____cacheline_aligned;
+	atomic_long_t		load_avg ____cacheline_aligned;//任务组的平均负载，用于多 CPU 系统中度量任务组的负载情况，以原子变量的形式存储，并对齐到独立的缓存行以减少竞争
 #endif
 #endif
 
 #ifdef CONFIG_RT_GROUP_SCHED
-	struct sched_rt_entity	**rt_se;
-	struct rt_rq		**rt_rq;
+	struct sched_rt_entity	**rt_se;//指向per_CPU 上属于此任务组的实时调度实体的指针数组，用于表示任务组在实时调度（RT）中的调度实体
+	struct rt_rq		**rt_rq;//指向per_CPU 上属于此任务组的 RT 运行队列的指针数组，表示此任务组在各个 CPU 上的 RT 调度队列
 
-	struct rt_bandwidth	rt_bandwidth;
+	struct rt_bandwidth	rt_bandwidth;// 实时任务组的带宽限制结构，用于控制此任务组在 RT 调度中的 CPU 带宽使用情况
 #endif
 
-	struct rcu_head		rcu;
-	struct list_head	list;
+	struct rcu_head		rcu;//任务组的 RCU（Read-Copy-Update）结构，用于在任务组删除时保证安全地释放内存
+	struct list_head	list;//任务组的链表节点，用于将任务组加入到全局任务组链表中
 
-	struct task_group	*parent;
-	struct list_head	siblings;
-	struct list_head	children;
+	struct task_group	*parent;//指向父任务组的指针，用于表示任务组之间的层级关系
+	struct list_head	siblings;//兄弟任务组的链表节点，用于将任务组加入到父任务组的子任务组链表中
+	struct list_head	children;//子任务组的链表头，用于管理此任务组的所有子任务组
 
 #ifdef CONFIG_SCHED_AUTOGROUP
-	struct autogroup	*autogroup;
+	struct autogroup	*autogroup;//自动任务组的指针，用于自动将任务分组以改善交互式任务的调度表现
 #endif
 
-	struct cfs_bandwidth	cfs_bandwidth;
+	struct cfs_bandwidth	cfs_bandwidth;//CFS 任务组的带宽限制结构，用于控制此任务组在 CFS 调度中的 CPU 带宽使用情况
 
 #ifdef CONFIG_UCLAMP_TASK_GROUP
 	/* The two decimal precision [%] value requested from user-space */
-	unsigned int		uclamp_pct[UCLAMP_CNT];
+	unsigned int		uclamp_pct[UCLAMP_CNT];//用户空间请求的利用率钳制值，精度为百分比，表示对任务组的 CPU 利用率进行限制
 	/* Clamp values requested for a task group */
-	struct uclamp_se	uclamp_req[UCLAMP_CNT];
+	struct uclamp_se	uclamp_req[UCLAMP_CNT];// 任务组请求的钳制值，用于对任务组的 CPU 利用率进行钳制，防止任务组占用过多或过少的 CPU 资源
 	/* Effective clamp values used for a task group */
-	struct uclamp_se	uclamp[UCLAMP_CNT];
+	struct uclamp_se	uclamp[UCLAMP_CNT];//实际应用于任务组的钳制值，可能经过内核调整后的值，用于最终控制任务组的 CPU 利用率
 #endif
 
 };
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
-#define ROOT_TASK_GROUP_LOAD	NICE_0_LOAD
+#define ROOT_TASK_GROUP_LOAD	NICE_0_LOAD//(大小：1 << 10)
 
 /*
  * A weight of 0 or 1 can cause arithmetics problems.

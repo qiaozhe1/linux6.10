@@ -9925,76 +9925,76 @@ void __init sched_init(void)
 	/* Make sure the linker didn't screw up */
 	BUG_ON(&idle_sched_class != &fair_sched_class + 1 ||
 	       &fair_sched_class != &rt_sched_class + 1 ||
-	       &rt_sched_class   != &dl_sched_class + 1);
+	       &rt_sched_class   != &dl_sched_class + 1);//通过检查各个调度类的内存布局是否紧挨在一起来保证调度类的顺序正确性,如果链接器在编译时打乱了这些顺序，会触发内核 panic。
 #ifdef CONFIG_SMP
-	BUG_ON(&dl_sched_class != &stop_sched_class + 1);
+	BUG_ON(&dl_sched_class != &stop_sched_class + 1);//在多核系统中，确保停止调度类（stop_sched_class）紧跟在其他调度类之后，以保证在停止 CPU 时的调度逻辑。
 #endif
 
-	wait_bit_init();
+	wait_bit_init();//初始化等待位的相关机制,用于在调度中处理等待的任务
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
-	ptr += 2 * nr_cpu_ids * sizeof(void **);
+	ptr += 2 * nr_cpu_ids * sizeof(void **);//为公平组调度分配两个指针数组的大小，分别用于调度实体和 CFS 运行队列
 #endif
 #ifdef CONFIG_RT_GROUP_SCHED
-	ptr += 2 * nr_cpu_ids * sizeof(void **);
+	ptr += 2 * nr_cpu_ids * sizeof(void **);//为实时组调度分配两个指针数组的大小，分别用于实时调度实体和 RT 运行队列
 #endif
 	if (ptr) {
-		ptr = (unsigned long)kzalloc(ptr, GFP_NOWAIT);
+		ptr = (unsigned long)kzalloc(ptr, GFP_NOWAIT);//分配内存用于根任务组，确保调度实体和运行队列指针数组的初始化
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
-		root_task_group.se = (struct sched_entity **)ptr;
+		root_task_group.se = (struct sched_entity **)ptr;//设置根任务组的调度实体指针数组，为per_CPU 的调度实体进行初始化
 		ptr += nr_cpu_ids * sizeof(void **);
 
-		root_task_group.cfs_rq = (struct cfs_rq **)ptr;
+		root_task_group.cfs_rq = (struct cfs_rq **)ptr;//设置根任务组的 CFS 运行队列指针数组，初始化为per_CPU 的 CFS 运行队列
 		ptr += nr_cpu_ids * sizeof(void **);
 
-		root_task_group.shares = ROOT_TASK_GROUP_LOAD;
-		init_cfs_bandwidth(&root_task_group.cfs_bandwidth, NULL);
+		root_task_group.shares = ROOT_TASK_GROUP_LOAD;//设置根任务组的初始负载权重为1024，用于确定根任务组在系统中的调度优先级
+		init_cfs_bandwidth(&root_task_group.cfs_bandwidth, NULL);//初始化根任务组的 CFS 带宽限制，确保公平使用 CPU
 #endif /* CONFIG_FAIR_GROUP_SCHED */
 #ifdef CONFIG_RT_GROUP_SCHED
-		root_task_group.rt_se = (struct sched_rt_entity **)ptr;
+		root_task_group.rt_se = (struct sched_rt_entity **)ptr;//设置根任务组的实时调度实体指针数组，初始化per_CPU 的实时调度实体
 		ptr += nr_cpu_ids * sizeof(void **);
 
-		root_task_group.rt_rq = (struct rt_rq **)ptr;
+		root_task_group.rt_rq = (struct rt_rq **)ptr;//设置根任务组的 RT 运行队列指针数组，初始化为每个 CPU 的 RT 运行队列
 		ptr += nr_cpu_ids * sizeof(void **);
 
 #endif /* CONFIG_RT_GROUP_SCHED */
 	}
 
-	init_rt_bandwidth(&def_rt_bandwidth, global_rt_period(), global_rt_runtime());
+	init_rt_bandwidth(&def_rt_bandwidth, global_rt_period(), global_rt_runtime());//初始化默认的实时带宽，设置全局实时任务的时间片和运行时间限制
 
 #ifdef CONFIG_SMP
-	init_defrootdomain();
+	init_defrootdomain();//初始化默认的根域（root domain），用于管理多核系统中的负载均衡
 #endif
 
 #ifdef CONFIG_RT_GROUP_SCHED
 	init_rt_bandwidth(&root_task_group.rt_bandwidth,
-			global_rt_period(), global_rt_runtime());
+			global_rt_period(), global_rt_runtime());//初始化根任务组的实时带宽，确保其符合系统的实时调度需求
 #endif /* CONFIG_RT_GROUP_SCHED */
 
 #ifdef CONFIG_CGROUP_SCHED
-	task_group_cache = KMEM_CACHE(task_group, 0);
+	task_group_cache = KMEM_CACHE(task_group, 0);//创建任务组的内存缓存，用于高效地管理任务组对象的分配和释放
 
-	list_add(&root_task_group.list, &task_groups);
-	INIT_LIST_HEAD(&root_task_group.children);
-	INIT_LIST_HEAD(&root_task_group.siblings);
-	autogroup_init(&init_task);
+	list_add(&root_task_group.list, &task_groups);//将根任务组添加到任务组列表中，便于管理所有的任务组
+	INIT_LIST_HEAD(&root_task_group.children);//初始化根任务组的子任务组列表，表示当前没有子任务组
+	INIT_LIST_HEAD(&root_task_group.siblings);//初始化根任务组的兄弟任务组列表，表示当前没有兄弟任务组
+	autogroup_init(&init_task);//初始化自动任务组，将初始任务（init_task）添加到自动任务组中
 #endif /* CONFIG_CGROUP_SCHED */
-
-	for_each_possible_cpu(i) {
+	/*根任务组初始化完成，开始初始化每个cpu的rq调度队列*/
+	for_each_possible_cpu(i) {//遍历每个可能的 CPU，为其初始化运行队列（runqueue）
 		struct rq *rq;
 
-		rq = cpu_rq(i);
-		raw_spin_lock_init(&rq->__lock);
-		rq->nr_running = 0;
-		rq->calc_load_active = 0;
-		rq->calc_load_update = jiffies + LOAD_FREQ;
-		init_cfs_rq(&rq->cfs);
-		init_rt_rq(&rq->rt);
-		init_dl_rq(&rq->dl);
+		rq = cpu_rq(i);//获取当前 CPU 的运行队列指针
+		raw_spin_lock_init(&rq->__lock);//初始化运行队列的自旋锁，用于保护运行队列的数据结构
+		rq->nr_running = 0;//将运行中的任务数量初始化为 0，表示当前没有任务在运行
+		rq->calc_load_active = 0;//初始化负载计算的活动标志，用于负载均衡时的计算
+		rq->calc_load_update = jiffies + LOAD_FREQ;//初始化负载更新的时间，确保定期更新系统的负载信息
+		init_cfs_rq(&rq->cfs);// 初始化完全公平调度（CFS）的运行队列，用于调度普通任务
+		init_rt_rq(&rq->rt);//初始化实时调度（RT）的运行队列，用于调度实时任务
+		init_dl_rq(&rq->dl);//初始化最早截止时间优先（DL）的运行队列，用于调度实时任务
 #ifdef CONFIG_FAIR_GROUP_SCHED
-		INIT_LIST_HEAD(&rq->leaf_cfs_rq_list);
-		rq->tmp_alone_branch = &rq->leaf_cfs_rq_list;
+		INIT_LIST_HEAD(&rq->leaf_cfs_rq_list);//初始化叶子 CFS 运行队列列表，用于管理 CFS 组调度中的叶子节点
+		rq->tmp_alone_branch = &rq->leaf_cfs_rq_list;// 设置临时独立分支，指向叶子 CFS 运行队列列表
 		/*
 		 * How much CPU bandwidth does root_task_group get?
 		 *
@@ -10014,96 +10014,103 @@ void __init sched_init(void)
 		 * We achieve this by letting root_task_group's tasks sit
 		 * directly in rq->cfs (i.e root_task_group->se[] = NULL).
 		 */
-		init_tg_cfs_entry(&root_task_group, &rq->cfs, NULL, i, NULL);
+		init_tg_cfs_entry(&root_task_group, &rq->cfs, NULL, i, NULL);//初始化根任务组的 CFS 入口，将根任务组与当前 CPU 的 CFS 运行队列关联起来
 #endif /* CONFIG_FAIR_GROUP_SCHED */
 
-		rq->rt.rt_runtime = def_rt_bandwidth.rt_runtime;
+		rq->rt.rt_runtime = def_rt_bandwidth.rt_runtime;//设置运行队列的 RT 运行时间为默认实时带宽的运行时间
 #ifdef CONFIG_RT_GROUP_SCHED
-		init_tg_rt_entry(&root_task_group, &rq->rt, NULL, i, NULL);
+		init_tg_rt_entry(&root_task_group, &rq->rt, NULL, i, NULL);//初始化根任务组的RT入口，将根任务组与当前CPU的RT运行队列关联起来
 #endif
 #ifdef CONFIG_SMP
-		rq->sd = NULL;
-		rq->rd = NULL;
-		rq->cpu_capacity = SCHED_CAPACITY_SCALE;
-		rq->balance_callback = &balance_push_callback;
-		rq->active_balance = 0;
-		rq->next_balance = jiffies;
-		rq->push_cpu = 0;
-		rq->cpu = i;
-		rq->online = 0;
-		rq->idle_stamp = 0;
-		rq->avg_idle = 2*sysctl_sched_migration_cost;
-		rq->max_idle_balance_cost = sysctl_sched_migration_cost;
+		rq->sd = NULL;//初始化调度域（sched_domain）指针为空，稍后会在调度域初始化时设置
+		rq->rd = NULL;// 初始化根域（root domain）指针为空
+		rq->cpu_capacity = SCHED_CAPACITY_SCALE;//初始化 CPU 容量为调度容量的比例尺，表示该 CPU 的计算能力
+		rq->balance_callback = &balance_push_callback;//设置负载均衡的回调函数，用于在负载不均衡时推送任务
+		rq->active_balance = 0;//初始化活动负载均衡标志，表示当前没有进行负载均衡操作
+		rq->next_balance = jiffies;//初始化下次负载均衡的时间，确保定期进行负载均衡
+		rq->push_cpu = 0;//初始化推送 CPU 标志，表示当前没有任务被推送到其他 CPU
+		rq->cpu = i;//设置运行队列所属的 CPU 编号
+		rq->online = 0;//初始化 CPU 在线状态为 0，表示当前 CPU 未上线
+		rq->idle_stamp = 0;//初始化空闲时间戳，用于记录 CPU 进入空闲状态的时间
+		rq->avg_idle = 2*sysctl_sched_migration_cost;//初始化平均空闲时间，用于负载均衡时的空闲度计算
+		rq->max_idle_balance_cost = sysctl_sched_migration_cost;//初始化最大空闲负载均衡成本，用于限制负载均衡的频率
 
-		INIT_LIST_HEAD(&rq->cfs_tasks);
+		INIT_LIST_HEAD(&rq->cfs_tasks);//初始化 CFS 任务列表，用于管理当前 CPU 上的所有 CFS 任务
 
-		rq_attach_root(rq, &def_root_domain);
+		rq_attach_root(rq, &def_root_domain);//将运行队列附加到默认根域，确保该 CPU 的任务可以参与全局负载均衡
 #ifdef CONFIG_NO_HZ_COMMON
-		rq->last_blocked_load_update_tick = jiffies;
-		atomic_set(&rq->nohz_flags, 0);
+		rq->last_blocked_load_update_tick = jiffies;//设置最后一次被阻塞的负载更新时间为当前时间，用于在 nohz 模式下追踪上一次被阻塞的负载状态
+		atomic_set(&rq->nohz_flags, 0);//初始化 nohz 标志为 0，表示当前没有进入 nohz 空闲状态，即当前运行队列未被隔离
 
-		INIT_CSD(&rq->nohz_csd, nohz_csd_func, rq);
+		INIT_CSD(&rq->nohz_csd, nohz_csd_func, rq);//初始化 CSD（Call Single Data），用于在 NO_HZ 模式下调度处理特定的回调函数，用于处理延迟的任务执行
 #endif
 #ifdef CONFIG_HOTPLUG_CPU
-		rcuwait_init(&rq->hotplug_wait);
+		rcuwait_init(&rq->hotplug_wait);//初始化运行队列的热插拔等待机制，供 CPU 热插拔使用，确保 CPU 热插拔过程中的同步性
 #endif
 #endif /* CONFIG_SMP */
-		hrtick_rq_init(rq);
-		atomic_set(&rq->nr_iowait, 0);
+		hrtick_rq_init(rq);//初始化高分辨率定时器（hrtick），用于在需要时为运行队列提供精确的时间中断服务，确保调度器精确地控制任务运行时间
+		atomic_set(&rq->nr_iowait, 0);//初始化 I/O 等待任务数为 0，表示当前没有任务在等待 I/O 完成
 
 #ifdef CONFIG_SCHED_CORE
-		rq->core = rq;
-		rq->core_pick = NULL;
-		rq->core_enabled = 0;
-		rq->core_tree = RB_ROOT;
-		rq->core_forceidle_count = 0;
-		rq->core_forceidle_occupation = 0;
-		rq->core_forceidle_start = 0;
+		rq->core = rq;//初始化运行队列的核心指针为自身，表示此运行队列本身就是核心队列
+		rq->core_pick = NULL;//初始化核心任务选择指针为空，表示当前没有指定的核心任务用于调度选择
+		rq->core_enabled = 0;//初始化核心调度启用标志为 0，表示核心调度功能暂未启用
+		rq->core_tree = RB_ROOT;//初始化核心调度树为空红黑树的根节点，用于管理核心调度中的任务关系
+		rq->core_forceidle_count = 0;// 初始化核心强制空闲计数为 0，表示没有核心调度导致的强制空闲操作
+		rq->core_forceidle_occupation = 0;//初始化核心强制空闲占用时间为 0，表示目前没有核心任务强制占用 CPU 时间
+		rq->core_forceidle_start = 0;//初始化核心强制空闲的开始时间为 0，表示没有强制空闲的时间点被记录
 
-		rq->core_cookie = 0UL;
+		rq->core_cookie = 0UL;// 初始化核心调度的 cookie 值为 0，表示没有分配核心任务的特定标识符
 #endif
-		zalloc_cpumask_var_node(&rq->scratch_mask, GFP_KERNEL, cpu_to_node(i));
+		zalloc_cpumask_var_node(&rq->scratch_mask, GFP_KERNEL, cpu_to_node(i));//为运行队列分配 CPU 掩码变量 scratch_mask，并将其初始化为 0，用于后续调度计算时临时存储 CPU 的掩码信息
 	}
 
-	set_load_weight(&init_task, false);
+	set_load_weight(&init_task, false);//设置初始任务的负载权重，false 表示不考虑群组调度，初始化时默认负载权重为 1024，用于公平调度的权重计算
 
 	/*
 	 * The boot idle thread does lazy MMU switching as well:
+	 * 启动空闲线程执行惰性 MMU 切换：
+	 * 空闲任务在执行过程中不会频繁进行内存切换，因此使用惰性 TLB 切换可以减少内存管理的开销。
 	 */
-	mmgrab_lazy_tlb(&init_mm);
-	enter_lazy_tlb(&init_mm, current);
+	mmgrab_lazy_tlb(&init_mm);// 获取并保留初始化内存描述符 init_mm，用于后续的惰性 TLB 切换，防止被其他任务释放
+	enter_lazy_tlb(&init_mm, current);//进入惰性 TLB 切换模式，将当前任务与初始化内存描述符关联，以减少频繁的内存上下文切换
 
 	/*
 	 * The idle task doesn't need the kthread struct to function, but it
 	 * is dressed up as a per-CPU kthread and thus needs to play the part
 	 * if we want to avoid special-casing it in code that deals with per-CPU
 	 * kthreads.
+	 * 空闲任务虽然不需要 kthread 结构体即可运行，但其被标记为per_CPU kthread，
+	 * 因此需要为其设置 kthread 结构体，以避免在代码中对per_CPU 的 kthread进行特殊处理。
 	 */
-	WARN_ON(!set_kthread_struct(current));
+	WARN_ON(!set_kthread_struct(current));//为当前任务设置 kthread 结构体，如果设置失败则发出警告，确保空闲任务在内核线程框架下运行
 
 	/*
 	 * Make us the idle thread. Technically, schedule() should not be
 	 * called from this thread, however somewhere below it might be,
 	 * but because we are the idle thread, we just pick up running again
 	 * when this runqueue becomes "idle".
+	 * 将当前任务设为空闲线程。技术上讲，空闲线程不应调用 schedule()，但在某些情况
+	 * 下它可能会调用，并且由于是空闲线程，因此在运行队列空闲时重新获取执行。空闲
+	 * 线程的作用是当没有其他任务可以运行时保持 CPU 的空闲状态，并随时准备接受新的任务。
 	 */
-	init_idle(current, smp_processor_id());
+	init_idle(current, smp_processor_id());//初始化空闲任务，将当前任务标记为空闲线程，确保在没有其他可运行任务时正确进入空闲状态
 
-	calc_load_update = jiffies + LOAD_FREQ;
+	calc_load_update = jiffies + LOAD_FREQ;//设置系统负载计算的下一次更新时间为当前时间加上负载计算频率，定期更新系统的平均负载信息
 
 #ifdef CONFIG_SMP
-	idle_thread_set_boot_cpu();
-	balance_push_set(smp_processor_id(), false);
+	idle_thread_set_boot_cpu();//将引导 CPU 设为空闲线程所在的 CPU，确保引导 CPU 上正确运行空闲线程，避免系统空闲时出错
+	balance_push_set(smp_processor_id(), false);//禁用当前 CPU 的负载推送操作，防止任务被强制推送到其他 CPU 上
 #endif
-	init_sched_fair_class();
+	init_sched_fair_class();//初始化完全公平调度器（CFS）类，为系统中的所有普通任务提供公平的调度策略
 
-	psi_init();
+	psi_init();//初始化 PSI（Pressure Stall Information，压力跟踪）机制，用于监控系统资源的压力情况，例如 CPU、内存等的使用压力
 
-	init_uclamp();
+	init_uclamp();//初始化调度器的 Uclamp（Utilization clamping，利用率钳制）功能，用于控制任务的 CPU 利用率，保证系统资源的合理分配
 
-	preempt_dynamic_init();
+	preempt_dynamic_init();//初始化动态抢占设置，根据内核配置和运行环境决定是否启用动态抢占，以控制任务的抢占行为，提高系统响应能力
 
-	scheduler_running = 1;
+	scheduler_running = 1;//标记调度器已经启动，表示调度器已经可以正常工作，开始对系统中的任务进行调度
 }
 
 #ifdef CONFIG_DEBUG_ATOMIC_SLEEP

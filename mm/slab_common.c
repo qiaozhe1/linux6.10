@@ -606,7 +606,7 @@ EXPORT_SYMBOL_GPL(kmem_dump_obj);
 #endif
 
 /* Create a cache during boot when no slab services are available yet
- * 负责在内核启动时创建并初始化新的 kmem_cache
+ * 负责在内核启动时创建静态并初始化新的 kmem_cache
  */
 void __init create_boot_cache(struct kmem_cache *s, const char *name,
 		unsigned int size, slab_flags_t flags,

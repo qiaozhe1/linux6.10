@@ -648,11 +648,11 @@ static __always_inline bool cpumask_test_and_clear_cpu(int cpu, struct cpumask *
  */
 static inline void cpumask_setall(struct cpumask *dstp)
 {
-	if (small_const_nbits(small_cpumask_bits)) {
-		cpumask_bits(dstp)[0] = BITMAP_LAST_WORD_MASK(nr_cpumask_bits);
+	if (small_const_nbits(small_cpumask_bits)) {//如果 CPU 掩码位数是小常量
+		cpumask_bits(dstp)[0] = BITMAP_LAST_WORD_MASK(nr_cpumask_bits);//将位图的最后一个字设置为 1，表示有效的 CPU 位全部置为 1
 		return;
 	}
-	bitmap_fill(cpumask_bits(dstp), nr_cpumask_bits);
+	bitmap_fill(cpumask_bits(dstp), nr_cpumask_bits);//否则将整个位图填充为 1，表示所有 CPU 可用
 }
 
 /**
