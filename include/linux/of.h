@@ -46,24 +46,24 @@ struct of_irq_controller;
 #endif
 
 struct device_node {
-	const char *name;
-	phandle phandle;
-	const char *full_name;
-	struct fwnode_handle fwnode;
+	const char *name;//唯一标识设备节点，通常与设备树中的名称相匹配。
+	phandle phandle;//用于设备节点的引用，允许其他节点引用该节点。
+	const char *full_name;//提供设备节点的完整路径，便于调试和识别
+	struct fwnode_handle fwnode;//处理固件相关信息的句柄，支持设备的固件接口。
 
-	struct	property *properties;
-	struct	property *deadprops;	/* removed properties */
-	struct	device_node *parent;
-	struct	device_node *child;
-	struct	device_node *sibling;
+	struct	property *properties;//设备节点的属性链表，包含所有相关的配置和特性信息
+	struct	property *deadprops;//保存已删除属性的链表，有助于管理和清理资源
+	struct	device_node *parent;//指向父节点，建立层级结构，便于导航
+	struct	device_node *child;//指向子节点，表示当前节点的下级设备。
+	struct	device_node *sibling;//用于遍历同级节点，便于处理同一层级的多个设备。
 #if defined(CONFIG_OF_KOBJ)
-	struct	kobject kobj;
+	struct	kobject kobj;//内核对象，支持设备的管理和交互功能，允许在 sysfs 中暴露属性。
 #endif
-	unsigned long _flags;
-	void	*data;
+	unsigned long _flags;//存储节点状态的标志，用于管理设备的不同状态。
+	void	*data;//指向附加数据，允许驱动程序存储额外的上下文信息。
 #if defined(CONFIG_SPARC)
-	unsigned int unique_id;
-	struct of_irq_controller *irq_trans;
+	unsigned int unique_id;//唯一标识符，主要用于某些特定架构，便于识别不同设备。
+	struct of_irq_controller *irq_trans;//用于 IRQ 管理，特别是在某些架构中，支持中断控制和处理。
 #endif
 };
 

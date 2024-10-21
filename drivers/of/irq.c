@@ -550,113 +550,122 @@ struct of_intc_desc {
  */
 void __init of_irq_init(const struct of_device_id *matches)
 {
-	const struct of_device_id *match;
-	struct device_node *np, *parent = NULL;
-	struct of_intc_desc *desc, *temp_desc;
-	struct list_head intc_desc_list, intc_parent_list;
+	const struct of_device_id *match;//用于存储当前匹配的设备ID
+	struct device_node *np, *parent = NULL;//np 指向当前设备节点，parent指向父设备节点
+	struct of_intc_desc *desc, *temp_desc;//中断控制器描述符指针，用于描述中断控制器的信息
+	struct list_head intc_desc_list, intc_parent_list;//链表用于存储中断控制器描述符和父节点描述符
 
-	INIT_LIST_HEAD(&intc_desc_list);
-	INIT_LIST_HEAD(&intc_parent_list);
+	INIT_LIST_HEAD(&intc_desc_list);//初始化中断控制器描述符链表
+	INIT_LIST_HEAD(&intc_parent_list);//初始化父链表
 
-	for_each_matching_node_and_match(np, matches, &match) {
+	for_each_matching_node_and_match(np, matches, &match) {//遍历所有与提供的 matches 参数匹配的设备节点
 		if (!of_property_read_bool(np, "interrupt-controller") ||
-				!of_device_is_available(np))
-			continue;
+				!of_device_is_available(np))//检查当前设备节点是否是中断控制器，并且是否可用
+			continue;//如果不是中断控制器或者不可用，则跳过
 
 		if (WARN(!match->data, "of_irq_init: no init function for %s\n",
-			 match->compatible))
-			continue;
+			 match->compatible))//检查匹配项是否有对应的初始化函数，如果没有则发出警告
+			continue;//没有初始化函数则跳过
 
 		/*
 		 * Here, we allocate and populate an of_intc_desc with the node
 		 * pointer, interrupt-parent device_node etc.
+		 * 为当前设备节点分配一个 of_intc_desc 描述符，并初始化相关信息。
+		 *  kzalloc 会分配内存并清零。
 		 */
-		desc = kzalloc(sizeof(*desc), GFP_KERNEL);
-		if (!desc) {
-			of_node_put(np);
-			goto err;
+		desc = kzalloc(sizeof(*desc), GFP_KERNEL);//分配内存
+		if (!desc) {//如果内存分配失败
+			of_node_put(np);//释放当前设备节点引用
+			goto err;//跳转到错误处理
 		}
 
-		desc->irq_init_cb = match->data;
-		desc->dev = of_node_get(np);
+		desc->irq_init_cb = match->data;//设置初始化回调函数，来自匹配项(riscv_intc_init)
+		desc->dev = of_node_get(np);//获取当前设备节点的引用，增加引用计数
 		/*
 		 * interrupts-extended can reference multiple parent domains.
 		 * Arbitrarily pick the first one; assume any other parents
 		 * are the same distance away from the root irq controller.
+		 * 处理 "interrupts-extended" 属性，以获取可能的多个父节点。
+		 * 这里假设只取第一个父节点，假设其他父节点的结构与根中断控制器相同。
 		 */
-		desc->interrupt_parent = of_parse_phandle(np, "interrupts-extended", 0);
-		if (!desc->interrupt_parent)
-			desc->interrupt_parent = of_irq_find_parent(np);
-		if (desc->interrupt_parent == np) {
-			of_node_put(desc->interrupt_parent);
-			desc->interrupt_parent = NULL;
+		desc->interrupt_parent = of_parse_phandle(np, "interrupts-extended", 0);//尝试解析扩展中断
+		if (!desc->interrupt_parent)//如果没有找到父节点
+			desc->interrupt_parent = of_irq_find_parent(np);//查找直接父节点
+		if (desc->interrupt_parent == np) {//如果找到的父节点是当前节点，则说明没有有效的父节点
+			of_node_put(desc->interrupt_parent);//释放父节点引用
+			desc->interrupt_parent = NULL;//设置为NULL
 		}
-		list_add_tail(&desc->list, &intc_desc_list);
+		list_add_tail(&desc->list, &intc_desc_list);//将当前描述符添加到中断控制器描述符链表中.(在链表尾部添加描述符)
 	}
 
 	/*
 	 * The root irq controller is the one without an interrupt-parent.
 	 * That one goes first, followed by the controllers that reference it,
 	 * followed by the ones that reference the 2nd level controllers, etc.
+	 * 处理没有中断父节点的根中断控制器. 这个循环会处理所有中断控制器，
+	 * 优先处理根控制器及其子节点。
 	 */
 	while (!list_empty(&intc_desc_list)) {
 		/*
 		 * Process all controllers with the current 'parent'.
 		 * First pass will be looking for NULL as the parent.
 		 * The assumption is that NULL parent means a root controller.
+		 * 遍历当前链表中所有的中断控制器描述符。
+		 *  第一次遍历会寻找父节点为空的中断控制器。
 		 */
 		list_for_each_entry_safe(desc, temp_desc, &intc_desc_list, list) {
-			int ret;
+			int ret;//用于存储初始化回调的返回值
 
-			if (desc->interrupt_parent != parent)
-				continue;
+			if (desc->interrupt_parent != parent)//检查当前描述符的父节点是否与当前处理的父节点相同
+				continue;//如果不相同，则继续遍历下一个描述符
 
-			list_del(&desc->list);
+			list_del(&desc->list);//从链表中删除当前描述符
 
-			of_node_set_flag(desc->dev, OF_POPULATED);
+			of_node_set_flag(desc->dev, OF_POPULATED);//标记当前设备节点为已填充，表示已经被处理过
 
 			pr_debug("of_irq_init: init %pOF (%p), parent %p\n",
 				 desc->dev,
-				 desc->dev, desc->interrupt_parent);
+				 desc->dev, desc->interrupt_parent);//调试输出
 			ret = desc->irq_init_cb(desc->dev,
-						desc->interrupt_parent);
-			if (ret) {
+						desc->interrupt_parent);//调用中断初始化回调函数，传入设备节点和父节点
+			if (ret) {//如果初始化失败
 				pr_err("%s: Failed to init %pOF (%p), parent %p\n",
 				       __func__, desc->dev, desc->dev,
-				       desc->interrupt_parent);
-				of_node_clear_flag(desc->dev, OF_POPULATED);
-				kfree(desc);
-				continue;
+				       desc->interrupt_parent);//输出错误信息，说明初始化失败
+				of_node_clear_flag(desc->dev, OF_POPULATED);//清除填充标志
+				kfree(desc);//释放描述符内存
+				continue;//继续下一个描述符
 			}
 
 			/*
 			 * This one is now set up; add it to the parent list so
 			 * its children can get processed in a subsequent pass.
+			 * 当前描述符初始化成功，添加到父链表中，以便处理其子节点
 			 */
-			list_add_tail(&desc->list, &intc_parent_list);
+			list_add_tail(&desc->list, &intc_parent_list);//将描述符添加到父链表
 		}
 
 		/* Get the next pending parent that might have children */
 		desc = list_first_entry_or_null(&intc_parent_list,
-						typeof(*desc), list);
-		if (!desc) {
-			pr_err("of_irq_init: children remain, but no parents\n");
-			break;
+						typeof(*desc), list);//获取下一个可能有子节点的父节点
+		if (!desc) {//如果没有找到下一个父节点
+			pr_err("of_irq_init: children remain, but no parents\n");// 输出错误信息
+			break;//跳出循环
 		}
-		list_del(&desc->list);
-		parent = desc->dev;
-		kfree(desc);
+		list_del(&desc->list);//从父链表中删除该父节点
+		parent = desc->dev;//更新当前父节点
+		kfree(desc);//释放该父节点的描述符
 	}
 
-	list_for_each_entry_safe(desc, temp_desc, &intc_parent_list, list) {
-		list_del(&desc->list);
-		kfree(desc);
+	list_for_each_entry_safe(desc, temp_desc, &intc_parent_list, list) {//清理父链表中的所有描述符，释放内存
+		list_del(&desc->list);//从链表中删除描述符
+		kfree(desc);//释放描述符内存
 	}
 err:
-	list_for_each_entry_safe(desc, temp_desc, &intc_desc_list, list) {
-		list_del(&desc->list);
-		of_node_put(desc->dev);
-		kfree(desc);
+	list_for_each_entry_safe(desc, temp_desc, &intc_desc_list, list) {//错误处理部分：清理中断控制器描述符链表中的所有描述符
+		list_del(&desc->list);//从链表中删除描述符
+		of_node_put(desc->dev);//释放设备节点引用，减少引用计数
+		kfree(desc);//释放描述符内存
 	}
 }
 

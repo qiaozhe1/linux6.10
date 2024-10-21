@@ -28,8 +28,8 @@ extern struct of_device_id __irqchip_of_table[];
 
 void __init irqchip_init(void)
 {
-	of_irq_init(__irqchip_of_table);
-	acpi_probe_device_table(irqchip);
+	of_irq_init(__irqchip_of_table);//初始化设备树中的中断控制器
+	acpi_probe_device_table(irqchip);//根据 ACPI 设备表探测中断控制器设备
 }
 
 int platform_irqchip_probe(struct platform_device *pdev)

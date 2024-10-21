@@ -280,10 +280,10 @@ struct sdw_device_id {
  * Struct used for matching a device
  */
 struct of_device_id {
-	char	name[32];
-	char	type[32];
-	char	compatible[128];
-	const void *data;
+	char	name[32];//用于存储设备的名称，便于识别和管理。通常在设备树中与设备节点相对应。
+	char	type[32];//描述设备的类型，可以是具体的类别，如网络设备、存储设备等，这有助于在系统中进行分类和管理。
+	char	compatible[128];//这个字段是设备与驱动程序之间的关键桥梁，包含一个或多个字符串，指示设备与哪些驱动程序兼容。内核通过这个字段来匹配合适的驱动程序。
+	const void *data;//这是一个指向额外信息的指针，通常包含设备初始化所需的数据，比如驱动程序的回调函数或其他结构体
 };
 
 /* VIO */
