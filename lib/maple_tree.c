@@ -5012,25 +5012,27 @@ static inline void mas_awalk(struct ma_state *mas, unsigned long size)
 static inline int mas_sparse_area(struct ma_state *mas, unsigned long min,
 				unsigned long max, unsigned long size, bool fwd)
 {
-	if (!unlikely(mas_is_none(mas)) && min == 0) {
-		min++;
+	if (!unlikely(mas_is_none(mas)) && min == 0) {//如果mas不是 none 并且 min 为 0
+		min++;//增加 min 值，以确保从有效的索引位置开始查找
 		/*
 		 * At this time, min is increased, we need to recheck whether
 		 * the size is satisfied.
+		 * 由于 min 值增加了，因此需要重新检查是否满足 size 要求。
+		 * 主要是为了避免由于 min 增加导致的超出 max 范围或不足以分配指定大小的情况。
 		 */
 		if (min > max || max - min + 1 < size)
-			return -EBUSY;
+			return -EBUSY;// 如果无法找到足够的空间，返回 -EBUSY 表示资源繁忙或不可用
 	}
 	/* mas_is_ptr */
 
-	if (fwd) {
-		mas->index = min;
-		mas->last = min + size - 1;
-	} else {
-		mas->last = max;
-		mas->index = max - size + 1;
+	if (fwd) {//如果方向为前向查找
+		mas->index = min;//将 mas 的索引设为 min，即查找起始位置
+		mas->last = min + size - 1;//将 mas 的结束位置设为从 min 开始的 size 区域
+	} else {//如果方向为反向查找
+		mas->last = max;//将结束位置设为 max
+		mas->index = max - size + 1;//将索引设为从 max 往前推 size 的起始位置
 	}
-	return 0;
+	return 0;//返回 0 表示成功找到空闲区域
 }
 
 /*
@@ -5040,53 +5042,54 @@ static inline int mas_sparse_area(struct ma_state *mas, unsigned long min,
  * @min: The lowest value of the range
  * @max: The highest value of the range
  * @size: The size needed
+ * 用于在稀疏数据结构中查找一个足够大的空闲区域，以容纳请求的大小
  */
 int mas_empty_area(struct ma_state *mas, unsigned long min,
 		unsigned long max, unsigned long size)
 {
-	unsigned char offset;
-	unsigned long *pivots;
-	enum maple_type mt;
-	struct maple_node *node;
+	unsigned char offset;//偏移量，用于指示在当前节点中查找到的位置
+	unsigned long *pivots;//支点数组，用于保存节点中边界的信息，帮助定位有效区域
+	enum maple_type mt;//当前节点的类型，用于判断节点的结构和处理方式
+	struct maple_node *node;//当前正在操作的树节点
 
-	if (min > max)
+	if (min > max)//如果最小值大于最大值，说明输入的范围不合法，返回 -EINVAL 表示参数错误
 		return -EINVAL;
 
-	if (size == 0 || max - min < size - 1)
+	if (size == 0 || max - min < size - 1)//如果请求的区域大小为 0 或者 (max - min) 的范围不足以容纳指定的大小，返回 -EINVAL 表示参数错误
 		return -EINVAL;
 
-	if (mas_is_start(mas))
+	if (mas_is_start(mas))//如果 ma_state 的状态处于初始状态，则调用 mas_start 设置查找的起始点
 		mas_start(mas);
-	else if (mas->offset >= 2)
+	else if (mas->offset >= 2)//如果偏移量大于等于 2，则向前移动偏移量，以尝试继续查找
 		mas->offset -= 2;
-	else if (!mas_skip_node(mas))
+	else if (!mas_skip_node(mas))//如果无法跳过当前节点，则返回 -EBUSY，表示当前状态无法继续查找
 		return -EBUSY;
 
 	/* Empty set */
-	if (mas_is_none(mas) || mas_is_ptr(mas))
+	if (mas_is_none(mas) || mas_is_ptr(mas))//如果稀疏集合为空（mas_is_none）或指向指针（mas_is_ptr），则直接调用 mas_sparse_area 查找空闲区域
 		return mas_sparse_area(mas, min, max, size, true);
 
-	/* The start of the window can only be within these values */
+	/* 设置当前查找窗口的起始索引为最小值，结束索引为最大值 */
 	mas->index = min;
 	mas->last = max;
-	mas_awalk(mas, size);
+	mas_awalk(mas, size);//调用 mas_awalk 函数从起始位置开始查找，寻找符合要求的空闲区域大小
 
-	if (unlikely(mas_is_err(mas)))
+	if (unlikely(mas_is_err(mas)))//如果查找过程中遇到错误，使用 xa_err 返回错误代码
 		return xa_err(mas->node);
 
-	offset = mas->offset;
-	if (unlikely(offset == MAPLE_NODE_SLOTS))
+	offset = mas->offset;//获取当前查找到的偏移量
+	if (unlikely(offset == MAPLE_NODE_SLOTS))//如果偏移量等于节点槽位的最大值（即查找到节点末尾），说明没有找到合适的位置，返回 -EBUSY
 		return -EBUSY;
 
-	node = mas_mn(mas);
-	mt = mte_node_type(mas->node);
-	pivots = ma_pivots(node, mt);
-	min = mas_safe_min(mas, pivots, offset);
-	if (mas->index < min)
+	node = mas_mn(mas);//获取当前操作的节点指针
+	mt = mte_node_type(mas->node);//获取当前节点的类型，用于后续判断该节点的数据结构类型
+	pivots = ma_pivots(node, mt);//获取节点中的支点数组（即节点分割边界信息）
+	min = mas_safe_min(mas, pivots, offset);//根据节点支点和偏移量计算安全的最小值，以确保查找范围在支点之间
+	if (mas->index < min)//如果当前的索引值小于计算出来的安全最小值，更新索引为最小值
 		mas->index = min;
-	mas->last = mas->index + size - 1;
-	mas->end = ma_data_end(node, mt, pivots, mas->max);
-	return 0;
+	mas->last = mas->index + size - 1;//计算查找的结束位置，将其设置为从当前索引开始的 size 长度
+	mas->end = ma_data_end(node, mt, pivots, mas->max);//计算并设置数据结束位置，以便后续分配时使用
+	return 0;//返回 0 表示成功找到符合要求的空闲区域
 }
 EXPORT_SYMBOL_GPL(mas_empty_area);
 

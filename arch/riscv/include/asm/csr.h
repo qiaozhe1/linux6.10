@@ -73,19 +73,19 @@
 #define CAUSE_IRQ_FLAG		(_AC(1, UL) << (__riscv_xlen - 1))
 
 /* Interrupt causes (minus the high bit) */
-#define IRQ_S_SOFT		1
-#define IRQ_VS_SOFT		2
-#define IRQ_M_SOFT		3
-#define IRQ_S_TIMER		5
-#define IRQ_VS_TIMER		6
-#define IRQ_M_TIMER		7
-#define IRQ_S_EXT		9
-#define IRQ_VS_EXT		10
-#define IRQ_M_EXT		11
-#define IRQ_S_GEXT		12
-#define IRQ_PMU_OVF		13
-#define IRQ_LOCAL_MAX		(IRQ_PMU_OVF + 1)
-#define IRQ_LOCAL_MASK		GENMASK((IRQ_LOCAL_MAX - 1), 0)
+#define IRQ_S_SOFT		1	//S 特权级的软件中断
+#define IRQ_VS_SOFT		2	//VS 特权级的软件中断
+#define IRQ_M_SOFT		3	//M 特权级的软件中断
+#define IRQ_S_TIMER		5	//S 特权级的定时器中断
+#define IRQ_VS_TIMER		6	// VS 特权级的定时器中断
+#define IRQ_M_TIMER		7	//M 特权级的定时器中断
+#define IRQ_S_EXT		9	//S 特权级的外部中断
+#define IRQ_VS_EXT		10	//VS 特权级的外部中断
+#define IRQ_M_EXT		11	//M 特权级的外部中断
+#define IRQ_S_GEXT		12	//S 特权级的全局外部中断（GEXT 表示 global external）
+#define IRQ_PMU_OVF		13	//性能监控单元（PMU）溢出中断
+#define IRQ_LOCAL_MAX		(IRQ_PMU_OVF + 1)	//本地中断的最大数量
+#define IRQ_LOCAL_MASK		GENMASK((IRQ_LOCAL_MAX - 1), 0)	//本地中断的掩码，用于对中断进行屏蔽
 
 /* Exception causes */
 #define EXC_INST_MISALIGNED	0

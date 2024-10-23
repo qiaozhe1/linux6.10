@@ -534,11 +534,11 @@ int of_irq_to_resource_table(struct device_node *dev, struct resource *res,
 }
 EXPORT_SYMBOL_GPL(of_irq_to_resource_table);
 
-struct of_intc_desc {
-	struct list_head	list;
-	of_irq_init_cb_t	irq_init_cb;
-	struct device_node	*dev;
-	struct device_node	*interrupt_parent;
+struct of_intc_desc {//描述设备树中断控制器的结构体
+	struct list_head	list;//链表头，用于将多个中断控制器描述结构体连接在一起
+	of_irq_init_cb_t	irq_init_cb;// 中断初始化回调函数，用于对中断控制器进行初始化
+	struct device_node	*dev;//指向设备树节点的指针，表示中断控制器设备节点
+	struct device_node	*interrupt_parent;//指向中断父节点的指针，表示该中断控制器的上一级父中断控制器
 };
 
 /**

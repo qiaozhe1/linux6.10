@@ -148,33 +148,33 @@ struct irq_domain_chip_generic;
  * @revmap:		Linear table of irq_data pointers
  */
 struct irq_domain {
-	struct list_head		link;
-	const char			*name;
-	const struct irq_domain_ops	*ops;
-	void				*host_data;
-	unsigned int			flags;
-	unsigned int			mapcount;
-	struct mutex			mutex;
-	struct irq_domain		*root;
+	struct list_head		link;//链表头，用于将多个中断域连接在一起
+	const char			*name;//中断域的名称，用于标识该域
+	const struct irq_domain_ops	*ops;//指向中断域的操作函数集合，定义域的行为（如映射、取消映射等）
+	void				*host_data;//指向与中断域相关的主机数据，用于存储特定于中断控制器的信息
+	unsigned int			flags;//中断域的标志位，表示中断域的属性
+	unsigned int			mapcount;//记录当前映射的中断数
+	struct mutex			mutex;//用于保护中断域操作的互斥锁，确保并发安全
+	struct irq_domain		*root;//指向根中断域的指针，用于层次化管理中断域
 
 	/* Optional data */
-	struct fwnode_handle		*fwnode;
-	enum irq_domain_bus_token	bus_token;
-	struct irq_domain_chip_generic	*gc;
-	struct device			*dev;
-	struct device			*pm_dev;
+	struct fwnode_handle		*fwnode;//固件节点句柄，用于描述中断控制器在设备树或其他固件描述中的位置
+	enum irq_domain_bus_token	bus_token;//总线类型，用于指定中断域所属的总线类型
+	struct irq_domain_chip_generic	*gc;//指向通用中断芯片的数据结构，用于管理中断芯片特性
+	struct device			*dev;//与中断域关联的设备
+	struct device			*pm_dev;//与电源管理相关的设备
 #ifdef	CONFIG_IRQ_DOMAIN_HIERARCHY
-	struct irq_domain		*parent;
+	struct irq_domain		*parent;//父中断域指针，用于支持中断域层次结构
 #endif
 #ifdef CONFIG_GENERIC_MSI_IRQ
-	const struct msi_parent_ops	*msi_parent_ops;
+	const struct msi_parent_ops	*msi_parent_ops;//指向与中断消息信号（MSI）相关的父操作函数集合
 #endif
 
 	/* reverse map data. The linear map gets appended to the irq_domain */
-	irq_hw_number_t			hwirq_max;
-	unsigned int			revmap_size;
-	struct radix_tree_root		revmap_tree;
-	struct irq_data __rcu		*revmap[] __counted_by(revmap_size);
+	irq_hw_number_t			hwirq_max;//硬件中断号的最大值，表示硬件支持的中断号范围
+	unsigned int			revmap_size;//反向映射数据的大小
+	struct radix_tree_root		revmap_tree;//反向映射树，用于从逻辑中断号查找硬件中断号
+	struct irq_data __rcu		*revmap[] __counted_by(revmap_size);//反向映射数组，用于逻辑中断号到硬件中断号的映射
 };
 
 /* Irq domain flags */

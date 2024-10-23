@@ -123,13 +123,13 @@ static struct irq_chip andes_intc_chip = {
 static int riscv_intc_domain_map(struct irq_domain *d, unsigned int irq,
 				 irq_hw_number_t hwirq)
 {
-	struct irq_chip *chip = d->host_data;
+	struct irq_chip *chip = d->host_data;//获取与中断域关联的中断芯片数据
 
-	irq_set_percpu_devid(irq);
+	irq_set_percpu_devid(irq);//设置该中断为per_CPU 唯一的设备 ID，表示每个 CPU 都会有一个独立的中断处理
 	irq_domain_set_info(d, irq, hwirq, chip, NULL, handle_percpu_devid_irq,
-			    NULL, NULL);
+			    NULL, NULL);//设置中断描述符的相关信息，包括中断芯片、处理函数等
 
-	return 0;
+	return 0;//返回 0 表示映射成功
 }
 
 static int riscv_intc_domain_alloc(struct irq_domain *domain,
@@ -178,30 +178,30 @@ static int __init riscv_intc_init_common(struct fwnode_handle *fn, struct irq_ch
 {
 	int rc;
 
-	intc_domain = irq_domain_create_tree(fn, &riscv_intc_domain_ops, chip);
+	intc_domain = irq_domain_create_tree(fn, &riscv_intc_domain_ops, chip);//创建 IRQ 域（irq_domain）来管理中断号的映射，使用提供的设备节点句柄 `fn` 和中断处理集合 `chip`
 	if (!intc_domain) {
 		pr_err("unable to add IRQ domain\n");
-		return -ENXIO;
+		return -ENXIO;//返回错误代码 -ENXIO 表示没有这样的设备或地址
 	}
-
+	/*检查 RISC-V ISA 扩展是否支持 AIA（Advanced Interrupt Architecture）*/
 	if (riscv_isa_extension_available(NULL, SxAIA)) {
-		riscv_intc_nr_irqs = 64;
-		rc = set_handle_irq(&riscv_intc_aia_irq);
+		riscv_intc_nr_irqs = 64;//如果支持 AIA，则中断数量为 64
+		rc = set_handle_irq(&riscv_intc_aia_irq);// 设置 AIA 模式下的中断处理函数
 	} else {
-		rc = set_handle_irq(&riscv_intc_irq);
+		rc = set_handle_irq(&riscv_intc_irq);//否则，设置常规模式的中断处理函数
 	}
 	if (rc) {
-		pr_err("failed to set irq handler\n");
+		pr_err("failed to set irq handler\n");//如果设置中断处理程序失败，打印错误信息
 		return rc;
 	}
 
-	riscv_set_intc_hwnode_fn(riscv_intc_hwnode);
+	riscv_set_intc_hwnode_fn(riscv_intc_hwnode);//设置硬件中断节点的回调函数，用于指定 INTC 的硬件节点
 
 	pr_info("%d local interrupts mapped%s\n",
 		riscv_intc_nr_irqs,
-		riscv_isa_extension_available(NULL, SxAIA) ? " using AIA" : "");
+		riscv_isa_extension_available(NULL, SxAIA) ? " using AIA" : "");//打印中断映射的信息，包括是否使用 AIA
 	if (riscv_intc_custom_nr_irqs)
-		pr_info("%d custom local interrupts mapped\n", riscv_intc_custom_nr_irqs);
+		pr_info("%d custom local interrupts mapped\n", riscv_intc_custom_nr_irqs);//如果定义了自定义的本地中断数量，则打印自定义中断的映射信息
 
 	return 0;
 }
@@ -209,14 +209,14 @@ static int __init riscv_intc_init_common(struct fwnode_handle *fn, struct irq_ch
 static int __init riscv_intc_init(struct device_node *node,
 				  struct device_node *parent)
 {
-	struct irq_chip *chip = &riscv_intc_chip;
-	unsigned long hartid;
+	struct irq_chip *chip = &riscv_intc_chip;//初始化一个指向默认中断操作方法集合的指针
+	unsigned long hartid;//用于存储硬件线程 ID
 	int rc;
 
-	rc = riscv_of_parent_hartid(node, &hartid);
+	rc = riscv_of_parent_hartid(node, &hartid);//获取与设备节点 `node` 关联的硬件线程 ID（HART ID）
 	if (rc < 0) {
-		pr_warn("unable to find hart id for %pOF\n", node);
-		return 0;
+		pr_warn("unable to find hart id for %pOF\n", node);//如果无法找到 HART ID，输出警告信息
+		return 0;//返回 0 表示初始化未能继续
 	}
 
 	/*
@@ -224,25 +224,30 @@ static int __init riscv_intc_init(struct device_node *node,
 	 * DT node so riscv_intc_init() function will be called once
 	 * for each INTC DT node. We only need to do INTC initialization
 	 * for the INTC DT node belonging to boot CPU (or boot HART).
+	 * 设备树（DT）中，每个 CPU（HART）节点下会有一个 INTC（中断控制器）节点，
+	 *  因此 `riscv_intc_init()` 函数会为每个 INTC 节点调用一次.但我们只需要
+	 *  对属于引导 CPU（引导 HART）的 INTC 节点进行初始化
 	 */
-	if (riscv_hartid_to_cpuid(hartid) != smp_processor_id()) {
+	if (riscv_hartid_to_cpuid(hartid) != smp_processor_id()) {//通过 riscv_hartid_to_cpuid(hartid) 将 HART ID 转换为 CPU ID，并与当前处理器 ID (smp_processor_id()) 进行比较，如果两者不匹配，则表示该 INTC 节点不属于引导 CPU，不需要进一步初始化。
 		/*
 		 * The INTC nodes of each CPU are suppliers for downstream
 		 * interrupt controllers (such as PLIC, IMSIC and APLIC
 		 * direct-mode) so we should mark an INTC node as initialized
 		 * if we are not creating IRQ domain for it.
+		 * 每个 CPU 的 INTC 节点为下游的中断控制器（如 PLIC、IMSIC 和 APLIC direct-mode）提供中断信息，
+		 * 因此即使不为它创建 IRQ 域，也应该标记 INTC 节点为已初始化，以便其他中断控制器能够使用它。
 		 */
-		fwnode_dev_initialized(of_fwnode_handle(node), true);
-		return 0;
+		fwnode_dev_initialized(of_fwnode_handle(node), true);//标记此设备节点为已初始化
+		return 0;//返回 0，表示不需要进一步初始化
 	}
-
+	/*如果设备节点与 "andestech,cpu-intc" 兼容，则选择 Andes 特定的中断控制器芯片*/
 	if (of_device_is_compatible(node, "andestech,cpu-intc")) {
-		riscv_intc_custom_base = ANDES_SLI_CAUSE_BASE;
-		riscv_intc_custom_nr_irqs = ANDES_RV_IRQ_LAST;
-		chip = &andes_intc_chip;
+		riscv_intc_custom_base = ANDES_SLI_CAUSE_BASE;//设置 Andes 特定的中断原因寄存器基地址
+		riscv_intc_custom_nr_irqs = ANDES_RV_IRQ_LAST;//设置 Andes 特定的中断数量
+		chip = &andes_intc_chip;// 使用 Andes 特定的中断方法集合代替默认的RISC-V 中断方法集合
 	}
 
-	return riscv_intc_init_common(of_node_to_fwnode(node), chip);
+	return riscv_intc_init_common(of_node_to_fwnode(node), chip);//使用提供的中断chip调用 `riscv_intc_init_common()`，完成通用的中断控制器初始化
 }
 
 IRQCHIP_DECLARE(riscv, "riscv,cpu-intc", riscv_intc_init);

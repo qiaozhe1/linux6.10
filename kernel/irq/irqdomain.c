@@ -261,9 +261,9 @@ struct irq_domain *__irq_domain_add(struct fwnode_handle *fwnode, unsigned int s
 	struct irq_domain *domain;
 
 	domain = __irq_domain_create(fwnode, size, hwirq_max, direct_max,
-				     ops, host_data);
+				     ops, host_data);//创建一个中断域（irq_domain），指定固件节点、大小、中断号上限和域的操作函数
 	if (domain)
-		__irq_domain_publish(domain);
+		__irq_domain_publish(domain);//如果创建成功，发布该中断域，使其对其他部分可见
 
 	return domain;
 }
@@ -578,43 +578,45 @@ static void irq_domain_disassociate(struct irq_domain *domain, unsigned int irq)
 static int irq_domain_associate_locked(struct irq_domain *domain, unsigned int virq,
 				       irq_hw_number_t hwirq)
 {
-	struct irq_data *irq_data = irq_get_irq_data(virq);
+	struct irq_data *irq_data = irq_get_irq_data(virq);//获取与虚拟中断号 (virq) 关联的中断数据结构
 	int ret;
-
+	/*验证硬件中断号是否超出域的最大范围*/
 	if (WARN(hwirq >= domain->hwirq_max,
 		 "error: hwirq 0x%x is too large for %s\n", (int)hwirq, domain->name))
-		return -EINVAL;
+		return -EINVAL;//如果硬件中断号超出范围，返回 -EINVAL 表示无效参数
+	/*验证虚拟中断号是否已经被分配*/
 	if (WARN(!irq_data, "error: virq%i is not allocated", virq))
-		return -EINVAL;
+		return -EINVAL;//如果虚拟中断号未分配，返回 -EINVAL
+	/*检查虚拟中断号是否已经与其他中断域相关联*/
 	if (WARN(irq_data->domain, "error: virq%i is already associated", virq))
 		return -EINVAL;
 
-	irq_data->hwirq = hwirq;
-	irq_data->domain = domain;
-	if (domain->ops->map) {
-		ret = domain->ops->map(domain, virq, hwirq);
-		if (ret != 0) {
+	irq_data->hwirq = hwirq;//设置硬件中断号
+	irq_data->domain = domain;//设置中断域
+	if (domain->ops->map) {//如果中断域有映射操作函数，则调用它进行映射
+		ret = domain->ops->map(domain, virq, hwirq);//调用映射函数(riscv_intc_domain_map)，将虚拟中断号和硬件中断号映射
+		if (ret != 0) {//如果映射失败
 			/*
 			 * If map() returns -EPERM, this interrupt is protected
 			 * by the firmware or some other service and shall not
 			 * be mapped. Don't bother telling the user about it.
+			 * 如果映射函数返回 -EPERM，表示该中断受固件或其他服务保护，不需要报告给用户
 			 */
 			if (ret != -EPERM) {
 				pr_info("%s didn't like hwirq-0x%lx to VIRQ%i mapping (rc=%d)\n",
-				       domain->name, hwirq, virq, ret);
+				       domain->name, hwirq, virq, ret);//打印映射失败的相关信息
 			}
-			irq_data->domain = NULL;
-			irq_data->hwirq = 0;
-			return ret;
+			irq_data->domain = NULL;//映射失败，清除关联的中断域
+			irq_data->hwirq = 0;//清除关联的硬件中断号
+			return ret;//返回映射失败的错误码
 		}
 	}
 
-	domain->mapcount++;
-	irq_domain_set_mapping(domain, hwirq, irq_data);
+	domain->mapcount++;//增加中断域的映射计数
+	irq_domain_set_mapping(domain, hwirq, irq_data);//将虚拟中断号和硬件中断号的映射关系添加到中断域的映射表中
+	irq_clear_status_flags(virq, IRQ_NOREQUEST);//清除中断描述符中的 IRQ_NOREQUEST 标志，表示该中断可以请求使用
 
-	irq_clear_status_flags(virq, IRQ_NOREQUEST);
-
-	return 0;
+	return 0;// 返回 0 表示操作成功
 }
 
 int irq_domain_associate(struct irq_domain *domain, unsigned int virq,
@@ -692,28 +694,28 @@ static unsigned int irq_create_mapping_affinity_locked(struct irq_domain *domain
 						       irq_hw_number_t hwirq,
 						       const struct irq_affinity_desc *affinity)
 {
-	struct device_node *of_node = irq_domain_get_of_node(domain);
-	int virq;
+	struct device_node *of_node = irq_domain_get_of_node(domain);//获取中断域对应的设备节点
+	int virq;// 定义虚拟 IRQ 号
 
-	pr_debug("irq_create_mapping(0x%p, 0x%lx)\n", domain, hwirq);
+	pr_debug("irq_create_mapping(0x%p, 0x%lx)\n", domain, hwirq);//打印调试信息，显示尝试创建映射的中断域和硬件中断号
 
 	/* Allocate a virtual interrupt number */
 	virq = irq_domain_alloc_descs(-1, 1, hwirq, of_node_to_nid(of_node),
-				      affinity);
-	if (virq <= 0) {
+				      affinity);//分配虚拟中断号（virq）
+	if (virq <= 0) {//如果分配失败，打印调试信息并返回 0
 		pr_debug("-> virq allocation failed\n");
 		return 0;
 	}
 
-	if (irq_domain_associate_locked(domain, virq, hwirq)) {
-		irq_free_desc(virq);
+	if (irq_domain_associate_locked(domain, virq, hwirq)) {//将虚拟中断号与中断域和硬件中断号关联起来
+		irq_free_desc(virq);// 如果关联失败，释放虚拟中断描述符
 		return 0;
 	}
 
 	pr_debug("irq %lu on domain %s mapped to virtual irq %u\n",
-		hwirq, of_node_full_name(of_node), virq);
+		hwirq, of_node_full_name(of_node), virq);//打印调试信息，显示成功映射的硬件中断号、域名和虚拟中断号
 
-	return virq;
+	return virq;//返回分配的虚拟中断号
 }
 
 /**
@@ -731,30 +733,30 @@ unsigned int irq_create_mapping_affinity(struct irq_domain *domain,
 					 irq_hw_number_t hwirq,
 					 const struct irq_affinity_desc *affinity)
 {
-	int virq;
+	int virq;//定义变量 virq，用于存储虚拟中断号
 
 	/* Look for default domain if necessary */
-	if (domain == NULL)
+	if (domain == NULL)//如果未指定中断域，则使用默认的中断域
 		domain = irq_default_domain;
-	if (domain == NULL) {
+	if (domain == NULL) {//如果依然没有找到有效的中断域，触发警告并返回 0
 		WARN(1, "%s(, %lx) called with NULL domain\n", __func__, hwirq);
 		return 0;
 	}
 
-	mutex_lock(&domain->root->mutex);
+	mutex_lock(&domain->root->mutex);//加锁，保护中断域的根节点结构体，防止并发访问
 
 	/* Check if mapping already exists */
-	virq = irq_find_mapping(domain, hwirq);
+	virq = irq_find_mapping(domain, hwirq);// 检查是否已经存在与该硬件中断号对应的虚拟中断映射
 	if (virq) {
 		pr_debug("existing mapping on virq %d\n", virq);
-		goto out;
+		goto out;//如果映射已经存在，直接跳到解锁部分并返回
 	}
 
-	virq = irq_create_mapping_affinity_locked(domain, hwirq, affinity);
+	virq = irq_create_mapping_affinity_locked(domain, hwirq, affinity);//创建与硬件中断号的映射，使用提供的亲和性信息
 out:
-	mutex_unlock(&domain->root->mutex);
+	mutex_unlock(&domain->root->mutex);//解锁中断域的根节点结构体
 
-	return virq;
+	return virq;//返回虚拟中断号
 }
 EXPORT_SYMBOL_GPL(irq_create_mapping_affinity);
 
@@ -936,6 +938,7 @@ EXPORT_SYMBOL_GPL(irq_dispose_mapping);
  * @irq: optional pointer to return the Linux irq if required
  *
  * Returns the interrupt descriptor.
+ * 用于从中断域（irq_domain）和硬件中断号（hwirq）获取对应的中断描述符（irq_desc）。
  */
 struct irq_desc *__irq_resolve_mapping(struct irq_domain *domain,
 				       irq_hw_number_t hwirq,
@@ -945,37 +948,37 @@ struct irq_desc *__irq_resolve_mapping(struct irq_domain *domain,
 	struct irq_data *data;
 
 	/* Look for default domain if necessary */
-	if (domain == NULL)
+	if (domain == NULL)//如果没有提供中断域，使用默认的中断域
 		domain = irq_default_domain;
 	if (domain == NULL)
-		return desc;
+		return desc;//如果仍没有有效的中断域，直接返回 NULL
 
-	if (irq_domain_is_nomap(domain)) {
-		if (hwirq < domain->hwirq_max) {
-			data = irq_domain_get_irq_data(domain, hwirq);
-			if (data && data->hwirq == hwirq)
-				desc = irq_data_to_desc(data);
-			if (irq && desc)
-				*irq = hwirq;
+	if (irq_domain_is_nomap(domain)) {//如果中断域是 nomap 类型（不映射），则直接查找 hwirq 是否在域的最大范围内
+		if (hwirq < domain->hwirq_max) {// 检查硬件中断号是否小于中断域的最大值
+			data = irq_domain_get_irq_data(domain, hwirq);// 获取与硬件中断号对应的 IRQ 数据
+			if (data && data->hwirq == hwirq)// 确保获取的数据有效并且匹配
+				desc = irq_data_to_desc(data);//将 IRQ 数据转换为 IRQ 描述符
+			if (irq && desc)//如果传入了 irq 指针且找到描述符
+				*irq = hwirq;//将硬件中断号赋值给 irq
 		}
 
-		return desc;
+		return desc;//返回中断描述符（可能是 NULL）
 	}
 
-	rcu_read_lock();
+	rcu_read_lock();//获取 RCU 读锁，以确保在并发访问中安全地读取 revmap 数据
 	/* Check if the hwirq is in the linear revmap. */
-	if (hwirq < domain->revmap_size)
-		data = rcu_dereference(domain->revmap[hwirq]);
+	if (hwirq < domain->revmap_size)//检查 hwirq 是否在线性 revmap 中
+		data = rcu_dereference(domain->revmap[hwirq]);//使用 RCU 获取 revmap 中的 IRQ 数据
 	else
-		data = radix_tree_lookup(&domain->revmap_tree, hwirq);
+		data = radix_tree_lookup(&domain->revmap_tree, hwirq);//如果不在线性 revmap 中，则在 radix 树中查找
 
-	if (likely(data)) {
-		desc = irq_data_to_desc(data);
-		if (irq)
-			*irq = data->irq;
+	if (likely(data)) {//如果成功找到了 IRQ 数据，则获取中断描述符
+		desc = irq_data_to_desc(data);// 将 IRQ 数据转换为中断描述符
+		if (irq)//如果传入了 irq 指针
+			*irq = data->irq;//将对应的虚拟 IRQ 号赋值给 irq
 	}
 
-	rcu_read_unlock();
+	rcu_read_unlock();//释放 RCU 读锁
 	return desc;
 }
 EXPORT_SYMBOL_GPL(__irq_resolve_mapping);
@@ -1089,24 +1092,24 @@ EXPORT_SYMBOL_GPL(irq_domain_translate_twocell);
 int irq_domain_alloc_descs(int virq, unsigned int cnt, irq_hw_number_t hwirq,
 			   int node, const struct irq_affinity_desc *affinity)
 {
-	unsigned int hint;
+	unsigned int hint;// 定义用于选择虚拟中断号的提示值
 
-	if (virq >= 0) {
+	if (virq >= 0) {//如果指定了虚拟中断号，则直接尝试从给定的虚拟中断号开始分配
 		virq = __irq_alloc_descs(virq, virq, cnt, node, THIS_MODULE,
 					 affinity);
-	} else {
-		hint = hwirq % nr_irqs;
-		if (hint == 0)
+	} else {//如果未指定虚拟中断号，根据硬件中断号计算提示值
+		hint = hwirq % nr_irqs;//使用硬件中断号对系统支持的最大中断数取模来计算提示值
+		if (hint == 0)//如果提示值为 0，将其设置为 1，避免分配到无效的中断号
 			hint++;
 		virq = __irq_alloc_descs(-1, hint, cnt, node, THIS_MODULE,
-					 affinity);
-		if (virq <= 0 && hint > 1) {
+					 affinity);//从计算出的提示值开始尝试分配虚拟中断号
+		if (virq <= 0 && hint > 1) {//如果分配失败并且提示值大于 1，则从 1 开始再次尝试分配
 			virq = __irq_alloc_descs(-1, 1, cnt, node, THIS_MODULE,
 						 affinity);
 		}
 	}
 
-	return virq;
+	return virq;//返回分配到的虚拟中断号，或者失败的标志（<=0）
 }
 
 /**
@@ -1400,9 +1403,9 @@ void irq_domain_set_info(struct irq_domain *domain, unsigned int virq,
 			 void *chip_data, irq_flow_handler_t handler,
 			 void *handler_data, const char *handler_name)
 {
-	irq_domain_set_hwirq_and_chip(domain, virq, hwirq, chip, chip_data);
-	__irq_set_handler(virq, handler, 0, handler_name);
-	irq_set_handler_data(virq, handler_data);
+	irq_domain_set_hwirq_and_chip(domain, virq, hwirq, chip, chip_data);//设置中断描述符中的硬件中断号和中断芯片相关信息
+	__irq_set_handler(virq, handler, 0, handler_name);//设置中断的处理函数和处理函数的名称
+	irq_set_handler_data(virq, handler_data);//设置处理函数的相关数据，供处理函数在处理中使用
 }
 EXPORT_SYMBOL(irq_domain_set_info);
 

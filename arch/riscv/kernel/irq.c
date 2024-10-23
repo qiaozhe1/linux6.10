@@ -63,7 +63,7 @@ static void init_irq_stacks(void)
 
 	for_each_possible_cpu(cpu) {//遍历系统中所有可能的 CPU
 		p = arch_alloc_vmap_stack(IRQ_STACK_SIZE, cpu_to_node(cpu));//为当前 CPU 分配 IRQ 堆栈，使用 CPU 所在的 NUMA 节点
-		per_cpu(irq_stack_ptr, cpu) = p;//将分配的堆栈指针存储到每个 CPU 的局部变量中
+		per_cpu(irq_stack_ptr, cpu) = p;//将分配的堆栈指针存储到每个CPU的局部变量中
 	}
 }
 #else

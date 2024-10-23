@@ -150,11 +150,11 @@ static struct maple_tree sparse_irqs = MTREE_INIT_EXT(sparse_irqs,
 
 static int irq_find_free_area(unsigned int from, unsigned int cnt)
 {
-	MA_STATE(mas, &sparse_irqs, 0, 0);
+	MA_STATE(mas, &sparse_irqs, 0, 0);//定义并初始化区间状态对象，用于操作稀疏IRQ集合
 
-	if (mas_empty_area(&mas, from, MAX_SPARSE_IRQS, cnt))
-		return -ENOSPC;
-	return mas.index;
+	if (mas_empty_area(&mas, from, MAX_SPARSE_IRQS, cnt))//尝试在稀疏 IRQ 集合中查找从 'from' 开始的空闲区域，要求长度为 'cnt
+		return -ENOSPC;//如果找不到满足要求的区域，返回 -ENOSPC，表示没有空间
+	return mas.index;// 返回找到的空闲区域的起始索引
 }
 
 static unsigned int irq_find_at_or_after(unsigned int offset)
@@ -510,44 +510,44 @@ static int alloc_descs(unsigned int start, unsigned int cnt, int node,
 		       const struct irq_affinity_desc *affinity,
 		       struct module *owner)
 {
-	struct irq_desc *desc;
+	struct irq_desc *desc;//定义中断描述符指针，用于存储分配的中断描述符
 	int i;
 
 	/* Validate affinity mask(s) */
-	if (affinity) {
-		for (i = 0; i < cnt; i++) {
-			if (cpumask_empty(&affinity[i].mask))
-				return -EINVAL;
+	if (affinity) {//如果传入了中断亲和性描述
+		for (i = 0; i < cnt; i++) {//遍历每一个需要分配的中断
+			if (cpumask_empty(&affinity[i].mask))//检查亲和性掩码是否为空，即是否没有指定任何CPU
+				return -EINVAL;//如果掩码为空，返回 -EINVAL 表示无效参数，无法分配中断
 		}
 	}
+	/*开始逐个分配中断描述符*/
+	for (i = 0; i < cnt; i++) {//遍历需要分配的中断数量
+		const struct cpumask *mask = NULL;//定义中断亲和性掩码指针，初始为空
+		unsigned int flags = 0;//定义中断标志，初始为 0，表示没有特殊标志
 
-	for (i = 0; i < cnt; i++) {
-		const struct cpumask *mask = NULL;
-		unsigned int flags = 0;
-
-		if (affinity) {
-			if (affinity->is_managed) {
+		if (affinity) {//如果有指定的中断亲和性描述
+			if (affinity->is_managed) {//如果中断是托管的（表示中断由系统管理）
 				flags = IRQD_AFFINITY_MANAGED |
-					IRQD_MANAGED_SHUTDOWN;
+					IRQD_MANAGED_SHUTDOWN;// 设置中断标志，IRQD_AFFINITY_MANAGED - 表示该中断是托管中断，由系统负责管理其亲和性。IRQD_MANAGED_SHUTDOWN - 表示该中断在系统关机时需要特殊处理。
 			}
-			mask = &affinity->mask;
-			node = cpu_to_node(cpumask_first(mask));
-			affinity++;
+			mask = &affinity->mask;//设置亲和性掩码为当前中断的亲和性掩码
+			node = cpu_to_node(cpumask_first(mask));// 获取掩码中第一个 CPU 所属的 NUMA 节点，确保中断在正确的节点上分配
+			affinity++;//移动到下一个亲和性描述，用于下一次循环
 		}
 
-		desc = alloc_desc(start + i, node, flags, mask, owner);
-		if (!desc)
+		desc = alloc_desc(start + i, node, flags, mask, owner);//分配中断描述符，并指定相关的属性（如 NUMA 节点、标志、亲和性等）
+		if (!desc)//如果分配失败，跳转到错误处理部分
 			goto err;
-		irq_insert_desc(start + i, desc);
-		irq_sysfs_add(start + i, desc);
-		irq_add_debugfs_entry(start + i, desc);
+		irq_insert_desc(start + i, desc);//将分配的中断描述符插入到中断描述符数组中，以便系统管理和使用
+		irq_sysfs_add(start + i, desc);//将中断信息添加到 sysfs 文件系统中，使用户空间程序可以访问和查看中断的信息
+		irq_add_debugfs_entry(start + i, desc);//将中断信息添加到 debugfs 文件系统中，以便内核开发人员进行调试和分析
 	}
-	return start;
+	return start;//返回成功分配的起始中断号，表示操作成功
 
 err:
-	for (i--; i >= 0; i--)
+	for (i--; i >= 0; i--)//如果在分配过程中出现错误，释放已经成功分配的中断描述符，防止资源泄漏
 		free_desc(start + i);
-	return -ENOMEM;
+	return -ENOMEM;// 返回-ENOMEM表示内存不足，无法完成所有中断的分配
 }
 
 static int irq_expand_nr_irqs(unsigned int nr)
@@ -829,40 +829,40 @@ int __ref
 __irq_alloc_descs(int irq, unsigned int from, unsigned int cnt, int node,
 		  struct module *owner, const struct irq_affinity_desc *affinity)
 {
-	int start, ret;
+	int start, ret;//定义开始分配的位置和返回值
 
-	if (!cnt)
+	if (!cnt)//如果需要分配的中断数量为 0，返回无效参数错误
 		return -EINVAL;
 
-	if (irq >= 0) {
-		if (from > irq)
+	if (irq >= 0) {//如果指定了 irq，则检查起始位置是否合理，并将 from 更新为指定的 irq
+		if (from > irq)//如果指定的起始位置大于 irq，返回无效参数错误
 			return -EINVAL;
-		from = irq;
+		from = irq;//如果指定了有效的 irq，将 from 设置为指定的 irq
 	} else {
 		/*
 		 * For interrupts which are freely allocated the
 		 * architecture can force a lower bound to the @from
 		 * argument. x86 uses this to exclude the GSI space.
 		 */
-		from = arch_dynirq_lower_bound(from);
+		from = arch_dynirq_lower_bound(from);//如果没有指定具体的irq，使用体系结构提供的下限进行限制
 	}
 
-	mutex_lock(&sparse_irq_lock);
+	mutex_lock(&sparse_irq_lock);//加锁，防止其他线程并发修改稀疏 IRQ 表
 
-	start = irq_find_free_area(from, cnt);
-	ret = -EEXIST;
-	if (irq >=0 && start != irq)
+	start = irq_find_free_area(from, cnt);//查找从指定位置开始的空闲中断描述符区域
+	ret = -EEXIST;//初始化返回值，表示区域不可用
+	if (irq >=0 && start != irq)//如果指定了 irq，但找到的空闲位置不等于 irq，解锁并返回
 		goto unlock;
 
-	if (start + cnt > nr_irqs) {
+	if (start + cnt > nr_irqs) {//如果分配的区域超出了系统支持的中断数，则尝试扩展中断数量
 		ret = irq_expand_nr_irqs(start + cnt);
-		if (ret)
+		if (ret)// 如果扩展失败，解锁并返回错误
 			goto unlock;
 	}
-	ret = alloc_descs(start, cnt, node, affinity, owner);
+	ret = alloc_descs(start, cnt, node, affinity, owner);//分配中断描述符
 unlock:
-	mutex_unlock(&sparse_irq_lock);
-	return ret;
+	mutex_unlock(&sparse_irq_lock);//解锁，释放对稀疏 IRQ 表的控制
+	return ret;//返回分配的起始位置或者错误代码
 }
 EXPORT_SYMBOL_GPL(__irq_alloc_descs);
 
@@ -912,20 +912,20 @@ void __irq_put_desc_unlock(struct irq_desc *desc, unsigned long flags, bool bus)
 int irq_set_percpu_devid_partition(unsigned int irq,
 				   const struct cpumask *affinity)
 {
-	struct irq_desc *desc = irq_to_desc(irq);
+	struct irq_desc *desc = irq_to_desc(irq);//获取虚拟中断号对应的中断描述符
 
-	if (!desc || desc->percpu_enabled)
-		return -EINVAL;
+	if (!desc || desc->percpu_enabled)// 检查中断描述符是否存在以及是否已经启用了per_CPU的中断ID
+		return -EINVAL;//如果中断描述符无效或已经启用了per_CPU ID，返回 -EINVAL 表示无效参数
 
-	desc->percpu_enabled = kzalloc(sizeof(*desc->percpu_enabled), GFP_KERNEL);
+	desc->percpu_enabled = kzalloc(sizeof(*desc->percpu_enabled), GFP_KERNEL);//为 percpu_enabled 分配内存，用于标记每个 CPU 是否启用该中断
 
-	if (!desc->percpu_enabled)
+	if (!desc->percpu_enabled)//如果内存分配失败，返回 -ENOMEM 表示内存不足
 		return -ENOMEM;
 
-	desc->percpu_affinity = affinity ? : cpu_possible_mask;
+	desc->percpu_affinity = affinity ? : cpu_possible_mask;//设置每 CPU 的中断亲和性掩码，如果未指定亲和性，则默认为所有可能的 CPU
 
-	irq_set_percpu_devid_flags(irq);
-	return 0;
+	irq_set_percpu_devid_flags(irq);//设置中断描述符的标志，表示该中断为每 CPU 唯一的设备 ID
+	return 0;//返回 0 表示成功设置每 CPU 的中断 ID
 }
 
 int irq_set_percpu_devid(unsigned int irq)
