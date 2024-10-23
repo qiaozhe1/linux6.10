@@ -1095,42 +1095,42 @@ irq_set_chip_and_handler_name(unsigned int irq, const struct irq_chip *chip,
 }
 EXPORT_SYMBOL_GPL(irq_set_chip_and_handler_name);
 
-void irq_modify_status(unsigned int irq, unsigned long clr, unsigned long set)
+void irq_modify_status(unsigned int irq, unsigned long clr, unsigned long set)//用于修改指定中断的状态标志。
 {
-	unsigned long flags, trigger, tmp;
-	struct irq_desc *desc = irq_get_desc_lock(irq, &flags, 0);
+	unsigned long flags, trigger, tmp;//定义用于存储标志位、中断触发类型以及临时变量的变量
+	struct irq_desc *desc = irq_get_desc_lock(irq, &flags, 0);//获取中断描述符，并锁定该描述符以防止并发修改
 
-	if (!desc)
-		return;
+	if (!desc)//检查中断描述符是否存在
+		return;//如果中断描述符不存在，直接返回，表示无法修改状态
 
 	/*
 	 * Warn when a driver sets the no autoenable flag on an already
 	 * active interrupt.
 	 */
-	WARN_ON_ONCE(!desc->depth && (set & _IRQ_NOAUTOEN));
+	WARN_ON_ONCE(!desc->depth && (set & _IRQ_NOAUTOEN));//如果中断已经激活且试图设置 _IRQ_NOAUTOEN 标志，发出警告
 
-	irq_settings_clr_and_set(desc, clr, set);
+	irq_settings_clr_and_set(desc, clr, set);//清除并设置中断描述符中的指定状态标志
 
-	trigger = irqd_get_trigger_type(&desc->irq_data);
+	trigger = irqd_get_trigger_type(&desc->irq_data);// 获取当前中断触发类型（例如电平触发或边沿触发）
 
 	irqd_clear(&desc->irq_data, IRQD_NO_BALANCING | IRQD_PER_CPU |
-		   IRQD_TRIGGER_MASK | IRQD_LEVEL | IRQD_MOVE_PCNTXT);
-	if (irq_settings_has_no_balance_set(desc))
-		irqd_set(&desc->irq_data, IRQD_NO_BALANCING);
-	if (irq_settings_is_per_cpu(desc))
-		irqd_set(&desc->irq_data, IRQD_PER_CPU);
-	if (irq_settings_can_move_pcntxt(desc))
-		irqd_set(&desc->irq_data, IRQD_MOVE_PCNTXT);
-	if (irq_settings_is_level(desc))
-		irqd_set(&desc->irq_data, IRQD_LEVEL);
+		   IRQD_TRIGGER_MASK | IRQD_LEVEL | IRQD_MOVE_PCNTXT);//清除中断数据结构中的特定标志，例如负载均衡、每 CPU 标志等
+	if (irq_settings_has_no_balance_set(desc))//如果中断描述符中设置了不进行负载均衡的标志
+		irqd_set(&desc->irq_data, IRQD_NO_BALANCING);//设置不进行负载均衡的标志，表示该中断不应在不同 CPU 之间迁移
+	if (irq_settings_is_per_cpu(desc))//如果中断描述符中设置了每 CPU 独立处理的标志
+		irqd_set(&desc->irq_data, IRQD_PER_CPU);//设置为每 CPU 独立中断的标志，表示每个 CPU 都有独立的中断处理
+	if (irq_settings_can_move_pcntxt(desc))//如果中断描述符中允许移动上下文处理
+		irqd_set(&desc->irq_data, IRQD_MOVE_PCNTXT);//设置中断可以移动上下文的标志，表示可以在不同的上下文中处理该中断
+	if (irq_settings_is_level(desc))//如果中断描述符中设置了电平触发模式
+		irqd_set(&desc->irq_data, IRQD_LEVEL);//设置中断为电平触发模式的标志，表示中断通过电平信号触发
 
-	tmp = irq_settings_get_trigger_mask(desc);
-	if (tmp != IRQ_TYPE_NONE)
-		trigger = tmp;
+	tmp = irq_settings_get_trigger_mask(desc);//获取当前中断的触发掩码
+	if (tmp != IRQ_TYPE_NONE)//如果掩码不为 "无类型"，则更新触发类型
+		trigger = tmp;//使用获取到的触发掩码覆盖默认的触发类型
 
-	irqd_set(&desc->irq_data, trigger);
+	irqd_set(&desc->irq_data, trigger);//将最终的触发类型设置到中断数据结构中，确保中断的触发模式正确无误
 
-	irq_put_desc_unlock(desc, flags);
+	irq_put_desc_unlock(desc, flags);//解锁中断描述符并恢复标志位，确保其他线程可以安全地访问该中断描述符
 }
 EXPORT_SYMBOL_GPL(irq_modify_status);
 

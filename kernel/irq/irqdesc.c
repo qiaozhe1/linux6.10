@@ -917,7 +917,7 @@ int irq_set_percpu_devid_partition(unsigned int irq,
 	if (!desc || desc->percpu_enabled)// 检查中断描述符是否存在以及是否已经启用了per_CPU的中断ID
 		return -EINVAL;//如果中断描述符无效或已经启用了per_CPU ID，返回 -EINVAL 表示无效参数
 
-	desc->percpu_enabled = kzalloc(sizeof(*desc->percpu_enabled), GFP_KERNEL);//为 percpu_enabled 分配内存，用于标记每个 CPU 是否启用该中断
+	desc->percpu_enabled = kzalloc(sizeof(*desc->percpu_enabled), GFP_KERNEL);//为percpu_enabled分配内存，用于标记每个CPU是否启用该中断
 
 	if (!desc->percpu_enabled)//如果内存分配失败，返回 -ENOMEM 表示内存不足
 		return -ENOMEM;

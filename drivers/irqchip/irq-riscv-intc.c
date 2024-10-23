@@ -127,7 +127,7 @@ static int riscv_intc_domain_map(struct irq_domain *d, unsigned int irq,
 
 	irq_set_percpu_devid(irq);//设置该中断为per_CPU 唯一的设备 ID，表示每个 CPU 都会有一个独立的中断处理
 	irq_domain_set_info(d, irq, hwirq, chip, NULL, handle_percpu_devid_irq,
-			    NULL, NULL);//设置中断描述符的相关信息，包括中断芯片、处理函数等
+			    NULL, NULL);//设置中断的处理函数为 handle_percpu_devid_irq，以及关联的中断芯片信息
 
 	return 0;//返回 0 表示映射成功
 }
