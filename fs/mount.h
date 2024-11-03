@@ -30,51 +30,51 @@ struct mountpoint {
 	int m_count;
 };
 
-struct mount {
-	struct hlist_node mnt_hash;
-	struct mount *mnt_parent;
-	struct dentry *mnt_mountpoint;
-	struct vfsmount mnt;
-	union {
-		struct rcu_head mnt_rcu;
-		struct llist_node mnt_llist;
+struct mount {//定义挂载结构体，表示文件系统的挂载信息
+	struct hlist_node mnt_hash;		//哈希链表节点，用于挂载哈希表
+	struct mount *mnt_parent;		//指向父挂载的指针
+	struct dentry *mnt_mountpoint;		//挂载点的目录项指针
+	struct vfsmount mnt;			//关联的虚拟文件系统挂载结构
+	union {					//联合体，用于不同上下文的内存管理
+		struct rcu_head mnt_rcu;	//RCU（Read-Copy-Update）头部，用于延迟释放
+		struct llist_node mnt_llist;	//线性链表节点，用于特殊挂载场景
 	};
 #ifdef CONFIG_SMP
-	struct mnt_pcp __percpu *mnt_pcp;
+	struct mnt_pcp __percpu *mnt_pcp;	//每CPU私有数据，用于多处理器环境
 #else
-	int mnt_count;
-	int mnt_writers;
+	int mnt_count;				//挂载计数，用于引用计数
+	int mnt_writers;			//当前写入者计数
 #endif
-	struct list_head mnt_mounts;	/* list of children, anchored here */
-	struct list_head mnt_child;	/* and going through their mnt_child */
-	struct list_head mnt_instance;	/* mount instance on sb->s_mounts */
-	const char *mnt_devname;	/* Name of device e.g. /dev/dsk/hda1 */
-	union {
-		struct rb_node mnt_node;	/* Under ns->mounts */
-		struct list_head mnt_list;
+	struct list_head mnt_mounts;		//子挂载的列表锚点
+	struct list_head mnt_child;		//子挂载通过此链表进行连接
+	struct list_head mnt_instance;		//在超级块的挂载列表中的挂载实例
+	const char *mnt_devname;		//设备名称，例如 /dev/dsk/hda1
+	union {					//联合体，包含用于不同数据结构的节点
+		struct rb_node mnt_node;	//红黑树节点，用于命名空间的挂载列表
+		struct list_head mnt_list;	//链表节点，用于其他挂载场景
 	};
-	struct list_head mnt_expire;	/* link in fs-specific expiry list */
-	struct list_head mnt_share;	/* circular list of shared mounts */
-	struct list_head mnt_slave_list;/* list of slave mounts */
-	struct list_head mnt_slave;	/* slave list entry */
-	struct mount *mnt_master;	/* slave is on master->mnt_slave_list */
-	struct mnt_namespace *mnt_ns;	/* containing namespace */
-	struct mountpoint *mnt_mp;	/* where is it mounted */
-	union {
-		struct hlist_node mnt_mp_list;	/* list mounts with the same mountpoint */
-		struct hlist_node mnt_umount;
+	struct list_head mnt_expire;		//在文件系统特定的过期列表中的链接
+	struct list_head mnt_share;		//共享挂载的循环链表
+	struct list_head mnt_slave_list;	//从挂载列表
+	struct list_head mnt_slave;		//从挂载列表的条目
+	struct mount *mnt_master;		//指向主挂载的指针
+	struct mnt_namespace *mnt_ns;		//包含此挂载的命名空间
+	struct mountpoint *mnt_mp;		//指向挂载点的结构
+	union {					//联合体，用于挂载点的管理
+		struct hlist_node mnt_mp_list;	//拥有相同挂载点的挂载列表
+		struct hlist_node mnt_umount;	//卸载的哈希链表节点
 	};
-	struct list_head mnt_umounting; /* list entry for umount propagation */
+	struct list_head mnt_umounting; 	//卸载传播的列表条目
 #ifdef CONFIG_FSNOTIFY
-	struct fsnotify_mark_connector __rcu *mnt_fsnotify_marks;
-	__u32 mnt_fsnotify_mask;
+	struct fsnotify_mark_connector __rcu *mnt_fsnotify_marks;	// FSNotify标记连接器
+	__u32 mnt_fsnotify_mask;		//FSNotify掩码
 #endif
-	int mnt_id;			/* mount identifier, reused */
-	u64 mnt_id_unique;		/* mount ID unique until reboot */
-	int mnt_group_id;		/* peer group identifier */
-	int mnt_expiry_mark;		/* true if marked for expiry */
-	struct hlist_head mnt_pins;
-	struct hlist_head mnt_stuck_children;
+	int mnt_id;				// 挂载标识符，重用
+	u64 mnt_id_unique;			//唯一的挂载ID，直到重启
+	int mnt_group_id;			//同类组的标识符
+	int mnt_expiry_mark;			//如果标记为过期则为真
+	struct hlist_head mnt_pins;		//挂载锁定列表
+	struct hlist_head mnt_stuck_children;	//挂载被阻塞的子挂载列表
 } __randomize_layout;
 
 #define MNT_NS_INTERNAL ERR_PTR(-EINVAL) /* distinct from any mnt_namespace */

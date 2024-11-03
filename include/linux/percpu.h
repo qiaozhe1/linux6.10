@@ -83,7 +83,7 @@ extern const unsigned long *pcpu_unit_offsets;
  *
  * */
 struct pcpu_group_info {
-	int			nr_units;//当前组中包含的 per-CPU 单元的数量。一个 per-CPU 单元可以被视为为某个 CPU 预留的内存块。它决定了该组要为多少个 CPU 分配内存资源
+	int			nr_units;//当前组中包含的 per-CPU 单元的数量。一个per-CPU单元是为一个CPU预留的内存块。它决定了该组要为多少个 CPU 分配内存资源
 	unsigned long		base_offset;//用来表示每个 pcpu_group_info 组在整个 per-CPU 内存区域中的位置.它是该组的基地址相对于整个per-CPU内存块基地址的偏移量。
 	unsigned int		*cpu_map;//用于映射该组中每个 per-CPU 单元所对应的CPU编号。如果该组中的某个 per-CPU 单元没有分配到具体的CPU，或者是无效的，那么cpu_map数组中的相应位置会存储 NR_CPUS 这个特殊值（无效值）。
 };

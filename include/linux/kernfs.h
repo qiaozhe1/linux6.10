@@ -187,11 +187,11 @@ struct kernfs_elem_attr {
  * accessible.  Dereferencing elem or any other outer entity requires
  * active reference.
  */
-struct kernfs_node {
-	atomic_t		count;
-	atomic_t		active;
+struct kernfs_node {//用于表示 kernfs 文件系统中的一个节点，包含了该节点的多种信息和操作属性
+	atomic_t		count;//跟踪对该节点的引用计数，确保在节点被使用时不会被释放。
+	atomic_t		active;//表示该节点当前是否处于活动状态，有助于管理节点的生命周期。
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
-	struct lockdep_map	dep_map;
+	struct lockdep_map	dep_map;//在启用锁依赖跟踪的情况下，提供调试信息，便于分析锁的使用情况。
 #endif
 	/*
 	 * Use kernfs_get_parent() and kernfs_name/path() instead of
@@ -199,32 +199,32 @@ struct kernfs_node {
 	 * never moved to a different parent, it is safe to access the
 	 * parent directly.
 	 */
-	struct kernfs_node	*parent;
-	const char		*name;
+	struct kernfs_node	*parent;//指向该节点的父节点，构成树形结构。
+	const char		*name;//节点的名称，作为标识符。
 
-	struct rb_node		rb;
+	struct rb_node		rb;//红黑树节点，用于在 kernfs 中进行高效的节点管理和查找。
 
-	const void		*ns;	/* namespace tag */
-	unsigned int		hash;	/* ns + name hash */
-	unsigned short		flags;
-	umode_t			mode;
+	const void		*ns;//命名空间标签，帮助标识节点所属的命名空间。
+	unsigned int		hash;//基于命名空间和名称的哈希值，加快查找速度。
+	unsigned short		flags;//节点的状态标志，用于表示节点的不同属性。
+	umode_t			mode;//表示节点的权限和类型，类似于文件系统中的访问控制。
 
-	union {
-		struct kernfs_elem_dir		dir;
-		struct kernfs_elem_symlink	symlink;
-		struct kernfs_elem_attr		attr;
+	union {//联合体，表示节点可以是目录、符号链接或属性
+		struct kernfs_elem_dir		dir;//目录类型的节点
+		struct kernfs_elem_symlink	symlink;//符号链接类型的节点
+		struct kernfs_elem_attr		attr;// 属性类型的节点
 	};
 
 	/*
 	 * 64bit unique ID.  On 64bit ino setups, id is the ino.  On 32bit,
 	 * the low 32bits are ino and upper generation.
 	 */
-	u64			id;
+	u64			id;//唯一 ID，用于标识该节点，在 64 位系统中表示 inode，32 位系统中包含生成信息
 
-	void			*priv;
-	struct kernfs_iattrs	*iattr;
+	void			*priv;// 用户自定义数据指针，允许附加用户数据到节点上
+	struct kernfs_iattrs	*iattr;//指向节点的 inode 属性结构，存储与 inode 相关的额外信息
 
-	struct rcu_head		rcu;
+	struct rcu_head		rcu;//RCU（Read-Copy Update）机制的头部结构，支持并发访问和延迟释放
 };
 
 /*

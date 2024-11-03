@@ -510,12 +510,12 @@ struct file_system_type rootfs_fs_type = {
 	.kill_sb	= kill_litter_super,
 };
 
-void __init init_rootfs(void)
+void __init init_rootfs(void)//初始化根文件系统的函数
 {
-	if (IS_ENABLED(CONFIG_TMPFS)) {
-		if (!saved_root_name[0] && !root_fs_names)
-			is_tmpfs = true;
-		else if (root_fs_names && !!strstr(root_fs_names, "tmpfs"))
-			is_tmpfs = true;
+	if (IS_ENABLED(CONFIG_TMPFS)) {// 检查是否启用了临时文件系统（tmpfs）
+		if (!saved_root_name[0] && !root_fs_names)//如果没有指定的根文件系统名称且没有根文件系统名称列表，则设置为临时文件系统
+			is_tmpfs = true;//设置 is_tmpfs 为 true，表示使用 tmpfs
+		else if (root_fs_names && !!strstr(root_fs_names, "tmpfs"))//如果根文件系统名称列表中包含 "tmpfs"，则也设置为临时文件系统
+			is_tmpfs = true;//设置 is_tmpfs 为 true
 	}
 }

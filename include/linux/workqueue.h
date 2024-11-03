@@ -147,11 +147,11 @@ enum wq_affn_scope {
  *
  * This can be used to change attributes of an unbound workqueue.
  */
-struct workqueue_attrs {
+struct workqueue_attrs {//用于管理工作队列的各种属性，帮助调节工作项的执行和亲和性。
 	/**
 	 * @nice: nice level
 	 */
-	int nice;
+	int nice;//进程的优先级，值越低优先级越高
 
 	/**
 	 * @cpumask: allowed CPUs
@@ -160,7 +160,7 @@ struct workqueue_attrs {
 	 * to execute on other CPUs. A pool serving a workqueue must have the
 	 * same @cpumask.
 	 */
-	cpumask_var_t cpumask;
+	cpumask_var_t cpumask;//允许执行工作项的 CPU 掩码
 
 	/**
 	 * @__pod_cpumask: internal attribute used to create per-pod pools
@@ -172,7 +172,7 @@ struct workqueue_attrs {
 	 * worker pools with disjoint @__pod_cpumask's. Whether the enforcement
 	 * of a pool's @__pod_cpumask is strict depends on @affn_strict.
 	 */
-	cpumask_var_t __pod_cpumask;
+	cpumask_var_t __pod_cpumask;//内部使用的 CPU 掩码，用于创建按 pod 划分的工作池
 
 	/**
 	 * @affn_strict: affinity scope is strict
@@ -183,7 +183,7 @@ struct workqueue_attrs {
 	 *
 	 * If set, workers are only allowed to run inside @__pod_cpumask.
 	 */
-	bool affn_strict;
+	bool affn_strict;//指示亲和性是否严格
 
 	/*
 	 * Below fields aren't properties of a worker_pool. They only modify how
@@ -204,12 +204,12 @@ struct workqueue_attrs {
 	 * selecting %WQ_AFFN_NUMA makes the workqueue use a separate worker
 	 * pool for each NUMA node.
 	 */
-	enum wq_affn_scope affn_scope;
+	enum wq_affn_scope affn_scope;//定义未绑定 CPU 亲和性范围的枚举类型
 
 	/**
 	 * @ordered: work items must be executed one by one in queueing order
 	 */
-	bool ordered;
+	bool ordered;//指示工作项是否必须按顺序执行
 };
 
 static inline struct delayed_work *to_delayed_work(struct work_struct *work)

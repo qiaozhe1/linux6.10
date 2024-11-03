@@ -3902,12 +3902,12 @@ void mm_drop_all_locks(struct mm_struct *mm)
 /*
  * initialise the percpu counter for VM
  */
-void __init mmap_init(void)
+void __init mmap_init(void)//用于初始化内存映射相关的数据结构
 {
 	int ret;
 
-	ret = percpu_counter_init(&vm_committed_as, 0, GFP_KERNEL);
-	VM_BUG_ON(ret);
+	ret = percpu_counter_init(&vm_committed_as, 0, GFP_KERNEL);//初始化每个CPU的 vm_committed_as 计数器，初始值为 0，分配内存时使用 GFP_KERNEL
+	VM_BUG_ON(ret);//检查 ret 的值是否为 0，如果不是则触发 BUG，表示初始化失败
 }
 
 /*

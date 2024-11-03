@@ -147,24 +147,24 @@ static inline bool super_lock_excl(struct super_block *sb)
 
 /* wake waiters */
 #define SUPER_WAKE_FLAGS (SB_BORN | SB_DYING | SB_DEAD)
-static void super_wake(struct super_block *sb, unsigned int flag)
+static void super_wake(struct super_block *sb, unsigned int flag)//在超级块状态发生变化时（如标志位变更）唤醒等待在该状态上的任务。
 {
-	WARN_ON_ONCE((flag & ~SUPER_WAKE_FLAGS));
-	WARN_ON_ONCE(hweight32(flag & SUPER_WAKE_FLAGS) > 1);
+	WARN_ON_ONCE((flag & ~SUPER_WAKE_FLAGS));//检查标志位是否超出预定义范围，如果有则触发警告
+	WARN_ON_ONCE(hweight32(flag & SUPER_WAKE_FLAGS) > 1);// 检查同时设置的唤醒标志是否超过一个，超过则触发警告
 
 	/*
 	 * Pairs with smp_load_acquire() in super_lock() to make sure
 	 * all initializations in the superblock are seen by the user
 	 * seeing SB_BORN sent.
 	 */
-	smp_store_release(&sb->s_flags, sb->s_flags | flag);
+	smp_store_release(&sb->s_flags, sb->s_flags | flag);//使用释放内存序列将标志位写入超级块，确保所有初始化都对其他 CPU 可见
 	/*
 	 * Pairs with the barrier in prepare_to_wait_event() to make sure
 	 * ___wait_var_event() either sees SB_BORN set or
 	 * waitqueue_active() check in wake_up_var() sees the waiter.
 	 */
-	smp_mb();
-	wake_up_var(&sb->s_flags);
+	smp_mb();//执行内存屏障，确保前面的所有操作在此之前完成
+	wake_up_var(&sb->s_flags);//唤醒等待在 `sb->s_flags` 上的任务
 }
 
 /*
@@ -726,70 +726,73 @@ bool mount_capable(struct fs_context *fc)
  *
  * Return: On success, an extant or newly created superblock is
  *         returned. On failure an error pointer is returned.
+ * 根据文件系统上下文 fc 获取一个超级块（super_block）
  */
 struct super_block *sget_fc(struct fs_context *fc,
-			    int (*test)(struct super_block *, struct fs_context *),
-			    int (*set)(struct super_block *, struct fs_context *))
+			    int (*test)(struct super_block *, struct fs_context *),//测试超级块的函数
+			    int (*set)(struct super_block *, struct fs_context *))//设置超级块的函数
 {
 	struct super_block *s = NULL;
 	struct super_block *old;
-	struct user_namespace *user_ns = fc->global ? &init_user_ns : fc->user_ns;
+	struct user_namespace *user_ns = fc->global ? &init_user_ns : fc->user_ns;//根据上下文决定使用的用户命名空间
 	int err;
 
 retry:
 	spin_lock(&sb_lock);
-	if (test) {
-		hlist_for_each_entry(old, &fc->fs_type->fs_supers, s_instances) {
-			if (test(old, fc))
-				goto share_extant_sb;
+	if (test) {//如果提供了测试函数
+		hlist_for_each_entry(old, &fc->fs_type->fs_supers, s_instances) {//遍历文件系统类型的已存在超级块
+			if (test(old, fc))//调用测试函数检查当前超级块
+				goto share_extant_sb;//如果匹配，跳转到共享现有超级块的处理
 		}
 	}
-	if (!s) {
+	if (!s) {// 如果没有找到合适的超级块
 		spin_unlock(&sb_lock);
-		s = alloc_super(fc->fs_type, fc->sb_flags, user_ns);
+		s = alloc_super(fc->fs_type, fc->sb_flags, user_ns);//申请新的超级块
 		if (!s)
-			return ERR_PTR(-ENOMEM);
+			return ERR_PTR(-ENOMEM);//如果失败，返回内存不足错误
 		goto retry;
 	}
 
-	s->s_fs_info = fc->s_fs_info;
-	err = set(s, fc);
-	if (err) {
-		s->s_fs_info = NULL;
+	s->s_fs_info = fc->s_fs_info;//设置超级块的文件系统信息
+	err = set(s, fc);//调用设置函数初始化超级块
+	if (err) {//如果设置失败
+		s->s_fs_info = NULL;//清空文件系统信息
 		spin_unlock(&sb_lock);
-		destroy_unused_super(s);
-		return ERR_PTR(err);
+		destroy_unused_super(s);//销毁未使用的超级块
+		return ERR_PTR(err);//返回错误代码
 	}
-	fc->s_fs_info = NULL;
-	s->s_type = fc->fs_type;
-	s->s_iflags |= fc->s_iflags;
-	strscpy(s->s_id, s->s_type->name, sizeof(s->s_id));
+	fc->s_fs_info = NULL;//清空上下文中的文件系统信息
+	s->s_type = fc->fs_type;//设置超级块类型
+	s->s_iflags |= fc->s_iflags;//合并超级块的标志
+	strscpy(s->s_id, s->s_type->name, sizeof(s->s_id));//复制文件系统类型名到超级块 ID
 	/*
 	 * Make the superblock visible on @super_blocks and @fs_supers.
 	 * It's in a nascent state and users should wait on SB_BORN or
 	 * SB_DYING to be set.
+	 * 将超级块添加到 @super_blocks 和 @fs_supers 中。超级块在此时处于初始状态，用户
+	 * 应等待 SB_BORN 或SB_DYING 状态的设置。
 	 */
-	list_add_tail(&s->s_list, &super_blocks);
-	hlist_add_head(&s->s_instances, &s->s_type->fs_supers);
+	list_add_tail(&s->s_list, &super_blocks);//将超级块添加到超级块链表
+	hlist_add_head(&s->s_instances, &s->s_type->fs_supers);//将超级块实例添加到类型链表
 	spin_unlock(&sb_lock);
-	get_filesystem(s->s_type);
-	shrinker_register(s->s_shrink);
-	return s;
+	get_filesystem(s->s_type);//增加文件系统类型的引用计数
+	shrinker_register(s->s_shrink);// 注册缩小器
+	return s;//返回获取到的超级块
 
 share_extant_sb:
-	if (user_ns != old->s_user_ns || fc->exclusive) {
+	if (user_ns != old->s_user_ns || fc->exclusive) {//检查新的用户命名空间和旧的超级快中的用户命名空间是否相同，和独占标志
 		spin_unlock(&sb_lock);
-		destroy_unused_super(s);
-		if (fc->exclusive)
-			warnfc(fc, "reusing existing filesystem not allowed");
+		destroy_unused_super(s);//销毁未使用的超级块
+		if (fc->exclusive)//如果是独占请求
+			warnfc(fc, "reusing existing filesystem not allowed");//警告：不允许重用现有文件系统
 		else
-			warnfc(fc, "reusing existing filesystem in another namespace not allowed");
-		return ERR_PTR(-EBUSY);
+			warnfc(fc, "reusing existing filesystem in another namespace not allowed");//警告：不允许在其他命名空间中重用现有文件系统
+		return ERR_PTR(-EBUSY);//返回忙碌错误
 	}
-	if (!grab_super(old))
-		goto retry;
-	destroy_unused_super(s);
-	return old;
+	if (!grab_super(old))//尝试增加现有超级块的引用计数
+		goto retry;//如果增加失败,重新尝试
+	destroy_unused_super(s);//销毁未使用的超级块
+	return old;//返回现有的超级块
 }
 EXPORT_SYMBOL(sget_fc);
 
@@ -1252,33 +1255,33 @@ static int test_single_super(struct super_block *s, struct fs_context *fc)
 {
 	return 1;
 }
-
+/*从给定的文件系统上下文 fc 中获取一个超级块，并进行必要的初始化和设置*/
 static int vfs_get_super(struct fs_context *fc,
-		int (*test)(struct super_block *, struct fs_context *),
-		int (*fill_super)(struct super_block *sb,
+		int (*test)(struct super_block *, struct fs_context *),//用于测试超级块的回调函数
+		int (*fill_super)(struct super_block *sb,//用于填充超级块的回调函数
 				  struct fs_context *fc))
 {
-	struct super_block *sb;
+	struct super_block *sb;// 定义指向超级块的指针
 	int err;
 
-	sb = sget_fc(fc, test, set_anon_super_fc);
+	sb = sget_fc(fc, test, set_anon_super_fc);//根据文件系统上下文获取超级块或申请新的超级块
 	if (IS_ERR(sb))
-		return PTR_ERR(sb);
+		return PTR_ERR(sb);//如果失败，返回错误代码
 
-	if (!sb->s_root) {
-		err = fill_super(sb, fc);
+	if (!sb->s_root) {// 如果超级块没有根目录项
+		err = fill_super(sb, fc);//调用填充超级块的函数，初始化其内容
 		if (err)
-			goto error;
+			goto error;//填充失败，跳转到错误处理
 
-		sb->s_flags |= SB_ACTIVE;
+		sb->s_flags |= SB_ACTIVE;//将超级块标记为活动状态
 	}
 
-	fc->root = dget(sb->s_root);
+	fc->root = dget(sb->s_root);//获取超级块的根目录项并保存到文件系统上下文
 	return 0;
 
 error:
-	deactivate_locked_super(sb);
-	return err;
+	deactivate_locked_super(sb);//解锁并停用该超级块
+	return err;//返回错误代码
 }
 
 int get_tree_nodev(struct fs_context *fc,
@@ -1765,33 +1768,35 @@ EXPORT_SYMBOL(mount_single);
  * The filesystem is invoked to get or create a superblock which can then later
  * be used for mounting.  The filesystem places a pointer to the root to be
  * used for mounting in @fc->root.
+ * 从给定的文件系统上下文 fc 中获取对应的树形结构，主要负责设置和初始化超级块。
  */
 int vfs_get_tree(struct fs_context *fc)
 {
-	struct super_block *sb;
+	struct super_block *sb;//定义超级块指针
 	int error;
 
-	if (fc->root)
-		return -EBUSY;
+	if (fc->root)//检查是否已经有根节点
+		return -EBUSY;// 如果已存在，返回忙状态错误
 
 	/* Get the mountable root in fc->root, with a ref on the root and a ref
 	 * on the superblock.
+	 *  获取可以挂载的根节点，增加根节点和超级块的引用计数
 	 */
-	error = fc->ops->get_tree(fc);
+	error = fc->ops->get_tree(fc);//调用文件系统操作中的 get_tree 函数(shmem_get_tree)
 	if (error < 0)
-		return error;
+		return error;//如果出错,返回错误代码
 
-	if (!fc->root) {
+	if (!fc->root) {//检查是否成功设置根目录项
 		pr_err("Filesystem %s get_tree() didn't set fc->root\n",
-		       fc->fs_type->name);
+		       fc->fs_type->name);//打印错误信息
 		/* We don't know what the locking state of the superblock is -
 		 * if there is a superblock.
 		 */
 		BUG();
 	}
 
-	sb = fc->root->d_sb;
-	WARN_ON(!sb->s_bdi);
+	sb = fc->root->d_sb;//获取超级块
+	WARN_ON(!sb->s_bdi);//超级块没有块设备信息发出警告
 
 	/*
 	 * super_wake() contains a memory barrier which also care of
@@ -1799,13 +1804,15 @@ int vfs_get_tree(struct fs_context *fc)
 	 * SB_BORN as the data dependency between the two functions is
 	 * the superblock structure contents that we just set up, not
 	 * the SB_BORN flag.
+	 * super_wake() 中包含内存屏障，并确保在设置 SB_BORN 状态之前，
+	 * 对超级块内容的操作是可见的。我们在此之前调用它以处理数据依赖性。
 	 */
-	super_wake(sb, SB_BORN);
+	super_wake(sb, SB_BORN);//唤醒超级块，将其标记为已存在
 
-	error = security_sb_set_mnt_opts(sb, fc->security, 0, NULL);
-	if (unlikely(error)) {
-		fc_drop_locked(fc);
-		return error;
+	error = security_sb_set_mnt_opts(sb, fc->security, 0, NULL);//设置挂载选项的安全性
+	if (unlikely(error)) {//如果安全设置出错
+		fc_drop_locked(fc);// 清除锁定的文件系统上下文
+		return error;//返回错误代码
 	}
 
 	/*
@@ -1813,11 +1820,13 @@ int vfs_get_tree(struct fs_context *fc)
 	 * but s_maxbytes was an unsigned long long for many releases. Throw
 	 * this warning for a little while to try and catch filesystems that
 	 * violate this rule.
+	 * 文件系统不应将 s_maxbytes 设置得大于 MAX_LFS_FILESIZE。如果违反此规则，我们将
+	 * 发出警告以捕捉此类文件系统。
 	 */
 	WARN((sb->s_maxbytes < 0), "%s set sb->s_maxbytes to "
-		"negative value (%lld)\n", fc->fs_type->name, sb->s_maxbytes);
+		"negative value (%lld)\n", fc->fs_type->name, sb->s_maxbytes);//警告最大字节数为负值
 
-	return 0;
+	return 0;//所有操作成功，返回 0
 }
 EXPORT_SYMBOL(vfs_get_tree);
 

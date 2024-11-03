@@ -389,11 +389,11 @@ struct workqueue_struct {
  * Each pod type describes how CPUs should be grouped for unbound workqueues.
  * See the comment above workqueue_attrs->affn_scope.
  */
-struct wq_pod_type {
-	int			nr_pods;	/* number of pods */
-	cpumask_var_t		*pod_cpus;	/* pod -> cpus */
-	int			*pod_node;	/* pod -> node */
-	int			*cpu_pod;	/* cpu -> pod */
+struct wq_pod_type {//用于管理工作队列中的 pod 及其与 CPU 和 NUMA 节点的关系
+	int			nr_pods;	/* pod数量 */
+	cpumask_var_t		*pod_cpus;	/* 每个 pod 关联的 CPU 掩码 */
+	int			*pod_node;	/* 每个 pod 关联的 NUMA 节点 */
+	int			*cpu_pod;	/* 每个 CPU 关联的 pod */
 };
 
 struct work_offq_data {
@@ -4611,25 +4611,26 @@ void free_workqueue_attrs(struct workqueue_attrs *attrs)
  * return it.
  *
  * Return: The allocated new workqueue_attr on success. %NULL on failure.
+ * 用于分配和初始化一个 workqueue_attrs 结构体，用于管理工作队列的属性
  */
 struct workqueue_attrs *alloc_workqueue_attrs(void)
 {
-	struct workqueue_attrs *attrs;
+	struct workqueue_attrs *attrs;//声明指向工作队列属性结构体的指针
 
-	attrs = kzalloc(sizeof(*attrs), GFP_KERNEL);
+	attrs = kzalloc(sizeof(*attrs), GFP_KERNEL);//分配内存并初始化为零
 	if (!attrs)
-		goto fail;
-	if (!alloc_cpumask_var(&attrs->cpumask, GFP_KERNEL))
-		goto fail;
-	if (!alloc_cpumask_var(&attrs->__pod_cpumask, GFP_KERNEL))
-		goto fail;
+		goto fail;//如果失败，跳转到 fail 标签
+	if (!alloc_cpumask_var(&attrs->cpumask, GFP_KERNEL))//为 cpumask成员分配内存
+		goto fail;//如果失败，跳转到 fail 标签
+	if (!alloc_cpumask_var(&attrs->__pod_cpumask, GFP_KERNEL))//为 __pod_cpumask成员分配内存
+		goto fail;//如果失败，跳转到 fail 标签
 
-	cpumask_copy(attrs->cpumask, cpu_possible_mask);
-	attrs->affn_scope = WQ_AFFN_DFL;
-	return attrs;
+	cpumask_copy(attrs->cpumask, cpu_possible_mask);//将 cpu_possible_mask 复制到 cpumask
+	attrs->affn_scope = WQ_AFFN_DFL;//设置默认的亲和性范围
+	return attrs;//返回分配并初始化的工作队列属性结构体指针
 fail:
-	free_workqueue_attrs(attrs);
-	return NULL;
+	free_workqueue_attrs(attrs);// 释放已分配的工作队列属性结构体
+	return NULL;//返回 NULL 指针，表示分配失败
 }
 
 static void copy_workqueue_attrs(struct workqueue_attrs *to,
@@ -7706,7 +7707,7 @@ void __init workqueue_init_early(void)
 
 	pwq_cache = KMEM_CACHE(pool_workqueue, SLAB_PANIC);//创建 pool_workqueue 的 kmem 缓存，用于池化管理，如果发生错误则触发 panic
 
-	wq_update_pod_attrs_buf = alloc_workqueue_attrs();//分配用于更新 pod 属性的工作队列属性缓存
+	wq_update_pod_attrs_buf = alloc_workqueue_attrs();//分配用于更新 pod 属性的工作队列属性缓存,并初始化
 	BUG_ON(!wq_update_pod_attrs_buf);//分配失败时触发 BUG，确保属性缓存分配成功
 
 	/*
@@ -7716,7 +7717,7 @@ void __init workqueue_init_early(void)
 	 *  这样允许工作队列项被移动到 housekeeping CPU，减少对非 housekeeping CPU 的打扰。
 	 */
 	if (housekeeping_enabled(HK_TYPE_TICK))//如果启用 nohz_full，则允许省电工作队列移动到 housekeeping CPU，提升系统的功耗效率
-		wq_power_efficient = true;//
+		wq_power_efficient = true;
 
 	/* initialize WQ_AFFN_SYSTEM pods */
 	pt->pod_cpus = kcalloc(1, sizeof(pt->pod_cpus[0]), GFP_KERNEL);//为 pod CPU 分配一个元素的内存，用于存储系统 pod 的 CPU 信息
@@ -7732,7 +7733,7 @@ void __init workqueue_init_early(void)
 	pt->cpu_pod[0] = 0;//设置第一个 CPU pod 的值为 0，表示所有 CPU 都属于第一个 pod
 
 	/* initialize BH and CPU pools */
-	for_each_possible_cpu(cpu) {//遍历每个可能的CPU，初始化cpu对应的 BH 和 CPU 工作池
+	for_each_possible_cpu(cpu) {//遍历每个可能的CPU，初始化cpu对应的BH工作池和CPU工作池
 		struct worker_pool *pool;//定义 worker 池指针
 
 		i = 0;
@@ -7744,7 +7745,7 @@ void __init workqueue_init_early(void)
 		}
 
 		i = 0;
-		for_each_cpu_worker_pool(pool, cpu)//遍历每个 BH 工作池
+		for_each_cpu_worker_pool(pool, cpu)//遍历每个cpu工作池
 			init_cpu_worker_pool(pool, cpu, std_nice[i++]);//初始化 CPU 工作池，设置池的 nice 值为标准的 nice 值
 	}
 

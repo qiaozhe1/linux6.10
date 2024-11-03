@@ -271,59 +271,60 @@ EXPORT_SYMBOL(generic_parse_monolithic);
  * initialised with the supplied flags and, if a submount/automount from
  * another superblock (referred to by @reference) is supplied, may have
  * parameters such as namespaces copied across from that superblock.
+ * 用于分配和初始化一个新的文件系统上下文（fs_context)
  */
-static struct fs_context *alloc_fs_context(struct file_system_type *fs_type,
-				      struct dentry *reference,
-				      unsigned int sb_flags,
-				      unsigned int sb_flags_mask,
-				      enum fs_context_purpose purpose)
+static struct fs_context *alloc_fs_context(struct file_system_type *fs_type,//要挂载的文件系统类型的指针
+				      struct dentry *reference,		//参考的目录项，用于获取相关信息
+				      unsigned int sb_flags,		//超级块的标志位
+				      unsigned int sb_flags_mask,	//超级块标志的掩码
+				      enum fs_context_purpose purpose)	//上下文的用途（如挂载或子挂载）
 {
-	int (*init_fs_context)(struct fs_context *);
-	struct fs_context *fc;
+	int (*init_fs_context)(struct fs_context *);//指向初始化文件系统上下文的函数指针
+	struct fs_context *fc;//文件系统上下文的指针
 	int ret = -ENOMEM;
 
-	fc = kzalloc(sizeof(struct fs_context), GFP_KERNEL_ACCOUNT);
+	fc = kzalloc(sizeof(struct fs_context), GFP_KERNEL_ACCOUNT);//分配内存，为文件系统上下文分配空间并清零
 	if (!fc)
-		return ERR_PTR(-ENOMEM);
+		return ERR_PTR(-ENOMEM);//如果失败，返回内存不足错误
 
-	fc->purpose	= purpose;
-	fc->sb_flags	= sb_flags;
-	fc->sb_flags_mask = sb_flags_mask;
-	fc->fs_type	= get_filesystem(fs_type);
-	fc->cred	= get_current_cred();
-	fc->net_ns	= get_net(current->nsproxy->net_ns);
-	fc->log.prefix	= fs_type->name;
+	fc->purpose	= purpose;//设置文件系统上下文的用途
+	fc->sb_flags	= sb_flags;//设置超级块标志
+	fc->sb_flags_mask = sb_flags_mask;//设置超级块标志掩码
+	fc->fs_type	= get_filesystem(fs_type);//获取文件系统类型的引用
+	fc->cred	= get_current_cred();//获取当前进程的凭据（如用户ID和组ID）
+	fc->net_ns	= get_net(current->nsproxy->net_ns);//获取当前进程的网络命名空间
+	fc->log.prefix	= fs_type->name;//将文件系统名称设置为日志前缀
 
-	mutex_init(&fc->uapi_mutex);
+	mutex_init(&fc->uapi_mutex);//初始化互斥锁
 
-	switch (purpose) {
+	switch (purpose) {//根据不同目的选择不同的用户命名空间
 	case FS_CONTEXT_FOR_MOUNT:
-		fc->user_ns = get_user_ns(fc->cred->user_ns);
+		fc->user_ns = get_user_ns(fc->cred->user_ns);//如果目的是挂载，获取当前凭据的用户命名空间
 		break;
 	case FS_CONTEXT_FOR_SUBMOUNT:
-		fc->user_ns = get_user_ns(reference->d_sb->s_user_ns);
+		fc->user_ns = get_user_ns(reference->d_sb->s_user_ns);//如果目的是子挂载，从参考的目录项获取用户命名空间
 		break;
-	case FS_CONTEXT_FOR_RECONFIGURE:
-		atomic_inc(&reference->d_sb->s_active);
-		fc->user_ns = get_user_ns(reference->d_sb->s_user_ns);
-		fc->root = dget(reference);
-		break;
+	case FS_CONTEXT_FOR_RECONFIGURE:// 如果目的是重新配置
+		atomic_inc(&reference->d_sb->s_active);//增加活动计数以表示此超级块正在使用中
+		fc->user_ns = get_user_ns(reference->d_sb->s_user_ns);//从参考的目录项获取用户命名空间
+		fc->root = dget(reference);//引用参考目录项，以便后续访问
+		break;//退出switch
 	}
 
-	/* TODO: Make all filesystems support this unconditionally */
-	init_fs_context = fc->fs_type->init_fs_context;
-	if (!init_fs_context)
-		init_fs_context = legacy_init_fs_context;
+	/* TODO: 使所有文件系统都无条件支持此功能 */
+	init_fs_context = fc->fs_type->init_fs_context;//获取特定文件系统的初始化函数
+	if (!init_fs_context)//如果没有自定义的初始化函数
+		init_fs_context = legacy_init_fs_context;//使用默认的初始化函数作为回退
 
-	ret = init_fs_context(fc);
+	ret = init_fs_context(fc);// 调用初始化函数以进一步设置文件系统上下文
 	if (ret < 0)
-		goto err_fc;
-	fc->need_free = true;
-	return fc;
+		goto err_fc;//如果失败，跳转到错误处理标签
+	fc->need_free = true;//设置标志，指示此上下文需要在使用完后释放
+	return fc;//返回成功分配和初始化的文件系统上下文指针
 
 err_fc:
-	put_fs_context(fc);
-	return ERR_PTR(ret);
+	put_fs_context(fc);//释放之前分配的文件系统上下文
+	return ERR_PTR(ret);//返回错误指针，表示初始化失败
 }
 
 struct fs_context *fs_context_for_mount(struct file_system_type *fs_type,

@@ -55,26 +55,26 @@ EXPORT_SYMBOL_GPL(irq_of_parse_and_map);
  */
 struct device_node *of_irq_find_parent(struct device_node *child)
 {
-	struct device_node *p;
+	struct device_node *p;//声明一个指针，用于存储当前节点的父节点
 	phandle parent;
 
-	if (!of_node_get(child))
+	if (!of_node_get(child))//尝试增加子节点的引用计数，如果失败，返回 NULL
 		return NULL;
 
 	do {
-		if (of_property_read_u32(child, "interrupt-parent", &parent)) {
-			p = of_get_parent(child);
+		if (of_property_read_u32(child, "interrupt-parent", &parent)) {//尝试从子节点读取 "interrupt-parent" 属性以获取父节点的句柄
+			p = of_get_parent(child);//如果没有 "interrupt-parent" 属性，则获取子节点的直接父节点
 		} else	{
-			if (of_irq_workarounds & OF_IMAP_NO_PHANDLE)
-				p = of_node_get(of_irq_dflt_pic);
+			if (of_irq_workarounds & OF_IMAP_NO_PHANDLE)// 如果存在 "interrupt-parent" 属性
+				p = of_node_get(of_irq_dflt_pic);// 如果当前工作模式要求使用默认中断控制器，获取该控制器的节点
 			else
-				p = of_find_node_by_phandle(parent);
+				p = of_find_node_by_phandle(parent);//否则根据读取到的父节点句柄查找对应的设备节点
 		}
-		of_node_put(child);
-		child = p;
-	} while (p && of_get_property(p, "#interrupt-cells", NULL) == NULL);
+		of_node_put(child);//释放当前子节点的引用，避免内存泄漏
+		child = p;//将 child 更新为找到的父节点，准备下一次迭代
+	} while (p && of_get_property(p, "#interrupt-cells", NULL) == NULL);//循环条件：继续查找直到找到一个有效的父节点且该节点有 "#interrupt-cells" 属性
 
-	return p;
+	return p;//返回找到的父节点指针，如果未找到则为 NULL
 }
 EXPORT_SYMBOL_GPL(of_irq_find_parent);
 
@@ -627,7 +627,7 @@ void __init of_irq_init(const struct of_device_id *matches)
 				 desc->dev,
 				 desc->dev, desc->interrupt_parent);//调试输出
 			ret = desc->irq_init_cb(desc->dev,
-						desc->interrupt_parent);//调用中断初始化回调函数，传入设备节点和父节点
+						desc->interrupt_parent);//调用中断初始化回调函数(riscv_intc_init)，传入设备节点和父节点
 			if (ret) {//如果初始化失败
 				pr_err("%s: Failed to init %pOF (%p), parent %p\n",
 				       __func__, desc->dev, desc->dev,

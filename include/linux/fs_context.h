@@ -87,29 +87,29 @@ struct p_log {
  *
  * See Documentation/filesystems/mount_api.rst
  */
-struct fs_context {
-	const struct fs_context_operations *ops;
-	struct mutex		uapi_mutex;	/* Userspace access mutex */
-	struct file_system_type	*fs_type;
-	void			*fs_private;	/* The filesystem's context */
-	void			*sget_key;
-	struct dentry		*root;		/* The root and superblock */
-	struct user_namespace	*user_ns;	/* The user namespace for this mount */
-	struct net		*net_ns;	/* The network namespace for this mount */
-	const struct cred	*cred;		/* The mounter's credentials */
-	struct p_log		log;		/* Logging buffer */
-	const char		*source;	/* The source name (eg. dev path) */
-	void			*security;	/* LSM options */
-	void			*s_fs_info;	/* Proposed s_fs_info */
-	unsigned int		sb_flags;	/* Proposed superblock flags (SB_*) */
-	unsigned int		sb_flags_mask;	/* Superblock flags that were changed */
-	unsigned int		s_iflags;	/* OR'd with sb->s_iflags */
-	enum fs_context_purpose	purpose:8;
-	enum fs_context_phase	phase:8;	/* The phase the context is in */
-	bool			need_free:1;	/* Need to call ops->free() */
-	bool			global:1;	/* Goes into &init_user_ns */
-	bool			oldapi:1;	/* Coming from mount(2) */
-	bool			exclusive:1;    /* create new superblock, reject existing one */
+struct fs_context {//用于管理和描述挂载文件系统的上下文信息。它包含了挂载所需的所有关键信息，使得内核能够正确地处理文件系统的挂载、卸载和其他相关操作
+	const struct fs_context_operations *ops;	// 指向特定文件系统上下文操作方法合集的指针
+	struct mutex		uapi_mutex;		//用户空间访问互斥锁，用于保护对上下文的并发访问
+	struct file_system_type	*fs_type;		//指向文件系统类型的指针
+	void			*fs_private;		//文件系统的私有上下文数据
+	void			*sget_key;		//用于唯一标识超级块的键
+	struct dentry		*root;			//根目录项，表示挂载的根目录项和超级块的根目录项
+	struct user_namespace	*user_ns;		//当前挂载操作的用户命名空间
+	struct net		*net_ns;		//当前挂载操作的网络命名空间
+	const struct cred	*cred;			//发起挂载操作的凭据（用户ID、组ID等）
+	struct p_log		log;			//日志缓冲区，用于记录挂载过程中的信息
+	const char		*source;		//源名称（例如设备路径）
+	void			*security;		//Linux安全模块（LSM）选项
+	void			*s_fs_info;		//提议的超级块信息
+	unsigned int		sb_flags;		//提议的超级块标志（SB_*）
+	unsigned int		sb_flags_mask;		//变化的超级块标志掩码
+	unsigned int		s_iflags;		//与超级块的s_iflags进行OR运算的标志
+	enum fs_context_purpose	purpose:8;		//上下文的用途（挂载、子挂载等），占用8位
+	enum fs_context_phase	phase:8;		//当前上下文所处的阶段，占用8位
+	bool			need_free:1;		//需要调用 ops->free() 来释放资源
+	bool			global:1;		//该上下文属于全局命名空间（&init_user_ns）
+	bool			oldapi:1;		//表示该上下文来自旧的挂载API（如mount(2)）
+	bool			exclusive:1;    	//如果为真，则创建新的超级块，拒绝现有的
 };
 
 struct fs_context_operations {

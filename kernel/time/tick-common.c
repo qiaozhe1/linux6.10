@@ -571,8 +571,8 @@ void tick_unfreeze(void)
 /**
  * tick_init - initialize the tick control
  */
-void __init tick_init(void)
+void __init tick_init(void)//初始化与系统时钟相关的功能
 {
-	tick_broadcast_init();
-	tick_nohz_init();
+	tick_broadcast_init();//设置系统中的广播时钟，确保在多处理器系统中能够同步各个 CPU 的时钟。
+	tick_nohz_init();//配置系统为无时钟滴答模式，减少不必要的时钟中断，提高系统效率，尤其是在空闲或低负载状态下。
 }

@@ -44,15 +44,15 @@ struct device;
 #define FWNODE_FLAG_BEST_EFFORT			BIT(4)
 #define FWNODE_FLAG_VISITED			BIT(5)
 
-struct fwnode_handle {
-	struct fwnode_handle *secondary;
-	const struct fwnode_operations *ops;
+struct fwnode_handle {//用于表示设备树（Device Tree）或其他硬件描述中的节点
+	struct fwnode_handle *secondary;// 指向与此 fwnode 关联的次级 fwnode，用于表示某些硬件树的层次关系。
+	const struct fwnode_operations *ops;//指向与该 fwnode 关联的操作函数集，用于定义对该 fwnode 的具体操作（如查找属性、管理子节点等）
 
-	/* The below is used solely by device links, don't use otherwise */
-	struct device *dev;
-	struct list_head suppliers;
-	struct list_head consumers;
-	u8 flags;
+	/* 下面的字段仅由设备链接使用，其他地方请勿使用 */
+	struct device *dev;//关联的设备指针，用于在设备链路管理中保持设备之间的关系。
+	struct list_head suppliers;//供应者链表，用于链接该 fwnode 的供应者设备，表示该节点的依赖关系。
+	struct list_head consumers;//消费者链表，用于链接该 fwnode 的消费者设备，表示依赖于该节点的设备。
+	u8 flags;//存储与该 fwnode 相关的标志，用于标识其状态或属性，例如是否有效、是否是合并节点等。
 };
 
 /*

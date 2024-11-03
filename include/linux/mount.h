@@ -67,10 +67,10 @@ struct path;
 #define MNT_ONRB		0x10000000
 
 struct vfsmount {
-	struct dentry *mnt_root;	/* root of the mounted tree */
-	struct super_block *mnt_sb;	/* pointer to superblock */
-	int mnt_flags;
-	struct mnt_idmap *mnt_idmap;
+	struct dentry *mnt_root;	//指向挂载树的根节点。这个节点是文件系统中所有文件和目录的起始点
+	struct super_block *mnt_sb;	//指向该挂载的超级块。超级块包含文件系统的总体信息，如状态、设备信息等
+	int mnt_flags;			//挂载标志，用于表示挂载的状态和选项。例如，可以指示挂载是只读的、临时的等
+	struct mnt_idmap *mnt_idmap;	//用于管理挂载的 ID 映射。特别是在支持命名空间的环境中，这有助于处理不同用户和组的访问权限。
 } __randomize_layout;
 
 static inline struct mnt_idmap *mnt_idmap(const struct vfsmount *mnt)

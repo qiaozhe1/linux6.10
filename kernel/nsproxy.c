@@ -584,8 +584,8 @@ out:
 	return err;
 }
 
-int __init nsproxy_cache_init(void)
+int __init nsproxy_cache_init(void)//初始化一个用于管理 nsproxy 结构体的内存缓存
 {
-	nsproxy_cachep = KMEM_CACHE(nsproxy, SLAB_PANIC|SLAB_ACCOUNT);
+	nsproxy_cachep = KMEM_CACHE(nsproxy, SLAB_PANIC|SLAB_ACCOUNT);//创建一个名为 nsproxy 的内存缓存池，分配策略为 SLAB_PANIC 和 SLAB_ACCOUNT
 	return 0;
 }

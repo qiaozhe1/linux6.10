@@ -1093,71 +1093,71 @@ static struct mount *skip_mnt_tree(struct mount *p)
  *
  * Note that this does not attach the mount to anything.
  */
-struct vfsmount *vfs_create_mount(struct fs_context *fc)
+struct vfsmount *vfs_create_mount(struct fs_context *fc)//用于创建一个新的虚拟文件系统（VFS）挂载结构
 {
-	struct mount *mnt;
+	struct mount *mnt;//真实挂载结构
 
-	if (!fc->root)
-		return ERR_PTR(-EINVAL);
+	if (!fc->root)//检查根目录是否存在
+		return ERR_PTR(-EINVAL);//如果不存在，返回无效参数错误
 
-	mnt = alloc_vfsmnt(fc->source ?: "none");
+	mnt = alloc_vfsmnt(fc->source ?: "none");// 分配新的真实文件系统挂载，源名称为 fc->source，若为空则为 "none"
 	if (!mnt)
-		return ERR_PTR(-ENOMEM);
+		return ERR_PTR(-ENOMEM);// 如果失败，返回内存不足错误
 
-	if (fc->sb_flags & SB_KERNMOUNT)
-		mnt->mnt.mnt_flags = MNT_INTERNAL;
+	if (fc->sb_flags & SB_KERNMOUNT)//检查是否为内核挂载
+		mnt->mnt.mnt_flags = MNT_INTERNAL;//如果是，设置挂载标志为内部挂载
 
-	atomic_inc(&fc->root->d_sb->s_active);
-	mnt->mnt.mnt_sb		= fc->root->d_sb;
-	mnt->mnt.mnt_root	= dget(fc->root);
-	mnt->mnt_mountpoint	= mnt->mnt.mnt_root;
-	mnt->mnt_parent		= mnt;
+	atomic_inc(&fc->root->d_sb->s_active);//增加超级块的活动计数，表示该超级块被一个新的挂载所使用
+	mnt->mnt.mnt_sb		= fc->root->d_sb;//设置挂载的超级块
+	mnt->mnt.mnt_root	= dget(fc->root);// 将挂载的根目录设置为 fc->root，并增加引用计数
+	mnt->mnt_mountpoint	= mnt->mnt.mnt_root;//将挂载点设置为根目录
+	mnt->mnt_parent		= mnt;//设置父挂载为自身（用于形成挂载树）
 
-	lock_mount_hash();
-	list_add_tail(&mnt->mnt_instance, &mnt->mnt.mnt_sb->s_mounts);
-	unlock_mount_hash();
-	return &mnt->mnt;
+	lock_mount_hash();//锁定挂载哈希表以保证线程安全
+	list_add_tail(&mnt->mnt_instance, &mnt->mnt.mnt_sb->s_mounts);//将新的挂载实例添加到超级块的挂载列表中
+	unlock_mount_hash();//解锁挂载哈希表
+	return &mnt->mnt;// 返回虚拟挂载结构的指针
 }
 EXPORT_SYMBOL(vfs_create_mount);
-
+/*负责根据给定的文件系统上下文 fc，获取相应的超级块树并进行挂载操作*/
 struct vfsmount *fc_mount(struct fs_context *fc)
 {
-	int err = vfs_get_tree(fc);
-	if (!err) {
-		up_write(&fc->root->d_sb->s_umount);
-		return vfs_create_mount(fc);
+	int err = vfs_get_tree(fc);//获取与文件系统上下文相关的树形结构（超级块)
+	if (!err) {//如果获取成功
+		up_write(&fc->root->d_sb->s_umount);//增加超级块的引用计数，标记为已挂载
+		return vfs_create_mount(fc);//创建并返回挂载的文件系统
 	}
-	return ERR_PTR(err);
+	return ERR_PTR(err);//返回错误指针
 }
 EXPORT_SYMBOL(fc_mount);
-
+/*用于在内核中挂载文件系统*/
 struct vfsmount *vfs_kern_mount(struct file_system_type *type,
 				int flags, const char *name,
 				void *data)
 {
-	struct fs_context *fc;
-	struct vfsmount *mnt;
+	struct fs_context *fc;//定义文件系统上下文指针
+	struct vfsmount *mnt;//定义挂载结构指针
 	int ret = 0;
 
-	if (!type)
-		return ERR_PTR(-EINVAL);
+	if (!type)//检查文件系统类型是否为空
+		return ERR_PTR(-EINVAL);//返回错误指针
 
-	fc = fs_context_for_mount(type, flags);
-	if (IS_ERR(fc))
+	fc = fs_context_for_mount(type, flags);//创建文件系统上下文
+	if (IS_ERR(fc))// 检查上下文创建是否成功
 		return ERR_CAST(fc);
 
-	if (name)
+	if (name)//如果提供了文件系统名称
 		ret = vfs_parse_fs_string(fc, "source",
-					  name, strlen(name));
-	if (!ret)
+					  name, strlen(name));//解析该名称并将其存储在文件系统上下文
+	if (!ret)//如果解析名称没有错误，调用 parse_monolithic_mount_data 解析附加的挂载数据。
 		ret = parse_monolithic_mount_data(fc, data);
-	if (!ret)
+	if (!ret)//如果前面的步骤没有错误，调用 fc_mount 函数挂载文件系统并获取挂载结构（mnt）。
 		mnt = fc_mount(fc);
 	else
-		mnt = ERR_PTR(ret);
+		mnt = ERR_PTR(ret);//如果发生错误，返回对应的错误指针。
 
-	put_fs_context(fc);
-	return mnt;
+	put_fs_context(fc);//释放文件系统上下文以避免内存泄漏。
+	return mnt;//返回挂载结构指针或错误指针。
 }
 EXPORT_SYMBOL_GPL(vfs_kern_mount);
 
@@ -5129,69 +5129,69 @@ err:
 	return ret;
 }
 
-
+/*用于初始化系统的挂载树，特别是设置根文件系统及其挂载命名空间*/
 static void __init init_mount_tree(void)
 {
-	struct vfsmount *mnt;
-	struct mount *m;
-	struct mnt_namespace *ns;
-	struct path root;
+	struct vfsmount *mnt;//定义一个指向虚拟文件系统挂载的指针，用于存储根文件系统的挂载信息
+	struct mount *m;//定义一个指向挂载结构的指针，表示实际的挂载结构
+	struct mnt_namespace *ns;//定义一个指向挂载命名空间的指针，用于管理挂载的命名空间
+	struct path root;//定义一个路径结构体，表示根路径及其相关信息
 
-	mnt = vfs_kern_mount(&rootfs_fs_type, 0, "rootfs", NULL);
-	if (IS_ERR(mnt))
-		panic("Can't create rootfs");
+	mnt = vfs_kern_mount(&rootfs_fs_type, 0, "rootfs", NULL);//创建根文件系统的挂载，调用 vfs_kern_mount 函数来进行内核级挂载
+	if (IS_ERR(mnt))//检查挂载是否成功，IS_ERR 宏用于判断指针是否为错误值
+		panic("Can't create rootfs");//如果挂载失败，触发内核恐慌，停止系统
 
-	ns = alloc_mnt_ns(&init_user_ns, false);
-	if (IS_ERR(ns))
-		panic("Can't allocate initial namespace");
-	m = real_mount(mnt);
-	ns->root = m;
-	ns->nr_mounts = 1;
-	mnt_add_to_ns(ns, m);
-	init_task.nsproxy->mnt_ns = ns;
-	get_mnt_ns(ns);
+	ns = alloc_mnt_ns(&init_user_ns, false);//分配初始的挂载命名空间，使用 alloc_mnt_ns 函数
+	if (IS_ERR(ns))//检查命名空间分配是否成功
+		panic("Can't allocate initial namespace");//如果失败，触发内核恐慌
+	m = real_mount(mnt);//获取实际的挂载结构，real_mount 函数返回挂载的真实结构
+	ns->root = m;//设置命名空间的根挂载为当前挂载
+	ns->nr_mounts = 1;//初始化命名空间中的挂载数量为 1，表示当前只有根挂载
+	mnt_add_to_ns(ns, m);//将当前挂载添加到命名空间中，以便管理
+	init_task.nsproxy->mnt_ns = ns;//将新创建的命名空间指针赋值给初始化任务的 nsproxy
+	get_mnt_ns(ns);//增加命名空间的引用计数，确保它在使用期间不会被销毁
 
-	root.mnt = mnt;
-	root.dentry = mnt->mnt_root;
-	mnt->mnt_flags |= MNT_LOCKED;
+	root.mnt = mnt;//设置根路径的挂载为刚刚创建的根挂载
+	root.dentry = mnt->mnt_root;//设置根路径的目录项为挂载的根目录项
+	mnt->mnt_flags |= MNT_LOCKED;//将挂载标记为锁定状态，以防止进一步的修改
 
-	set_fs_pwd(current->fs, &root);
-	set_fs_root(current->fs, &root);
+	set_fs_pwd(current->fs, &root);//设置当前进程的工作目录为根路径，更新进程的文件系统状态
+	set_fs_root(current->fs, &root);//设置当前进程的根目录为根路径，使进程可以访问根文件系统
 }
 
-void __init mnt_init(void)
+void __init mnt_init(void)//初始化文件系统的挂载点管理
 {
 	int err;
 
 	mnt_cache = kmem_cache_create("mnt_cache", sizeof(struct mount),
-			0, SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_ACCOUNT, NULL);
+			0, SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_ACCOUNT, NULL);//创建挂载点的 slab 缓存池
 
 	mount_hashtable = alloc_large_system_hash("Mount-cache",
 				sizeof(struct hlist_head),
 				mhash_entries, 19,
 				HASH_ZERO,
-				&m_hash_shift, &m_hash_mask, 0, 0);
+				&m_hash_shift, &m_hash_mask, 0, 0);//分配挂载缓存的哈希表
 	mountpoint_hashtable = alloc_large_system_hash("Mountpoint-cache",
 				sizeof(struct hlist_head),
 				mphash_entries, 19,
 				HASH_ZERO,
-				&mp_hash_shift, &mp_hash_mask, 0, 0);
+				&mp_hash_shift, &mp_hash_mask, 0, 0);//分配挂载点缓存的哈希表
 
-	if (!mount_hashtable || !mountpoint_hashtable)
+	if (!mount_hashtable || !mountpoint_hashtable)//检查哈希表分配是否成功
 		panic("Failed to allocate mount hash table\n");
 
-	kernfs_init();
+	kernfs_init();//初始化内核文件系统，处理与内核相关的虚拟文件系统
 
-	err = sysfs_init();
+	err = sysfs_init();//初始化 sysfs文件系统，并检查其返回值以确保成功
 	if (err)
 		printk(KERN_WARNING "%s: sysfs_init error: %d\n",
 			__func__, err);
-	fs_kobj = kobject_create_and_add("fs", NULL);
+	fs_kobj = kobject_create_and_add("fs", NULL);//创建名为 "fs" 的内核对象，以便在系统中表示文件系统
 	if (!fs_kobj)
 		printk(KERN_WARNING "%s: kobj create error\n", __func__);
-	shmem_init();
-	init_rootfs();
-	init_mount_tree();
+	shmem_init();//初始化共享内存文件系统的相关结构
+	init_rootfs();//初始化根文件系统。
+	init_mount_tree();//构建和初始化挂载树结构。(挂载根文件系统并设置为当前进程的工作目录)
 }
 
 void put_mnt_ns(struct mnt_namespace *ns)
@@ -5202,18 +5202,18 @@ void put_mnt_ns(struct mnt_namespace *ns)
 	free_mnt_ns(ns);
 }
 
-struct vfsmount *kern_mount(struct file_system_type *type)
+struct vfsmount *kern_mount(struct file_system_type *type)//用于在内核中挂载文件系统
 {
 	struct vfsmount *mnt;
-	mnt = vfs_kern_mount(type, SB_KERNMOUNT, type->name, NULL);
-	if (!IS_ERR(mnt)) {
+	mnt = vfs_kern_mount(type, SB_KERNMOUNT, type->name, NULL);//根据传入的文件系统类型（type）、标志（SB_KERNMOUNT）和文件系统名称（type->name）创建一个新的挂载结构（mnt）
+	if (!IS_ERR(mnt)) {//检查挂载是否成功
 		/*
 		 * it is a longterm mount, don't release mnt until
 		 * we unmount before file sys is unregistered
 		*/
-		real_mount(mnt)->mnt_ns = MNT_NS_INTERNAL;
+		real_mount(mnt)->mnt_ns = MNT_NS_INTERNAL;//如果挂载成功，将挂载点的命名空间（mnt_ns）设置为 MNT_NS_INTERNAL，表示这是一个内部的挂载，直到文件系统被注销之前，不能释放这个挂载结构
 	}
-	return mnt;
+	return mnt;//返回创建的挂载结构指针 mnt
 }
 EXPORT_SYMBOL_GPL(kern_mount);
 

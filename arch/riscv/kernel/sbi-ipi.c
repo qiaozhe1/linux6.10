@@ -45,13 +45,13 @@ void __init sbi_ipi_init(void)
 		return;
 
 	domain = irq_find_matching_fwnode(riscv_get_intc_hwnode(),
-					  DOMAIN_BUS_ANY);//查找与INTC硬件节点匹配的IRQ domain
+					  DOMAIN_BUS_ANY);//查找与INTC硬件节点匹配的IRQ domain(这块直接返回的是intc_domain)
 	if (!domain) {
 		pr_err("unable to find INTC IRQ domain\n");//如果找不到中断域，打印错误信息
 		return;//返回，表示初始化失败
 	}
 
-	sbi_ipi_virq = irq_create_mapping(domain, RV_IRQ_SOFT);//创建中断映射，将硬件中断号RV_IRQ_SOFT映射到逻辑中断号
+	sbi_ipi_virq = irq_create_mapping(domain, RV_IRQ_SOFT);//创建中断映射，将硬件中断号RV_IRQ_SOFT=3映射到逻辑中断号
 	if (!sbi_ipi_virq) {
 		pr_err("unable to create INTC IRQ mapping\n");//如果映射失败，打印错误信息
 		return;

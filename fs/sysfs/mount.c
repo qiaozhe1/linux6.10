@@ -94,18 +94,18 @@ static struct file_system_type sysfs_fs_type = {
 	.fs_flags		= FS_USERNS_MOUNT,
 };
 
-int __init sysfs_init(void)
+int __init sysfs_init(void)//用于初始化 sysfs 文件系统
 {
 	int err;
 
 	sysfs_root = kernfs_create_root(NULL, KERNFS_ROOT_EXTRA_OPEN_PERM_CHECK,
-					NULL);
+					NULL);//创建一个 sysfs 根节点，并设置权限检查。若创建失败，返回相应的错误码。
 	if (IS_ERR(sysfs_root))
 		return PTR_ERR(sysfs_root);
 
-	sysfs_root_kn = kernfs_root_to_node(sysfs_root);
+	sysfs_root_kn = kernfs_root_to_node(sysfs_root);//将 sysfs 根节点转换为 kernfs 节点，便于后续管理。
 
-	err = register_filesystem(&sysfs_fs_type);
+	err = register_filesystem(&sysfs_fs_type);//注册 sysfs 文件系统。如果注册失败，则调用 kernfs_destroy_root 销毁之前创建的根节点，并返回错误码
 	if (err) {
 		kernfs_destroy_root(sysfs_root);
 		return err;

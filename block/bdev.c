@@ -395,14 +395,14 @@ void __init bdev_cache_init(void)
 	bdev_cachep = kmem_cache_create("bdev_cache", sizeof(struct bdev_inode),
 			0, (SLAB_HWCACHE_ALIGN|SLAB_RECLAIM_ACCOUNT|
 				SLAB_ACCOUNT|SLAB_PANIC),
-			init_once);
-	err = register_filesystem(&bd_type);
+			init_once);//创建一个内存缓存池，专门用于块设备的 inode 结构申请
+	err = register_filesystem(&bd_type);//注册块设备的伪文件系统
 	if (err)
-		panic("Cannot register bdev pseudo-fs");
-	blockdev_mnt = kern_mount(&bd_type);
+		panic("Cannot register bdev pseudo-fs");//如果失败，触发内核恐慌
+	blockdev_mnt = kern_mount(&bd_type);// 创建块设备伪文件系统的挂载点
 	if (IS_ERR(blockdev_mnt))
-		panic("Cannot create bdev pseudo-fs");
-	blockdev_superblock = blockdev_mnt->mnt_sb;   /* For writeback */
+		panic("Cannot create bdev pseudo-fs");//如果失败，触发内核恐慌
+	blockdev_superblock = blockdev_mnt->mnt_sb;//获取挂载的超级块，用于后续的写回操作
 }
 
 struct block_device *bdev_alloc(struct gendisk *disk, u8 partno)

@@ -647,25 +647,25 @@ SYSCALL_DEFINE2(pidfd_open, pid_t, pid, unsigned int, flags)
 	return fd;
 }
 
-void __init pid_idr_init(void)
+void __init pid_idr_init(void)//初始化进程ID（PID）相关的结构
 {
 	/* Verify no one has done anything silly: */
-	BUILD_BUG_ON(PID_MAX_LIMIT >= PIDNS_ADDING);
+	BUILD_BUG_ON(PID_MAX_LIMIT >= PIDNS_ADDING);//检查 PID_MAX_LIMIT 是否小于 PIDNS_ADDING，若不满足则编译错误
 
 	/* bump default and minimum pid_max based on number of cpus */
 	pid_max = min(pid_max_max, max_t(int, pid_max,
-				PIDS_PER_CPU_DEFAULT * num_possible_cpus()));
+				PIDS_PER_CPU_DEFAULT * num_possible_cpus()));//更新 pid最大数量
 	pid_max_min = max_t(int, pid_max_min,
-				PIDS_PER_CPU_MIN * num_possible_cpus());
-	pr_info("pid_max: default: %u minimum: %u\n", pid_max, pid_max_min);
+				PIDS_PER_CPU_MIN * num_possible_cpus());//更新 pid最小数量
+	pr_info("pid_max: default: %u minimum: %u\n", pid_max, pid_max_min);//输出当前的 pid_max 和 pid_max_min
 
-	idr_init(&init_pid_ns.idr);
+	idr_init(&init_pid_ns.idr);// 初始化 PID 命名空间的 IDR（索引-动态数组）结构，为 PID 的分配和管理做好准备。
 
 	init_pid_ns.pid_cachep = kmem_cache_create("pid",
 			struct_size_t(struct pid, numbers, 1),
 			__alignof__(struct pid),
 			SLAB_HWCACHE_ALIGN | SLAB_PANIC | SLAB_ACCOUNT,
-			NULL);
+			NULL);//创建PID命名空间中用于管理PID结构的内存缓存
 }
 
 static struct file *__pidfd_fget(struct task_struct *task, int fd)

@@ -83,16 +83,17 @@ EXPORT_SYMBOL(irq_set_irq_type);
  *	@data:	Pointer to interrupt specific data
  *
  *	Set the hardware irq controller data for an irq
+ *	用于为给定中断号（irq）设置处理器相关的数据（handler_data）
  */
 int irq_set_handler_data(unsigned int irq, void *data)
 {
-	unsigned long flags;
-	struct irq_desc *desc = irq_get_desc_lock(irq, &flags, 0);
+	unsigned long flags;//用于保存中断状态的标志，确保对中断描述符的安全访问
+	struct irq_desc *desc = irq_get_desc_lock(irq, &flags, 0);// 获取中断号对应的中断描述符并加锁
 
-	if (!desc)
+	if (!desc)//检查是否成功获取中断描述符，如果获取失败则返回 -EINVAL 表示无效参数
 		return -EINVAL;
-	desc->irq_common_data.handler_data = data;
-	irq_put_desc_unlock(desc, flags);
+	desc->irq_common_data.handler_data = data;//将给定的数据设置为中断描述符中的处理器相关数据
+	irq_put_desc_unlock(desc, flags);//释放中断描述符的锁，恢复中断状态
 	return 0;
 }
 EXPORT_SYMBOL(irq_set_handler_data);
@@ -1053,19 +1054,19 @@ __irq_do_set_handler(struct irq_desc *desc, irq_flow_handler_t handle,
 		irq_activate_and_startup(desc, IRQ_RESEND);
 	}
 }
-
+/*用于设置给定中断号（irq）的中断处理程序*/
 void
 __irq_set_handler(unsigned int irq, irq_flow_handler_t handle, int is_chained,
 		  const char *name)
 {
-	unsigned long flags;
-	struct irq_desc *desc = irq_get_desc_buslock(irq, &flags, 0);
+	unsigned long flags;//用于保存中断状态的标志，保证对中断描述符的安全访问
+	struct irq_desc *desc = irq_get_desc_buslock(irq, &flags, 0);//获取中断号对应的中断描述符并加锁
 
-	if (!desc)
+	if (!desc)//如果获取中断描述符失败（即找不到对应的中断号），直接返回
 		return;
 
-	__irq_do_set_handler(desc, handle, is_chained, name);
-	irq_put_desc_busunlock(desc, flags);
+	__irq_do_set_handler(desc, handle, is_chained, name);//设置中断处理程序
+	irq_put_desc_busunlock(desc, flags);//释放中断描述符的锁
 }
 EXPORT_SYMBOL_GPL(__irq_set_handler);
 

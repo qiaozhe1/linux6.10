@@ -1905,18 +1905,18 @@ void d_instantiate_new(struct dentry *entry, struct inode *inode)
 }
 EXPORT_SYMBOL(d_instantiate_new);
 
-struct dentry *d_make_root(struct inode *root_inode)
+struct dentry *d_make_root(struct inode *root_inode)// 创建并返回根目录项
 {
 	struct dentry *res = NULL;
 
-	if (root_inode) {
-		res = d_alloc_anon(root_inode->i_sb);
+	if (root_inode) {//检查传入的根 inode 是否有效
+		res = d_alloc_anon(root_inode->i_sb);// 分配一个匿名的目录项，并关联到超级块
 		if (res)
-			d_instantiate(res, root_inode);
+			d_instantiate(res, root_inode);//如果目录项分配成功,将根 inode 与目录项实例化
 		else
-			iput(root_inode);
+			iput(root_inode);//如果目录项分配失败,释放根 inode 的引用
 	}
-	return res;
+	return res;//返回创建的目录项（成功）或 NULL（失败）
 }
 EXPORT_SYMBOL(d_make_root);
 
@@ -3136,7 +3136,7 @@ static void __init dcache_init_early(void)
 	d_hash_shift = 32 - d_hash_shift;//计算哈希位移量
 }
 
-static void __init dcache_init(void)
+static void __init dcache_init(void)//用于初始化目录缓存（dentry cache）
 {
 	/*
 	 * A constructor could be added for stable state like the lists,
@@ -3145,23 +3145,23 @@ static void __init dcache_init(void)
 	 */
 	dentry_cache = KMEM_CACHE_USERCOPY(dentry,
 		SLAB_RECLAIM_ACCOUNT|SLAB_PANIC|SLAB_ACCOUNT,
-		d_iname);
+		d_iname);//创建 dentry_cache 的缓存池，用于存储 dentry 结构
 
 	/* Hash may have been set up in dcache_init_early */
-	if (!hashdist)
+	if (!hashdist)// 如果 hashdist 为零，说明哈希表未初始化，直接返回
 		return;
 
 	dentry_hashtable =
 		alloc_large_system_hash("Dentry cache",
 					sizeof(struct hlist_bl_head),
-					dhash_entries,
+					dhash_entries,//哈希表的条目数量
 					13,
 					HASH_ZERO,
 					&d_hash_shift,
 					NULL,
 					0,
-					0);
-	d_hash_shift = 32 - d_hash_shift;
+					0);//分配一个大的系统哈希表用于目录缓存
+	d_hash_shift = 32 - d_hash_shift;//计算哈希位移
 }
 
 /* SLAB cache for __getname() consumers */
@@ -3182,13 +3182,13 @@ void __init vfs_caches_init_early(void)
 void __init vfs_caches_init(void)
 {
 	names_cachep = kmem_cache_create_usercopy("names_cache", PATH_MAX, 0,
-			SLAB_HWCACHE_ALIGN|SLAB_PANIC, 0, PATH_MAX, NULL);
+			SLAB_HWCACHE_ALIGN|SLAB_PANIC, 0, PATH_MAX, NULL);//创建名为 names_cache 的缓存，用于存储路径名称，大小为 PATH_MAX
 
-	dcache_init();
-	inode_init();
-	files_init();
-	files_maxfiles_init();
-	mnt_init();
-	bdev_cache_init();
-	chrdev_init();
+	dcache_init();//初始化目录缓存池，用于存储目录项。
+	inode_init();//初始化 inode 缓存池，inode 是文件系统中的基本数据结构，保存文件的元数据。
+	files_init();//初始化文件缓存池，用于管理打开文件的信息。
+	files_maxfiles_init();//设置最大打开文件数的初始化
+	mnt_init();//初始化挂载点缓存池，用于管理文件系统的挂载信息。挂载相关文件系统
+	bdev_cache_init();//初始化块设备缓存池，管理块设备的信息。挂载设备文件系统
+	chrdev_init();//初始化字符设备缓存池，准备字符设备相关的结构和管理。
 }

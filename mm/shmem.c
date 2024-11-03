@@ -4326,21 +4326,21 @@ static void shmem_put_super(struct super_block *sb)
 	kfree(sbinfo);
 	sb->s_fs_info = NULL;
 }
-
+/*初始化共享内存文件系统的超级块*/
 static int shmem_fill_super(struct super_block *sb, struct fs_context *fc)
 {
-	struct shmem_options *ctx = fc->fs_private;
+	struct shmem_options *ctx = fc->fs_private;//从文件系统上下文获取共享内存选项
 	struct inode *inode;
-	struct shmem_sb_info *sbinfo;
+	struct shmem_sb_info *sbinfo;//指向共享内存超级块信息的指针
 	int error = -ENOMEM;
 
 	/* Round up to L1_CACHE_BYTES to resist false sharing */
 	sbinfo = kzalloc(max((int)sizeof(struct shmem_sb_info),
-				L1_CACHE_BYTES), GFP_KERNEL);
+				L1_CACHE_BYTES), GFP_KERNEL);//申请内存，确保分配的内存对齐到 L1_CACHE_BYTES，以防止假共享
 	if (!sbinfo)
 		return error;
 
-	sb->s_fs_info = sbinfo;
+	sb->s_fs_info = sbinfo;//记录超级块的信息指针
 
 #ifdef CONFIG_TMPFS
 	/*
@@ -4348,90 +4348,90 @@ static int shmem_fill_super(struct super_block *sb, struct fs_context *fc)
 	 * tmpfs instance, limiting inodes to one per page of lowmem;
 	 * but the internal instance is left unlimited.
 	 */
-	if (!(sb->s_flags & SB_KERNMOUNT)) {
-		if (!(ctx->seen & SHMEM_SEEN_BLOCKS))
+	if (!(sb->s_flags & SB_KERNMOUNT)) {//如果未标记为内核挂载，进行默认配置
+		if (!(ctx->seen & SHMEM_SEEN_BLOCKS))//如果上下文中未设置共享内存块的标志，则使用默认的共享内存块数量
 			ctx->blocks = shmem_default_max_blocks();
-		if (!(ctx->seen & SHMEM_SEEN_INODES))
+		if (!(ctx->seen & SHMEM_SEEN_INODES))//如果上下文中未设置 inode 数量标志，则使用默认的 inode 数量
 			ctx->inodes = shmem_default_max_inodes();
-		if (!(ctx->seen & SHMEM_SEEN_INUMS))
+		if (!(ctx->seen & SHMEM_SEEN_INUMS))// 如果上下文中未设置完整 inode 标志，则根据配置启用 64 位 inode
 			ctx->full_inums = IS_ENABLED(CONFIG_TMPFS_INODE64);
-		sbinfo->noswap = ctx->noswap;
+		sbinfo->noswap = ctx->noswap;//设置是否支持交换
 	} else {
-		sb->s_flags |= SB_NOUSER;
+		sb->s_flags |= SB_NOUSER;//标记为不允许用户挂载
 	}
-	sb->s_export_op = &shmem_export_ops;
-	sb->s_flags |= SB_NOSEC | SB_I_VERSION;
+	sb->s_export_op = &shmem_export_ops;//
+	sb->s_flags |= SB_NOSEC | SB_I_VERSION;//设置安全标志和版本标志
 #else
-	sb->s_flags |= SB_NOUSER;
+	sb->s_flags |= SB_NOUSER;//如果未启用 tmpfs，设置为不允许用户挂载
 #endif
-	sbinfo->max_blocks = ctx->blocks;
-	sbinfo->max_inodes = ctx->inodes;
-	sbinfo->free_ispace = sbinfo->max_inodes * BOGO_INODE_SIZE;
-	if (sb->s_flags & SB_KERNMOUNT) {
+	sbinfo->max_blocks = ctx->blocks;//设置最大块数
+	sbinfo->max_inodes = ctx->inodes;//设置最大 inode 数
+	sbinfo->free_ispace = sbinfo->max_inodes * BOGO_INODE_SIZE;// 计算空闲 inode 空间
+	if (sb->s_flags & SB_KERNMOUNT) {//如果是内核挂载，为 inode 批量分配内存
 		sbinfo->ino_batch = alloc_percpu(ino_t);
 		if (!sbinfo->ino_batch)
-			goto failed;
+			goto failed;// 如果分配失败，跳转到失败处理
 	}
-	sbinfo->uid = ctx->uid;
-	sbinfo->gid = ctx->gid;
-	sbinfo->full_inums = ctx->full_inums;
-	sbinfo->mode = ctx->mode;
-	sbinfo->huge = ctx->huge;
-	sbinfo->mpol = ctx->mpol;
-	ctx->mpol = NULL;
+	sbinfo->uid = ctx->uid;//设置超级块的用户 ID
+	sbinfo->gid = ctx->gid;//设置超级块的组 ID
+	sbinfo->full_inums = ctx->full_inums;//设置完整 inode 标志
+	sbinfo->mode = ctx->mode;//设置超级块的模式
+	sbinfo->huge = ctx->huge;//设置大文件支持标志
+	sbinfo->mpol = ctx->mpol;//设置内存策略
+	ctx->mpol = NULL;//清空上下文中的内存策略
 
-	raw_spin_lock_init(&sbinfo->stat_lock);
-	if (percpu_counter_init(&sbinfo->used_blocks, 0, GFP_KERNEL))
-		goto failed;
-	spin_lock_init(&sbinfo->shrinklist_lock);
-	INIT_LIST_HEAD(&sbinfo->shrinklist);
+	raw_spin_lock_init(&sbinfo->stat_lock);//初始化统计锁
+	if (percpu_counter_init(&sbinfo->used_blocks, 0, GFP_KERNEL))//初始化已用块计数器
+		goto failed;// 如果失败，跳转到失败处理
+	spin_lock_init(&sbinfo->shrinklist_lock);//初始化收缩列表锁
+	INIT_LIST_HEAD(&sbinfo->shrinklist);//初始化收缩列表头
 
-	sb->s_maxbytes = MAX_LFS_FILESIZE;
-	sb->s_blocksize = PAGE_SIZE;
-	sb->s_blocksize_bits = PAGE_SHIFT;
-	sb->s_magic = TMPFS_MAGIC;
-	sb->s_op = &shmem_ops;
-	sb->s_time_gran = 1;
+	sb->s_maxbytes = MAX_LFS_FILESIZE;//设置最大文件大小
+	sb->s_blocksize = PAGE_SIZE;//设置块大小为页面大小
+	sb->s_blocksize_bits = PAGE_SHIFT;//设置块大小的位数
+	sb->s_magic = TMPFS_MAGIC;//设置超级块的魔数
+	sb->s_op = &shmem_ops;//设置超级块的操作函数
+	sb->s_time_gran = 1;//设置时间粒度为 1 秒
 #ifdef CONFIG_TMPFS_XATTR
-	sb->s_xattr = shmem_xattr_handlers;
+	sb->s_xattr = shmem_xattr_handlers;//设置扩展属性处理程序
 #endif
 #ifdef CONFIG_TMPFS_POSIX_ACL
-	sb->s_flags |= SB_POSIXACL;
+	sb->s_flags |= SB_POSIXACL;//设置 POSIX ACL 标志
 #endif
 	uuid_t uuid;
-	uuid_gen(&uuid);
-	super_set_uuid(sb, uuid.b, sizeof(uuid));
+	uuid_gen(&uuid);//生成一个新的 UUID
+	super_set_uuid(sb, uuid.b, sizeof(uuid));//将 UUID 设置到超级块
 
 #ifdef CONFIG_TMPFS_QUOTA
-	if (ctx->seen & SHMEM_SEEN_QUOTA) {
-		sb->dq_op = &shmem_quota_operations;
-		sb->s_qcop = &dquot_quotactl_sysfile_ops;
-		sb->s_quota_types = QTYPE_MASK_USR | QTYPE_MASK_GRP;
+	if (ctx->seen & SHMEM_SEEN_QUOTA) {//如果上下文中设置了配额标志
+		sb->dq_op = &shmem_quota_operations;//设置配额操作函数
+		sb->s_qcop = &dquot_quotactl_sysfile_ops;// 设置配额控制操作
+		sb->s_quota_types = QTYPE_MASK_USR | QTYPE_MASK_GRP;//设置配额类型为用户和组
 
 		/* Copy the default limits from ctx into sbinfo */
 		memcpy(&sbinfo->qlimits, &ctx->qlimits,
-		       sizeof(struct shmem_quota_limits));
+		       sizeof(struct shmem_quota_limits));//将默认配额限制从上下文复制到超级块信息中
 
-		if (shmem_enable_quotas(sb, ctx->quota_types))
-			goto failed;
+		if (shmem_enable_quotas(sb, ctx->quota_types))//启用共享内存配额
+			goto failed;// 如果失败，跳转到失败处理
 	}
 #endif /* CONFIG_TMPFS_QUOTA */
 
 	inode = shmem_get_inode(&nop_mnt_idmap, sb, NULL,
-				S_IFDIR | sbinfo->mode, 0, VM_NORESERVE);
-	if (IS_ERR(inode)) {
-		error = PTR_ERR(inode);
-		goto failed;
+				S_IFDIR | sbinfo->mode, 0, VM_NORESERVE);// 获取根 inode，并初始化根目录
+	if (IS_ERR(inode)) {//检查获取 inode 是否成功
+		error = PTR_ERR(inode);//获取错误码
+		goto failed;//跳转到失败处理
 	}
-	inode->i_uid = sbinfo->uid;
-	inode->i_gid = sbinfo->gid;
-	sb->s_root = d_make_root(inode);
-	if (!sb->s_root)
-		goto failed;
-	return 0;
+	inode->i_uid = sbinfo->uid;//设置根 inode 的用户 ID
+	inode->i_gid = sbinfo->gid;//设置根 inode 的组 ID
+	sb->s_root = d_make_root(inode);//创建根目录的 dentry
+	if (!sb->s_root)//检查根目录 dentry 是否成功创建
+		goto failed;//跳转到失败处理
+	return 0;// 成功返回 0
 
 failed:
-	shmem_put_super(sb);
+	shmem_put_super(sb);//释放超级块资源
 	return error;
 }
 
@@ -4653,50 +4653,50 @@ static struct file_system_type shmem_fs_type = {
 	.fs_flags	= FS_USERNS_MOUNT | FS_ALLOW_IDMAP,
 };
 
-void __init shmem_init(void)
+void __init shmem_init(void)//初始化共享内存文件系统
 {
 	int error;
 
-	shmem_init_inodecache();
+	shmem_init_inodecache();//初始化共享内存的 inode 缓存池
 
-#ifdef CONFIG_TMPFS_QUOTA
-	error = register_quota_format(&shmem_quota_format);
-	if (error < 0) {
-		pr_err("Could not register quota format\n");
-		goto out3;
+#ifdef CONFIG_TMPFS_QUOTA//如果启用 tmpfs 配额支持
+	error = register_quota_format(&shmem_quota_format);//注册共享内存配额格式
+	if (error < 0) {// 检查注册是否成功
+		pr_err("Could not register quota format\n");//打印错误信息
+		goto out3;//跳转到错误处理部分
 	}
 #endif
 
-	error = register_filesystem(&shmem_fs_type);
-	if (error) {
+	error = register_filesystem(&shmem_fs_type);//注册共享内存文件系统
+	if (error) {//如果注册失败，打印错误信息并跳转到 out2 标签进行错误处理。
 		pr_err("Could not register tmpfs\n");
 		goto out2;
 	}
 
-	shm_mnt = kern_mount(&shmem_fs_type);
-	if (IS_ERR(shm_mnt)) {
+	shm_mnt = kern_mount(&shmem_fs_type);//挂载共享内存文件系统。
+	if (IS_ERR(shm_mnt)) {//检查挂载是否成功，如果失败，获取错误码并打印错误信息，随后跳转到 out1 标签进行错误处理。
 		error = PTR_ERR(shm_mnt);
 		pr_err("Could not kern_mount tmpfs\n");
 		goto out1;
 	}
 
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
-	if (has_transparent_hugepage() && shmem_huge > SHMEM_HUGE_DENY)
-		SHMEM_SB(shm_mnt->mnt_sb)->huge = shmem_huge;
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE//透明大页支持
+	if (has_transparent_hugepage() && shmem_huge > SHMEM_HUGE_DENY)//检查是否启用大页，并且配置的 shmem_huge 大于 SHMEM_HUGE_DENY
+		SHMEM_SB(shm_mnt->mnt_sb)->huge = shmem_huge;//设置大页标志
 	else
-		shmem_huge = SHMEM_HUGE_NEVER; /* just in case it was patched */
+		shmem_huge = SHMEM_HUGE_NEVER;//如果不支持透明大页，则将 shmem_huge 设置为 SHMEM_HUGE_NEVER
 #endif
 	return;
 
 out1:
-	unregister_filesystem(&shmem_fs_type);
+	unregister_filesystem(&shmem_fs_type);//取消注册文件系统
 out2:
 #ifdef CONFIG_TMPFS_QUOTA
-	unregister_quota_format(&shmem_quota_format);
+	unregister_quota_format(&shmem_quota_format);//取消注册配额格式
 out3:
 #endif
-	shmem_destroy_inodecache();
-	shm_mnt = ERR_PTR(error);
+	shmem_destroy_inodecache();//销毁inode缓存
+	shm_mnt = ERR_PTR(error);//将错误指针存储到shm_mnt
 }
 
 #if defined(CONFIG_TRANSPARENT_HUGEPAGE) && defined(CONFIG_SYSFS)

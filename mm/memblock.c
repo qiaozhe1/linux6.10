@@ -592,24 +592,24 @@ static int __init_memblock memblock_add_range(struct memblock_type *type,
 				phys_addr_t base, phys_addr_t size,
 				int nid, enum memblock_flags flags)
 {
-	bool insert = false;
-	phys_addr_t obase = base;
-	phys_addr_t end = base + memblock_cap_size(base, &size);
-	int idx, nr_new, start_rgn = -1, end_rgn;
-	struct memblock_region *rgn;
+	bool insert = false;//标志是否可以直接插入新区域
+	phys_addr_t obase = base;//保存原始基地址，以便在重复插入时使用
+	phys_addr_t end = base + memblock_cap_size(base, &size);//计算结束地址，考虑内存块的大小限制
+	int idx, nr_new, start_rgn = -1, end_rgn;//初始化索引、计数新区域的数量、起始和结束区域索引
+	struct memblock_region *rgn;//指向当前遍历的内存块区域的指针
 
-	if (!size)
+	if (!size)//如果新区域的大小为 0，直接返回 0
 		return 0;
 
 	/* special case for empty array */
-	if (type->regions[0].size == 0) {
-		WARN_ON(type->cnt != 1 || type->total_size);
-		type->regions[0].base = base;
-		type->regions[0].size = size;
-		type->regions[0].flags = flags;
-		memblock_set_region_node(&type->regions[0], nid);
-		type->total_size = size;
-		return 0;
+	if (type->regions[0].size == 0) {// 特殊情况处理：如果第一个区域为空，初始化它
+		WARN_ON(type->cnt != 1 || type->total_size);//如果当前计数不为 1 或总大小不为 0，则发出警告
+		type->regions[0].base = base;//设置新区域的基地址
+		type->regions[0].size = size;//设置新区域的大小
+		type->regions[0].flags = flags;//设置新区域的标志
+		memblock_set_region_node(&type->regions[0], nid);//将节点 ID 关联到新区域
+		type->total_size = size;//更新总大小
+		return 0;// 返回成功
 	}
 
 	/*
@@ -618,78 +618,85 @@ static int __init_memblock memblock_add_range(struct memblock_type *type,
 	 * type->cnt * 2 + 1 is less than or equal to type->max, we know
 	 * that there is enough empty regions in @type, and we can insert
 	 * regions directly.
+	 * 判断是否有足够的空间可以插入新区域：如果现有区域数量乘以 2 加 1 小于等于最大容量，则可以插入。
+	 * 这是为了预留足够的空间处理重叠区域的情况。
 	 */
 	if (type->cnt * 2 + 1 <= type->max)
-		insert = true;
+		insert = true;//标记为可以插入
 
-repeat:
+repeat://标签，用于在需要时重复插入过程
 	/*
 	 * The following is executed twice.  Once with %false @insert and
 	 * then with %true.  The first counts the number of regions needed
 	 * to accommodate the new area.  The second actually inserts them.
+	 * 此循环将执行两次。第一次用于计算所需的区域数量，第二次实际插入新区域。
 	 */
-	base = obase;
-	nr_new = 0;
+	base = obase;//重置基地址为原始值
+	nr_new = 0;// 新区域的数量初始化为 0
 
-	for_each_memblock_type(idx, type, rgn) {
-		phys_addr_t rbase = rgn->base;
-		phys_addr_t rend = rbase + rgn->size;
+	for_each_memblock_type(idx, type, rgn) {//遍历现有的内存块区域
+		phys_addr_t rbase = rgn->base;// 获取现有区域的基地址
+		phys_addr_t rend = rbase + rgn->size;// 计算现有区域的结束地址
 
-		if (rbase >= end)
+		if (rbase >= end)//如果现有区域的基地址大于或等于新区域的结束地址，停止遍历
 			break;
-		if (rend <= base)
+		if (rend <= base)//如果现有区域的结束地址小于或等于新区域的基地址，继续下一个区域
 			continue;
 		/*
 		 * @rgn overlaps.  If it separates the lower part of new
 		 * area, insert that portion.
+		 * 当前区域与新区域重叠。
+		 * 如果现有区域的基地址大于新区域的基地址，插入新区域的下部部分。
 		 */
 		if (rbase > base) {
 #ifdef CONFIG_NUMA
-			WARN_ON(nid != memblock_get_region_node(rgn));
+			WARN_ON(nid != memblock_get_region_node(rgn));//在 NUMA 配置下，检查节点 ID 是否匹配
 #endif
-			WARN_ON(flags != rgn->flags);
-			nr_new++;
-			if (insert) {
-				if (start_rgn == -1)
+			WARN_ON(flags != rgn->flags);//检查新区域的标志是否与现有区域的标志相同
+			nr_new++;//增加新区域计数
+			if (insert) {//如果可以插入
+				if (start_rgn == -1)//如果没有开始区域，设置为当前索引
 					start_rgn = idx;
-				end_rgn = idx + 1;
+				end_rgn = idx + 1;//设置结束区域
 				memblock_insert_region(type, idx++, base,
 						       rbase - base, nid,
-						       flags);
+						       flags);//插入从新区域基地址到现有区域基地址之间的区域
 			}
 		}
 		/* area below @rend is dealt with, forget about it */
-		base = min(rend, end);
+		base = min(rend, end);//更新 base 为新区域的最小结束地址，以继续处理后面的区域
 	}
 
-	/* insert the remaining portion */
-	if (base < end) {
-		nr_new++;
-		if (insert) {
-			if (start_rgn == -1)
+	/* 处理新区域剩余的部分 */
+	if (base < end) {//如果还有未处理的部分
+		nr_new++;//增加新区域计数
+		if (insert) {//如果可以插入
+			if (start_rgn == -1)// 如果没有开始区域，设置为当前索引
 				start_rgn = idx;
-			end_rgn = idx + 1;
+			end_rgn = idx + 1;// 设置结束区域
 			memblock_insert_region(type, idx, base, end - base,
-					       nid, flags);
+					       nid, flags);//插入剩余的区域
 		}
 	}
 
-	if (!nr_new)
+	if (!nr_new)//如果没有新区域被添加，直接返回 0
 		return 0;
 
 	/*
 	 * If this was the first round, resize array and repeat for actual
 	 * insertions; otherwise, merge and return.
+	 * 如果这是第一次执行插入（insert 为 false），则可能需要扩展内存块区域数组的大小。
+	 * 循环直到扩展成功为止。
 	 */
 	if (!insert) {
-		while (type->cnt + nr_new > type->max)
-			if (memblock_double_array(type, obase, size) < 0)
-				return -ENOMEM;
-		insert = true;
-		goto repeat;
+		while (type->cnt + nr_new > type->max)//如果新区域数量超过最大容量
+			if (memblock_double_array(type, obase, size) < 0)//调用函数扩展内存块区域数组
+				return -ENOMEM;//如果扩展失败，返回内存不足错误
+		insert = true;//设置为插入状态
+		goto repeat;//重复插入过程
 	} else {
-		memblock_merge_regions(type, start_rgn, end_rgn);
-		return 0;
+		memblock_merge_regions(type, start_rgn, end_rgn);//如果可以插入，则合并新插入的区域
+		return 0;//返回成功
 	}
 }
 

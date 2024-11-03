@@ -38,11 +38,11 @@ struct fdt_node_header {
 	char name[];
 };
 
-struct fdt_property {
-	fdt32_t tag;
-	fdt32_t len;
-	fdt32_t nameoff;
-	char data[];
+struct fdt_property {//用于表示设备树中的单个属性
+	fdt32_t tag;//属性的标签，通常用于标识属性的类型或状态。它是一个32位的整数，遵循设备树格式。
+	fdt32_t len;//属性数据的长度，表示该属性中数据部分的字节数。它也是一个32位整数，便于在读取属性时进行数据验证。
+	fdt32_t nameoff;//属性名称在设备树 Blob 中的偏移量。该值指向一个字符串，表示属性的名称。在解析设备树时，使用这个偏移量可以快速找到属性名称。
+	char data[];//属性的实际数据，大小可变。这个字段是一个灵活数组成员，表示属性的内容，可以是任意类型的数据，长度由 `len` 字段决定。
 };
 
 #endif /* !__ASSEMBLY */

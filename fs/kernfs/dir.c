@@ -957,55 +957,58 @@ struct kernfs_node *kernfs_walk_and_get_ns(struct kernfs_node *parent,
  *
  * Return: the root of the new hierarchy on success, ERR_PTR() value on
  * failure.
+ * 创建一个新的 kernfs 根节点。接受系统调用操作、标志和私有数据作为参数
  */
 struct kernfs_root *kernfs_create_root(struct kernfs_syscall_ops *scops,
 				       unsigned int flags, void *priv)
 {
-	struct kernfs_root *root;
-	struct kernfs_node *kn;
+	struct kernfs_root *root;// 定义指向 kernfs 根节点的指针
+	struct kernfs_node *kn;//定义指向 kernfs 节点的指针
 
-	root = kzalloc(sizeof(*root), GFP_KERNEL);
+	root = kzalloc(sizeof(*root), GFP_KERNEL);//分配内存并将其清零以初始化根节点
 	if (!root)
-		return ERR_PTR(-ENOMEM);
+		return ERR_PTR(-ENOMEM);//如果失败，返回一个指向错误的指针，表示内存不足
 
-	idr_init(&root->ino_idr);
-	init_rwsem(&root->kernfs_rwsem);
-	init_rwsem(&root->kernfs_iattr_rwsem);
-	init_rwsem(&root->kernfs_supers_rwsem);
-	INIT_LIST_HEAD(&root->supers);
+	idr_init(&root->ino_idr);//初始化 inode IDR（索引到节点的映射）
+	init_rwsem(&root->kernfs_rwsem);//初始化读写信号量，用于保护对根节点的并发访问
+	init_rwsem(&root->kernfs_iattr_rwsem);//初始化 inode 属性的读写信号量
+	init_rwsem(&root->kernfs_supers_rwsem);//初始化超级块的读写信号量
+	INIT_LIST_HEAD(&root->supers);//初始化超级块列表，准备存储相关的超级块
 
 	/*
 	 * On 64bit ino setups, id is ino.  On 32bit, low 32bits are ino.
 	 * High bits generation.  The starting value for both ino and
 	 * genenration is 1.  Initialize upper 32bit allocation
 	 * accordingly.
+	 * 在 64 位系统中，inode 的标识直接使用 id。对于 32 位系统，低 32 位作为 inode。
+	 * 高位生成。对于 inode 和生成标识的初始值都是 1。根据系统类型初始化高位分配。
 	 */
-	if (sizeof(ino_t) >= sizeof(u64))
-		root->id_highbits = 0;
+	if (sizeof(ino_t) >= sizeof(u64))//检查 inode 类型的大小
+		root->id_highbits = 0;//如果 inode 类型大小大于等于 64 位，设置高位标志为 0
 	else
-		root->id_highbits = 1;
+		root->id_highbits = 1;// 否则，设置高位标志为 1
 
 	kn = __kernfs_new_node(root, NULL, "", S_IFDIR | S_IRUGO | S_IXUGO,
 			       GLOBAL_ROOT_UID, GLOBAL_ROOT_GID,
-			       KERNFS_DIR);
+			       KERNFS_DIR);//创建新的 kernfs 节点，根节点类型为目录，设置权限为可读和可执行
 	if (!kn) {
-		idr_destroy(&root->ino_idr);
-		kfree(root);
-		return ERR_PTR(-ENOMEM);
+		idr_destroy(&root->ino_idr);//如果失败，销毁kernfs根节点的inode IDR以释放资源
+		kfree(root);//释放之前分配的根节点内存
+		return ERR_PTR(-ENOMEM);// 返回内存不足的错误指针
 	}
 
-	kn->priv = priv;
-	kn->dir.root = root;
+	kn->priv = priv;//设置 kernfs 节点的私有数据为传入的用户定义数据
+	kn->dir.root = root;//将节点的目录指针设置为当前根节点
 
-	root->syscall_ops = scops;
-	root->flags = flags;
-	root->kn = kn;
-	init_waitqueue_head(&root->deactivate_waitq);
+	root->syscall_ops = scops;//将传入的系统调用操作赋值给根节点的 syscall_ops 字段
+	root->flags = flags;// 设置根节点的标志，决定节点的行为和特性
+	root->kn = kn;// 关联根节点和创建的 kernfs 节点
+	init_waitqueue_head(&root->deactivate_waitq);//初始化与根节点相关的等待队列，用于处理激活和停用操作
 
-	if (!(root->flags & KERNFS_ROOT_CREATE_DEACTIVATED))
-		kernfs_activate(kn);
+	if (!(root->flags & KERNFS_ROOT_CREATE_DEACTIVATED))//检查根节点的标志，如果未设置为已停用
+		kernfs_activate(kn);//调用函数激活该节点，使其可用
 
-	return root;
+	return root;//返回创建的根节点指针，供调用者使用
 }
 
 /**

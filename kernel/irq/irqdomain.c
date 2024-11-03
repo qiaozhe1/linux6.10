@@ -31,11 +31,11 @@ static int irq_domain_alloc_irqs_locked(struct irq_domain *domain, int irq_base,
 static void irq_domain_check_hierarchy(struct irq_domain *domain);
 static void irq_domain_free_one_irq(struct irq_domain *domain, unsigned int virq);
 
-struct irqchip_fwid {
-	struct fwnode_handle	fwnode;
-	unsigned int		type;
-	char			*name;
-	phys_addr_t		*pa;
+struct irqchip_fwid {//用于表示一个中断控制器的相关信息
+	struct fwnode_handle	fwnode;//设备树节点的句柄，表示该中断控制器在设备树中的位置及其属性。
+	unsigned int		type;//中断控制器的类型标识，通常用于区分不同类型的中断控制器（例如，GPIO、PCI等）。
+	char			*name;//中断控制器的名称，用于调试和日志记录，以便识别具体的中断控制器。
+	phys_addr_t		*pa;//指向物理地址的指针，通常用于表示中断控制器寄存器的物理地址，以便进行直接访问。
 };
 
 #ifdef CONFIG_GENERIC_IRQ_DEBUGFS
@@ -435,7 +435,7 @@ struct irq_domain *irq_find_matching_fwspec(struct irq_fwspec *fwspec,
 					    enum irq_domain_bus_token bus_token)
 {
 	struct irq_domain *h, *found = NULL;
-	struct fwnode_handle *fwnode = fwspec->fwnode;
+	struct fwnode_handle *fwnode = fwspec->fwnode;//从 fwspec 中获取固件节点的句柄
 	int rc;
 
 	/* We might want to match the legacy controller last since
@@ -446,19 +446,24 @@ struct irq_domain *irq_find_matching_fwspec(struct irq_fwspec *fwspec,
 	 * bus_token == DOMAIN_BUS_ANY matches any domain, any other
 	 * values must generate an exact match for the domain to be
 	 * selected.
+	 * 我们可能希望在最后匹配遗留控制器，因为在没有设备节点的情况下，
+	 * 它可能会被设置为匹配所有中断。这目前还不是一个问题。
+	 *
+	 * bus_token == DOMAIN_BUS_ANY 表示匹配任何中断域，任何其他值则必
+	 * 须与中断域的 bus_token 完全匹配。
 	 */
 	mutex_lock(&irq_domain_mutex);
-	list_for_each_entry(h, &irq_domain_list, link) {
-		if (h->ops->select && bus_token != DOMAIN_BUS_ANY)
-			rc = h->ops->select(h, fwspec, bus_token);
-		else if (h->ops->match)
+	list_for_each_entry(h, &irq_domain_list, link) {//遍历全局的中断域列表，查找匹配的中断域
+		if (h->ops->select && bus_token != DOMAIN_BUS_ANY)// 如果中断域具有select方法，并且bus_token不是DOMAIN_BUS_ANY
+			rc = h->ops->select(h, fwspec, bus_token);//调用 select 函数判断当前中断域是否匹配
+		else if (h->ops->match)//如果没有 select 方法但有 match 方法，调用 match 判断是否匹配
 			rc = h->ops->match(h, to_of_node(fwnode), bus_token);
 		else
 			rc = ((fwnode != NULL) && (h->fwnode == fwnode) &&
 			      ((bus_token == DOMAIN_BUS_ANY) ||
-			       (h->bus_token == bus_token)));
+			       (h->bus_token == bus_token)));//如果都没有 select 和 match 方法，使用默认的匹配逻辑
 
-		if (rc) {
+		if (rc) {//如果当前中断域匹配，将其存储到 found 并跳出循环
 			found = h;
 			break;
 		}
@@ -1368,22 +1373,24 @@ EXPORT_SYMBOL_GPL(irq_domain_get_irq_data);
  * @hwirq:	The hwirq number
  * @chip:	The associated interrupt chip
  * @chip_data:	The associated chip data
+ * 用于设置给定虚拟中断号（virq）在指定中断域（domain）中的硬件中断号（hwirq）以
+ * 及其关联的中断控制器（irq_chip）和控制器数据（chip_data)
  */
 int irq_domain_set_hwirq_and_chip(struct irq_domain *domain, unsigned int virq,
 				  irq_hw_number_t hwirq,
 				  const struct irq_chip *chip,
 				  void *chip_data)
 {
-	struct irq_data *irq_data = irq_domain_get_irq_data(domain, virq);
+	struct irq_data *irq_data = irq_domain_get_irq_data(domain, virq);//获取中断域中的虚拟中断号对应的 irq_data 结构体
 
 	if (!irq_data)
 		return -ENOENT;
 
-	irq_data->hwirq = hwirq;
-	irq_data->chip = (struct irq_chip *)(chip ? chip : &no_irq_chip);
-	irq_data->chip_data = chip_data;
+	irq_data->hwirq = hwirq;//设置 irq_data 中的硬件中断号
+	irq_data->chip = (struct irq_chip *)(chip ? chip : &no_irq_chip);//设置 irq_data 中的中断控制器。如果 chip 为空，设置为 no_irq_chip，表示没有实际的中断控制器
+	irq_data->chip_data = chip_data;//设置 irq_data 中的中断控制器相关数据
 
-	return 0;
+	return 0;//返回 0 表示成功完成设置
 }
 EXPORT_SYMBOL_GPL(irq_domain_set_hwirq_and_chip);
 
@@ -1403,7 +1410,7 @@ void irq_domain_set_info(struct irq_domain *domain, unsigned int virq,
 			 void *chip_data, irq_flow_handler_t handler,
 			 void *handler_data, const char *handler_name)
 {
-	irq_domain_set_hwirq_and_chip(domain, virq, hwirq, chip, chip_data);//设置中断描述符中的硬件中断号和中断芯片相关信息
+	irq_domain_set_hwirq_and_chip(domain, virq, hwirq, chip, chip_data);//设置中断描述符中的硬件中断号和中断芯片相关信息.设置完相关信息后表示硬中断号和软中断号已经管理成功
 	__irq_set_handler(virq, handler, 0, handler_name);//设置中断的处理函数和处理函数的名称
 	irq_set_handler_data(virq, handler_data);//设置处理函数的相关数据，供处理函数在处理中使用
 }

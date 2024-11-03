@@ -493,7 +493,7 @@ static void inode_lru_list_del(struct inode *inode)
 void inode_sb_list_add(struct inode *inode)
 {
 	spin_lock(&inode->i_sb->s_inode_list_lock);
-	list_add(&inode->i_sb_list, &inode->i_sb->s_inodes);
+	list_add(&inode->i_sb_list, &inode->i_sb->s_inodes);//将 inode 的列表项 i_sb_list 添加到超级块 s_inodes 列表中
 	spin_unlock(&inode->i_sb->s_inode_list_lock);
 }
 EXPORT_SYMBOL_GPL(inode_sb_list_add);
@@ -1030,10 +1030,10 @@ struct inode *new_inode(struct super_block *sb)
 {
 	struct inode *inode;
 
-	inode = new_inode_pseudo(sb);
+	inode = new_inode_pseudo(sb);//创建一个新的伪 inode
 	if (inode)
-		inode_sb_list_add(inode);
-	return inode;
+		inode_sb_list_add(inode);// 如果成功，将 inode 添加到超级块的 inode 列表中
+	return inode;//返回创建的 inode 指针（成功时）或 NULL（失败时）
 }
 EXPORT_SYMBOL(new_inode);
 
@@ -2289,7 +2289,7 @@ void __init inode_init(void)
 					 0,
 					 (SLAB_RECLAIM_ACCOUNT|SLAB_PANIC|
 					 SLAB_ACCOUNT),
-					 init_once);
+					 init_once);// 创建一个名为 inode_cache 的 slab 缓存池，用于存储 inode 结构体。init_once是首次分配该缓存池时调用的初始化函数
 
 	/* Hash may have been set up in inode_init_early */
 	if (!hashdist)
@@ -2304,7 +2304,7 @@ void __init inode_init(void)
 					&i_hash_shift,
 					&i_hash_mask,
 					0,
-					0);
+					0);//分配一个大的系统哈希表用于 inode 缓存
 }
 
 void init_special_inode(struct inode *inode, umode_t mode, dev_t rdev)

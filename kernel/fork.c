@@ -1037,49 +1037,49 @@ static void task_struct_whitelist(unsigned long *offset, unsigned long *size)
 		*offset += offsetof(struct task_struct, thread);
 }
 
-void __init fork_init(void)
+void __init fork_init(void)//初始化进程创建相关的内存结构和资源
 {
 	int i;
 #ifndef ARCH_MIN_TASKALIGN
 #define ARCH_MIN_TASKALIGN	0
 #endif
-	int align = max_t(int, L1_CACHE_BYTES, ARCH_MIN_TASKALIGN);
-	unsigned long useroffset, usersize;
+	int align = max_t(int, L1_CACHE_BYTES, ARCH_MIN_TASKALIGN);//计算任务对齐大小，选择 L1_CACHE_BYTES 和 ARCH_MIN_TASKALIGN 中的最大值
+	unsigned long useroffset, usersize;//用户空间偏移和大小
 
-	/* create a slab on which task_structs can be allocated */
-	task_struct_whitelist(&useroffset, &usersize);
+	/* 创建一个 slab，用于分配 task_struct 结构体 */
+	task_struct_whitelist(&useroffset, &usersize);//获取 useroffset 和 usersize
 	task_struct_cachep = kmem_cache_create_usercopy("task_struct",
 			arch_task_struct_size, align,
 			SLAB_PANIC|SLAB_ACCOUNT,
-			useroffset, usersize, NULL);
+			useroffset, usersize, NULL);//创建 task_struct 的内存缓存池
 
-	/* do the arch specific task caches init */
+	/* 执行架构特定的任务缓存初始化 */
 	arch_task_cache_init();
 
-	set_max_threads(MAX_THREADS);
+	set_max_threads(MAX_THREADS);//设置最大线程数
 
-	init_task.signal->rlim[RLIMIT_NPROC].rlim_cur = max_threads/2;
-	init_task.signal->rlim[RLIMIT_NPROC].rlim_max = max_threads/2;
+	init_task.signal->rlim[RLIMIT_NPROC].rlim_cur = max_threads/2;//设置当前进程(初始化进程)的最大进程限制
+	init_task.signal->rlim[RLIMIT_NPROC].rlim_max = max_threads/2;//设置最大进程数限制
 	init_task.signal->rlim[RLIMIT_SIGPENDING] =
-		init_task.signal->rlim[RLIMIT_NPROC];
+		init_task.signal->rlim[RLIMIT_NPROC];//设置待处理信号的限制，继承进程数限制
 
-	for (i = 0; i < UCOUNT_COUNTS; i++)
-		init_user_ns.ucount_max[i] = max_threads/2;
+	for (i = 0; i < UCOUNT_COUNTS; i++)//初始化用户命名空间中的用户计数
+		init_user_ns.ucount_max[i] = max_threads/2;//每个计数的最大值设为最大线程数的一半
 
-	set_userns_rlimit_max(&init_user_ns, UCOUNT_RLIMIT_NPROC,      RLIM_INFINITY);
-	set_userns_rlimit_max(&init_user_ns, UCOUNT_RLIMIT_MSGQUEUE,   RLIM_INFINITY);
-	set_userns_rlimit_max(&init_user_ns, UCOUNT_RLIMIT_SIGPENDING, RLIM_INFINITY);
-	set_userns_rlimit_max(&init_user_ns, UCOUNT_RLIMIT_MEMLOCK,    RLIM_INFINITY);
+	set_userns_rlimit_max(&init_user_ns, UCOUNT_RLIMIT_NPROC,      RLIM_INFINITY);//设置用户命名空间进程限制为无限制
+	set_userns_rlimit_max(&init_user_ns, UCOUNT_RLIMIT_MSGQUEUE,   RLIM_INFINITY);//设置用户命名空间消息队列限制为无限制
+	set_userns_rlimit_max(&init_user_ns, UCOUNT_RLIMIT_SIGPENDING, RLIM_INFINITY);//设置用户命名空间待处理信号限制为无限制
+	set_userns_rlimit_max(&init_user_ns, UCOUNT_RLIMIT_MEMLOCK,    RLIM_INFINITY);//设置用户命名空间内存锁定限制为无限制
 
 #ifdef CONFIG_VMAP_STACK
 	cpuhp_setup_state(CPUHP_BP_PREPARE_DYN, "fork:vm_stack_cache",
-			  NULL, free_vm_stack_cache);
+			  NULL, free_vm_stack_cache);// 设置 CPU 热插拔状态
 #endif
 
-	scs_init();
+	scs_init();//初始化 SCS（单一控制结构）
 
-	lockdep_init_task(&init_task);
-	uprobes_init();
+	lockdep_init_task(&init_task);//初始化锁依赖跟踪
+	uprobes_init();//初始化用户探针
 }
 
 int __weak arch_dup_task_struct(struct task_struct *dst,
@@ -3167,26 +3167,26 @@ void __init proc_caches_init(void)
 	sighand_cachep = kmem_cache_create("sighand_cache",
 			sizeof(struct sighand_struct), 0,
 			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_TYPESAFE_BY_RCU|
-			SLAB_ACCOUNT, sighand_ctor);
+			SLAB_ACCOUNT, sighand_ctor);//创建信号处理程序缓存，以存储信号处理程序结构 (sighand_struct) 的实例。设置构造函数为sighand_ctor
 	signal_cachep = kmem_cache_create("signal_cache",
 			sizeof(struct signal_struct), 0,
 			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_ACCOUNT,
-			NULL);
+			NULL);//创建信号结构缓存，存储信号结构 (signal_struct) 的实例
 	files_cachep = kmem_cache_create("files_cache",
 			sizeof(struct files_struct), 0,
 			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_ACCOUNT,
-			NULL);
+			NULL);//创建文件结构缓存，存储文件结构 (files_struct) 的实例
 	fs_cachep = kmem_cache_create("fs_cache",
 			sizeof(struct fs_struct), 0,
 			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_ACCOUNT,
-			NULL);
+			NULL);//创建文件系统结构缓存，存储文件系统结构 (fs_struct) 的实例
 
-	vm_area_cachep = KMEM_CACHE(vm_area_struct, SLAB_PANIC|SLAB_ACCOUNT);
+	vm_area_cachep = KMEM_CACHE(vm_area_struct, SLAB_PANIC|SLAB_ACCOUNT);// 创建虚拟内存区域结构缓存，存储虚拟内存区域结构 (vm_area_struct) 的实例。
 #ifdef CONFIG_PER_VMA_LOCK
-	vma_lock_cachep = KMEM_CACHE(vma_lock, SLAB_PANIC|SLAB_ACCOUNT);
+	vma_lock_cachep = KMEM_CACHE(vma_lock, SLAB_PANIC|SLAB_ACCOUNT);//创建虚拟内存区域锁的缓存
 #endif
-	mmap_init();
-	nsproxy_cache_init();
+	mmap_init();//初始化内存映射
+	nsproxy_cache_init();//初始化命名空间代理缓存
 }
 
 /*

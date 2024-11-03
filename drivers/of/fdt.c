@@ -87,17 +87,17 @@ void __init of_fdt_limit_memory(int limit)
 	}
 }
 
-bool of_fdt_device_is_available(const void *blob, unsigned long node)
+bool of_fdt_device_is_available(const void *blob, unsigned long node)//用于检查设备树中指定设备的可用性
 {
-	const char *status = fdt_getprop(blob, node, "status", NULL);
+	const char *status = fdt_getprop(blob, node, "status", NULL);//从设备树中获取指定节点的"status"属性
 
-	if (!status)
+	if (!status)//如果没有找到"status"属性，默认认为设备可用
 		return true;
 
-	if (!strcmp(status, "ok") || !strcmp(status, "okay"))
-		return true;
+	if (!strcmp(status, "ok") || !strcmp(status, "okay"))//检查"status"属性的值是否为"ok"或"okay"
+		return true;//如果状态是"ok"或"okay"，设备可用
 
-	return false;
+	return false;//其他情况下，设备不可用
 }
 
 static void *unflatten_dt_alloc(void **mem, unsigned long size,
@@ -1042,65 +1042,68 @@ int __init early_init_dt_scan_memory(void)
 	}
 	return found_memory;//返回是否找到内存节点的标志
 }
-
+/*主要用于在系统启动时初始化设备树（Device Tree）中 "/chosen" 节点，提取与系统引导相关的命令行参数，并设置默认值。*/
 int __init early_init_dt_scan_chosen(char *cmdline)
 {
-	int l, node;
+	int l, node;//定义整型变量 l 用于存储属性长度，node 用于存储节点偏移
 	const char *p;
-	const void *rng_seed;
-	const void *fdt = initial_boot_params;
+	const void *rng_seed;//定义常量无指针 rng_seed 用于存储随机数种子
+	const void *fdt = initial_boot_params;//获取设备树的初始引导参数
 
-	node = fdt_path_offset(fdt, "/chosen");
+	node = fdt_path_offset(fdt, "/chosen");//获取 "/chosen" 节点的偏移
 	if (node < 0)
-		node = fdt_path_offset(fdt, "/chosen@0");
+		node = fdt_path_offset(fdt, "/chosen@0");//如果无效，尝试获取 "/chosen@0" 节点的偏移
 	if (node < 0)
-		/* Handle the cmdline config options even if no /chosen node */
-		goto handle_cmdline;
+		/* 处理命令行配置选项，即使没有 "/chosen" 节点 */
+		goto handle_cmdline;// 跳转到处理命令行的部分
 
-	chosen_node_offset = node;
+	chosen_node_offset = node;//保存找到的节点偏移
 
-	early_init_dt_check_for_initrd(node);
-	early_init_dt_check_for_elfcorehdr(node);
+	early_init_dt_check_for_initrd(node);//检查设备树中是否有 initrd
+	early_init_dt_check_for_elfcorehdr(node);//检查设备树中是否有 ELF 核心头
 
-	rng_seed = of_get_flat_dt_prop(node, "rng-seed", &l);
-	if (rng_seed && l > 0) {
-		add_bootloader_randomness(rng_seed, l);
+	rng_seed = of_get_flat_dt_prop(node, "rng-seed", &l);//获取 "rng-seed" 属性，返回长度
+	if (rng_seed && l > 0) {//如果成功获取到随机数种子且长度有效
+		add_bootloader_randomness(rng_seed, l);// 将随机数种子添加到引导加载器随机性中
 
-		/* try to clear seed so it won't be found. */
-		fdt_nop_property(initial_boot_params, node, "rng-seed");
+		/* 尝试清除种子，以免被找到 */
+		fdt_nop_property(initial_boot_params, node, "rng-seed");//从设备树中删除 "rng-seed" 属性
 
-		/* update CRC check value */
+		/* 更新 CRC 校验值 */
 		of_fdt_crc32 = crc32_be(~0, initial_boot_params,
-				fdt_totalsize(initial_boot_params));
+				fdt_totalsize(initial_boot_params));//计算设备树的 CRC 校验，使用初始引导参数的大小
 	}
 
-	/* Retrieve command line */
-	p = of_get_flat_dt_prop(node, "bootargs", &l);
-	if (p != NULL && l > 0)
-		strscpy(cmdline, p, min(l, COMMAND_LINE_SIZE));
+	/* 获取命令行参数 */
+	p = of_get_flat_dt_prop(node, "bootargs", &l);//从节点中获取 "bootargs" 属性
+	if (p != NULL && l > 0)//如果命令行参数有效
+		strscpy(cmdline, p, min(l, COMMAND_LINE_SIZE));//将命令行参数复制到 cmdline 中
 
-handle_cmdline:
+handle_cmdline://处理命令行部分
 	/*
 	 * CONFIG_CMDLINE is meant to be a default in case nothing else
 	 * managed to set the command line, unless CONFIG_CMDLINE_FORCE
 	 * is set in which case we override whatever was found earlier.
+	 * 如果没有其他地方设置命令行，使用 CONFIG_CMDLINE 作为默认值
+	 * 除非设置了 CONFIG_CMDLINE_FORCE，否则覆盖之前找到的值
 	 */
-#ifdef CONFIG_CMDLINE
-#if defined(CONFIG_CMDLINE_EXTEND)
-	strlcat(cmdline, " ", COMMAND_LINE_SIZE);
-	strlcat(cmdline, CONFIG_CMDLINE, COMMAND_LINE_SIZE);
-#elif defined(CONFIG_CMDLINE_FORCE)
-	strscpy(cmdline, CONFIG_CMDLINE, COMMAND_LINE_SIZE);
+#ifdef CONFIG_CMDLINE//如果配置了命令行
+#if defined(CONFIG_CMDLINE_EXTEND)//如果配置了命令行扩展
+	strlcat(cmdline, " ", COMMAND_LINE_SIZE);//在命令行后添加空格
+	strlcat(cmdline, CONFIG_CMDLINE, COMMAND_LINE_SIZE);//将配置的命令行附加到 cmdline
+#elif defined(CONFIG_CMDLINE_FORCE)//如果配置强制命令行
+	strscpy(cmdline, CONFIG_CMDLINE, COMMAND_LINE_SIZE);//直接复制配置的命令行到 cmdline
 #else
-	/* No arguments from boot loader, use kernel's  cmdl*/
-	if (!((char *)cmdline)[0])
-		strscpy(cmdline, CONFIG_CMDLINE, COMMAND_LINE_SIZE);
+	/* 如果没有来自引导加载程序的参数，则使用内核的命令行 */
+	if (!((char *)cmdline)[0])//如果 cmdline 为空
+		strscpy(cmdline, CONFIG_CMDLINE, COMMAND_LINE_SIZE);//复制配置的命令行
 #endif
 #endif /* CONFIG_CMDLINE */
 
-	pr_debug("Command line is: %s\n", (char *)cmdline);
+	pr_debug("Command line is: %s\n", (char *)cmdline);//输出调试信息，显示最终的命令行
+  1102
 
-	return 0;
+	return 0;//返回 0 表示成功
 }
 
 #ifndef MIN_MEMBLOCK_ADDR
@@ -1163,20 +1166,20 @@ static void * __init early_init_dt_alloc_memory_arch(u64 size, u64 align)
 	return ptr;
 }
 
-bool __init early_init_dt_verify(void *params)
+bool __init early_init_dt_verify(void *params)//用于验证传入的设备树参数的有效性
 {
-	if (!params)
+	if (!params)//检查传入的参数是否为NULL
 		return false;
 
 	/* check device tree validity */
-	if (fdt_check_header(params))
+	if (fdt_check_header(params))//检查设备树头部的有效性
 		return false;
 
 	/* Setup flat device-tree pointer */
-	initial_boot_params = params;
+	initial_boot_params = params;// 保存设备树的指针
 	of_fdt_crc32 = crc32_be(~0, initial_boot_params,
-				fdt_totalsize(initial_boot_params));
-	return true;
+				fdt_totalsize(initial_boot_params));//计算设备树的CRC32校验值
+	return true;//如果检查通过，返回true
 }
 
 

@@ -3092,11 +3092,11 @@ int __init pcpu_embed_first_chunk(size_t reserved_size, size_t dyn_size,
 		unsigned int cpu = NR_CPUS;//初始化 CPU 为NR_CPUS
 		void *ptr;//用于存储当前组的分配地址
 
-		for (i = 0; i < gi->nr_units && cpu == NR_CPUS; i++)//遍历当前组中的所有单元（一个单元相当于一个per_cpu变量内存块），查找有效的CPU索引
+		for (i = 0; i < gi->nr_units && cpu == NR_CPUS; i++)//遍历当前组中的所有单元（一个单元是一个per_cpu变量内存块），查找有效的CPU索引
 			cpu = gi->cpu_map[i];//记录第一个有效的 CPU 索引
-		BUG_ON(cpu == NR_CPUS);//如果所有 CPU 都不可用，触发错误
+		BUG_ON(cpu == NR_CPUS);//如果所有CPU都不可用，触发错误
 
-		/*为组内所有单元分配内存，分配原则基于单元大小和对齐要求 */
+		/*为组内所有单元(cpu)分配内存，分配原则基于单元大小和对齐要求 */
 		ptr = pcpu_fc_alloc(cpu, gi->nr_units * ai->unit_size, atom_size, cpu_to_nd_fn);//在memblock中分配
 		if (!ptr) {//如果分配失败，设置错误码并跳转到错误处理
 			rc = -ENOMEM;
@@ -3110,9 +3110,9 @@ int __init pcpu_embed_first_chunk(size_t reserved_size, size_t dyn_size,
 		if (ptr > areas[highest_group])//更新最大组索引
 			highest_group = group;
 	}
-	/*计算最大距离：最大组的地址减去最小基地址，并加上单元大小乘以单元数*/
+	/*计算最大距离：最大组的基地址减去最小组的基地址，并加上最大组的单元大小乘以单元数*/
 	max_distance = areas[highest_group] - base;
-	max_distance += ai->unit_size * ai->groups[highest_group].nr_units;
+	max_distance += ai->unit_size * ai->groups[highest_group].nr_units;//加上最大组占的内存大小
 
 	/* 如果最大距离超过 vmalloc 空间的 75%，打印警告并在有回退时返回错误 */
 	if (max_distance > VMALLOC_TOTAL * 3 / 4) {
@@ -3379,7 +3379,7 @@ void __init setup_per_cpu_areas(void)
 	 * 这是传统分配器所做的操作。
 	 */
 	rc = pcpu_embed_first_chunk(PERCPU_MODULE_RESERVE, PERCPU_DYNAMIC_RESERVE,
-				    PAGE_SIZE, NULL, NULL);//用于初始化 per-CPU 内存块，为每个 CPU 分配必要的内存空间。PERCPU_MODULE_RESERVE:内核为per-CPU变量所保留的固定区域大小。PERCPU_DYNAMIC_RESERVE：内核为动态分配的per-CPU变量保留的区域大小。PAGE_SIZE：内存块的对齐大小
+				    PAGE_SIZE, NULL, NULL);//用于初始化 per-CPU 内存块，为per_CPU 分配必要的内存空间。PERCPU_MODULE_RESERVE:内核为per-CPU变量所保留的固定区域大小(64MB)。PERCPU_DYNAMIC_RESERVE：内核为动态分配的per-CPU变量保留的区域大小(112MB)。PAGE_SIZE：内存块的对齐大小
 	if (rc < 0)//如果初始化失败，则直接触发内核崩溃，以防止系统继续运行
 		panic("Failed to initialize percpu areas.");
 

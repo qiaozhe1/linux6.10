@@ -116,26 +116,26 @@ static void desc_set_defaults(unsigned int irq, struct irq_desc *desc, int node,
 {
 	int cpu;
 
-	desc->irq_common_data.handler_data = NULL;
-	desc->irq_common_data.msi_desc = NULL;
+	desc->irq_common_data.handler_data = NULL;// 初始化通用中断数据，将 handler_data 设置为 NULL，表示没有关联的处理数据
+	desc->irq_common_data.msi_desc = NULL;//将 MSI（Message Signaled Interrupts）描述符设置为 NULL，表示当前中断没有关联的 MSI 描述符
 
-	desc->irq_data.common = &desc->irq_common_data;
-	desc->irq_data.irq = irq;
-	desc->irq_data.chip = &no_irq_chip;
-	desc->irq_data.chip_data = NULL;
-	irq_settings_clr_and_set(desc, ~0, _IRQ_DEFAULT_INIT_FLAGS);
-	irqd_set(&desc->irq_data, IRQD_IRQ_DISABLED);
-	irqd_set(&desc->irq_data, IRQD_IRQ_MASKED);
-	desc->handle_irq = handle_bad_irq;
-	desc->depth = 1;
-	desc->irq_count = 0;
-	desc->irqs_unhandled = 0;
-	desc->tot_count = 0;
-	desc->name = NULL;
-	desc->owner = owner;
-	for_each_possible_cpu(cpu)
+	desc->irq_data.common = &desc->irq_common_data;//将 irq_data 的 common 指向 irq_common_data，建立通用中断数据与 irq_data 的关联
+	desc->irq_data.irq = irq;//设置 irq_data 的中断号为给定的 irq
+	desc->irq_data.chip = &no_irq_chip;//设置 irq_data 的中断控制器为 no_irq_chip，表示当前中断暂时没有有效的中断控制器
+	desc->irq_data.chip_data = NULL;// 将中断控制器的相关数据设置为 NULL
+	irq_settings_clr_and_set(desc, ~0, _IRQ_DEFAULT_INIT_FLAGS);//清除并设置中断描述符的默认标志
+	irqd_set(&desc->irq_data, IRQD_IRQ_DISABLED);//设置中断状态为禁用状态
+	irqd_set(&desc->irq_data, IRQD_IRQ_MASKED);// 设置中断状态为屏蔽状态
+	desc->handle_irq = handle_bad_irq;//设置默认的中断处理程序为 handle_bad_irq，表示当前中断没有有效的处理函数
+	desc->depth = 1;//设置中断的嵌套深度为 1，表示中断被屏蔽，无法触发
+	desc->irq_count = 0;// 初始化中断计数器
+	desc->irqs_unhandled = 0;//初始化未处理中断计数器
+	desc->tot_count = 0;//初始化总的中断计数
+	desc->name = NULL;//将中断名称初始化为 NULL
+	desc->owner = owner;//设置中断的所有者模块为传入的 owner
+	for_each_possible_cpu(cpu)//遍历每一个可能的 CPU，初始化每个 CPU 的中断统计数据
 		*per_cpu_ptr(desc->kstat_irqs, cpu) = (struct irqstat) { };
-	desc_smp_init(desc, node, affinity);
+	desc_smp_init(desc, node, affinity);//初始化与 SMP（对称多处理）相关的中断属性
 }
 
 int nr_irqs = NR_IRQS;
@@ -170,8 +170,8 @@ static unsigned int irq_find_at_or_after(unsigned int offset)
 
 static void irq_insert_desc(unsigned int irq, struct irq_desc *desc)
 {
-	MA_STATE(mas, &sparse_irqs, irq, irq);
-	WARN_ON(mas_store_gfp(&mas, desc, GFP_KERNEL) != 0);
+	MA_STATE(mas, &sparse_irqs, irq, irq);//初始化 ma_state 对象，用于操作稀疏 IRQ 数据结构
+	WARN_ON(mas_store_gfp(&mas, desc, GFP_KERNEL) != 0);//将中断描述符存储到稀疏 IRQ 数据结构中，并检查是否存储成功
 }
 
 static void delete_irq_desc(unsigned int irq)

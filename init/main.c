@@ -1018,7 +1018,7 @@ void start_kernel(void)
 	/* 在 init_ISA_irqs() 之前初始化一些链接 */
 	early_irq_init();
 	init_IRQ();//初始化中断处理，设置中断向量和处理函数
-	tick_init();//初始化定时器，设置定时器中断处理
+	tick_init();//初始化与系统时钟相关的功能
 	rcu_init_nohz();//初始化无驻留 RCU，用于低延迟的 RCU 操作
 	init_timers();//初始化定时器，设置内核定时器
 	srcu_init();//初始化 SRCU（Sleepable RCU），用于睡眠状态下的 RCU 操作

@@ -248,21 +248,21 @@ EXPORT_SYMBOL(jiffies_64);
  *			of the timer wheel. The list contains all timers
  *			which are enqueued into a specific bucket.
  */
-struct timer_base {
-	raw_spinlock_t		lock;
-	struct timer_list	*running_timer;
+struct timer_base {//用于实现内核中的定时器管理系统
+	raw_spinlock_t		lock;//保护 timer_base 结构的并发访问，确保在多线程环境下的安全性。
+	struct timer_list	*running_timer;//指向当前正在运行的定时器，方便管理和调度
 #ifdef CONFIG_PREEMPT_RT
-	spinlock_t		expiry_lock;
-	atomic_t		timer_waiters;
+	spinlock_t		expiry_lock;//过期锁。在启用实时调度时，用于保护对定时器过期操作的访问。
+	atomic_t		timer_waiters;//原子变量，用于计数当前有多少线程在等待定时器的到期。
 #endif
-	unsigned long		clk;
-	unsigned long		next_expiry;
-	unsigned int		cpu;
-	bool			next_expiry_recalc;
-	bool			is_idle;
-	bool			timers_pending;
-	DECLARE_BITMAP(pending_map, WHEEL_SIZE);
-	struct hlist_head	vectors[WHEEL_SIZE];
+	unsigned long		clk;//记录系统启动以来的时钟值，用于定时器的时间计算。
+	unsigned long		next_expiry;//记录下一个即将到期的定时器的时间。
+	unsigned int		cpu;//记录该定时器基所关联的 CPU，用于在多核系统中管理定时器
+	bool			next_expiry_recalc;//指示是否需要重新计算下一个到期时间。
+	bool			is_idle;//表示该定时器基当前是否处于空闲状态。
+	bool			timers_pending;//指示是否有待处理的定时器。
+	DECLARE_BITMAP(pending_map, WHEEL_SIZE);//使用位图来标识当前所有待处理的定时器，方便快速访问。
+	struct hlist_head	vectors[WHEEL_SIZE];//用于存储不同到期时间的定时器的链表，支持高效的定时器管理和调度。
 } ____cacheline_aligned;
 
 static DEFINE_PER_CPU(struct timer_base, timer_bases[NR_BASES]);
@@ -2694,18 +2694,18 @@ int timers_dead_cpu(unsigned int cpu)
 
 #endif /* CONFIG_HOTPLUG_CPU */
 
-static void __init init_timer_cpu(int cpu)
+static void __init init_timer_cpu(int cpu)//用于初始化指定CPU的定时器系统
 {
-	struct timer_base *base;
+	struct timer_base *base;// 定义定时器基类的指针，用于指向定时器基结构
 	int i;
 
-	for (i = 0; i < NR_BASES; i++) {
-		base = per_cpu_ptr(&timer_bases[i], cpu);
-		base->cpu = cpu;
-		raw_spin_lock_init(&base->lock);
-		base->clk = jiffies;
-		base->next_expiry = base->clk + NEXT_TIMER_MAX_DELTA;
-		timer_base_init_expiry_lock(base);
+	for (i = 0; i < NR_BASES; i++) {//遍历所有定时器基
+		base = per_cpu_ptr(&timer_bases[i], cpu);// 获取当前 CPU 对应的定时器基
+		base->cpu = cpu;//设置定时器基的 CPU 字段
+		raw_spin_lock_init(&base->lock);//初始化定时器基的自旋锁，确保线程安全
+		base->clk = jiffies;//将当前的 jiffies 值赋给定时器基的时钟字段
+		base->next_expiry = base->clk + NEXT_TIMER_MAX_DELTA;//计算下一个到期时间
+		timer_base_init_expiry_lock(base);//初始化定时器基的过期锁
 	}
 }
 
@@ -2717,11 +2717,11 @@ static void __init init_timer_cpus(void)
 		init_timer_cpu(cpu);
 }
 
-void __init init_timers(void)
+void __init init_timers(void)//负责内核中定时器的初始化工作，确保定时器系统在系统启动时能够正常运行
 {
-	init_timer_cpus();
-	posix_cputimers_init_work();
-	open_softirq(TIMER_SOFTIRQ, run_timer_softirq);
+	init_timer_cpus();//初始化 CPU 上的定时器，确保每个 CPU 都能正确处理定时器
+	posix_cputimers_init_work();//初始化 POSIX CPU 定时器，设置工作队列以支持 POSIX 定时器。以便符合 POSIX 标准的应用程序能够正确使用定时器
+	open_softirq(TIMER_SOFTIRQ, run_timer_softirq);//打开软中断，注册定时器软中断处理函数(run_timer_softirq)
 }
 
 /**

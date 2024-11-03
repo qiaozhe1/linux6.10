@@ -79,14 +79,14 @@ struct anon_vma {
  * The "rb" field indexes on an interval tree the anon_vma_chains
  * which link all the VMAs associated with this anon_vma.
  */
-struct anon_vma_chain {
-	struct vm_area_struct *vma;
-	struct anon_vma *anon_vma;
-	struct list_head same_vma;   /* locked by mmap_lock & page_table_lock */
-	struct rb_node rb;			/* locked by anon_vma->rwsem */
-	unsigned long rb_subtree_last;
+struct anon_vma_chain {//用于管理与匿名虚拟内存相关的链表和红黑树节点
+	struct vm_area_struct *vma;//指向一个虚拟内存区域结构体，表示该链表节点关联的虚拟内存区域
+	struct anon_vma *anon_vma;//指向与此链表节点关联的匿名虚拟内存区域
+	struct list_head same_vma;   /* 用于连接同一虚拟内存区域的多个 anon_vma_chain 结构体 */
+	struct rb_node rb;			/* 用于在红黑树中进行管理，以便于快速查找和插入 */
+	unsigned long rb_subtree_last;//记录红黑树子树的最后一个节点，用于优化操作，比如在查找过程中避免重复遍历。
 #ifdef CONFIG_DEBUG_VM_RB
-	unsigned long cached_vma_start, cached_vma_last;
+	unsigned long cached_vma_start, cached_vma_last;//在调试模式下使用，用于缓存虚拟内存区域的起始和结束地址
 #endif
 };
 

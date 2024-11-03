@@ -510,26 +510,26 @@ void __fput_sync(struct file *file)
 EXPORT_SYMBOL(fput);
 EXPORT_SYMBOL(__fput_sync);
 
-void __init files_init(void)
+void __init files_init(void)//用于初始化文件系统的相关结构
 {
 	filp_cachep = kmem_cache_create("filp", sizeof(struct file), 0,
 				SLAB_TYPESAFE_BY_RCU | SLAB_HWCACHE_ALIGN |
-				SLAB_PANIC | SLAB_ACCOUNT, NULL);
-	percpu_counter_init(&nr_files, 0, GFP_KERNEL);
+				SLAB_PANIC | SLAB_ACCOUNT, NULL);// 创建一个名为 "filp" 的缓存池，用于分配 struct file 结构体
+	percpu_counter_init(&nr_files, 0, GFP_KERNEL);//初始化每个 CPU 的文件计数器 nr_files，初始值为 0，用于内核追踪系统中打开的文件的数量
 }
 
 /*
  * One file with associated inode and dcache is very roughly 1K. Per default
  * do not use more than 10% of our memory for files.
  */
-void __init files_maxfiles_init(void)
+void __init files_maxfiles_init(void)//初始化系统中能够同时打开的最大文件数量
 {
 	unsigned long n;
-	unsigned long nr_pages = totalram_pages();
-	unsigned long memreserve = (nr_pages - nr_free_pages()) * 3/2;
+	unsigned long nr_pages = totalram_pages();//获取系统中的总页数
+	unsigned long memreserve = (nr_pages - nr_free_pages()) * 3/2;//估算保留内存的页数
 
-	memreserve = min(memreserve, nr_pages - 1);
-	n = ((nr_pages - memreserve) * (PAGE_SIZE / 1024)) / 10;
+	memreserve = min(memreserve, nr_pages - 1);//保证保留内存不超过总页数
+	n = ((nr_pages - memreserve) * (PAGE_SIZE / 1024)) / 10;//计算最大同时打开的文件数量
 
-	files_stat.max_files = max_t(unsigned long, n, NR_FILE);
+	files_stat.max_files = max_t(unsigned long, n, NR_FILE);//设置最大文件数量，取 n 和 NR_FILE 的最大值
 }

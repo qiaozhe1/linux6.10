@@ -5,9 +5,9 @@
 struct dentry;
 struct vfsmount;
 
-struct path {
-	struct vfsmount *mnt;
-	struct dentry *dentry;
+struct path {//路径结构体
+	struct vfsmount *mnt;//虚拟文件挂载结构
+	struct dentry *dentry;//挂载目录项
 } __randomize_layout;
 
 extern void path_get(const struct path *);

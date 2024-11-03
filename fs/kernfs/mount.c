@@ -419,16 +419,16 @@ static void __init kernfs_lock_init(void)
 	kernfs_mutex_init();
 }
 
-void __init kernfs_init(void)
+void __init kernfs_init(void)//初始化内核文件系统 (kernfs)
 {
 	kernfs_node_cache = kmem_cache_create("kernfs_node_cache",
 					      sizeof(struct kernfs_node),
-					      0, SLAB_PANIC, NULL);
+					      0, SLAB_PANIC, NULL);// 创建 kernfs 节点的 slab 缓存池,用于管理 struct kernfs_node 结构的内存分配。
 
 	/* Creates slab cache for kernfs inode attributes */
 	kernfs_iattrs_cache  = kmem_cache_create("kernfs_iattrs_cache",
 					      sizeof(struct kernfs_iattrs),
-					      0, SLAB_PANIC, NULL);
+					      0, SLAB_PANIC, NULL);//创建 kernfs节点属性的 slab 缓存池,用于管理 struct kernfs_iattrs 结构的内存分配。
 
-	kernfs_lock_init();
+	kernfs_lock_init();//初始化 kernfs 的锁
 }

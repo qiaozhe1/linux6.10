@@ -48,11 +48,11 @@ void put_filesystem(struct file_system_type *fs)
 
 static struct file_system_type **find_filesystem(const char *name, unsigned len)
 {
-	struct file_system_type **p;
-	for (p = &file_systems; *p; p = &(*p)->next)
+	struct file_system_type **p;//指向文件系统类型的指针，用于遍历链表
+	for (p = &file_systems; *p; p = &(*p)->next)/// 遍历已注册的文件系统链表
 		if (strncmp((*p)->name, name, len) == 0 &&
-		    !(*p)->name[len])
-			break;
+		    !(*p)->name[len])//使用 strncmp 比较名称前len个字符是否匹配，并检查名称长度
+			break;//有匹配的文件系统，跳出循环
 	return p;
 }
 
@@ -69,26 +69,26 @@ static struct file_system_type **find_filesystem(const char *name, unsigned len)
  *	unregistered.
  */
  
-int register_filesystem(struct file_system_type * fs)
+int register_filesystem(struct file_system_type * fs)//用于注册一个新的文件系统类型
 {
 	int res = 0;
-	struct file_system_type ** p;
+	struct file_system_type ** p;//指向文件系统类型的指针，用于查找和修改
 
 	if (fs->parameters &&
-	    !fs_validate_description(fs->name, fs->parameters))
+	    !fs_validate_description(fs->name, fs->parameters))// 如果文件系统有参数且验证失败，返回无效参数错误
 		return -EINVAL;
 
-	BUG_ON(strchr(fs->name, '.'));
-	if (fs->next)
+	BUG_ON(strchr(fs->name, '.'));//检查文件系统名称中是否包含 '.'，如果有则出错
+	if (fs->next)//如果文件系统的 next 字段不为空，表示已在注册中，返回忙错误
 		return -EBUSY;
-	write_lock(&file_systems_lock);
-	p = find_filesystem(fs->name, strlen(fs->name));
-	if (*p)
-		res = -EBUSY;
+	write_lock(&file_systems_lock);//获取写锁，开始修改文件系统列表
+	p = find_filesystem(fs->name, strlen(fs->name));//查找文件系统名称
+	if (*p)// 如果找到的指针不为空
+		res = -EBUSY;//返回 -EBUSY，表示文件系统已经注册
 	else
-		*p = fs;
-	write_unlock(&file_systems_lock);
-	return res;
+		*p = fs;// 否则，将 fs 赋值给找到的指针，注册文件系统
+	write_unlock(&file_systems_lock);// 释放写锁
+	return res;//返回结果，成功则为 0，失败则为相应错误码
 }
 
 EXPORT_SYMBOL(register_filesystem);

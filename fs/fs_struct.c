@@ -16,15 +16,15 @@ void set_fs_root(struct fs_struct *fs, const struct path *path)
 {
 	struct path old_root;
 
-	path_get(path);
+	path_get(path);//增加 path成员的引用计数，以确保在修改过程中它不会被释放
 	spin_lock(&fs->lock);
-	write_seqcount_begin(&fs->seq);
-	old_root = fs->root;
-	fs->root = *path;
-	write_seqcount_end(&fs->seq);
+	write_seqcount_begin(&fs->seq);//开始一个序列计数写入，表示将要进行修改
+	old_root = fs->root;//保存当前的根路径到 old_root，以便在后续释放旧根路径时使用
+	fs->root = *path;//将文件系统的根路径更新为新的路径
+	write_seqcount_end(&fs->seq);//结束序列计数写入，标志修改完成
 	spin_unlock(&fs->lock);
-	if (old_root.dentry)
-		path_put(&old_root);
+	if (old_root.dentry)//如果旧根路径存在
+		path_put(&old_root);// 释放旧根路径的引用，减少引用计数
 }
 
 /*

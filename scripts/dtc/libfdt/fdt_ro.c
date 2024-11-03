@@ -398,27 +398,27 @@ static const struct fdt_property *fdt_get_property_namelen_(const void *fdt,
 							    int *lenp,
 							    int *poffset)
 {
-	for (offset = fdt_first_property_offset(fdt, offset);
+	for (offset = fdt_first_property_offset(fdt, offset);//offset 初始值由 fdt_first_property_offset 函数设定，指向设备树中第一个属性的偏移
 	     (offset >= 0);
-	     (offset = fdt_next_property_offset(fdt, offset))) {
+	     (offset = fdt_next_property_offset(fdt, offset))) {//获取下一个属性的偏移量
 		const struct fdt_property *prop;
 
-		prop = fdt_get_property_by_offset_(fdt, offset, lenp);
-		if (!can_assume(LIBFDT_FLAWLESS) && !prop) {
-			offset = -FDT_ERR_INTERNAL;
+		prop = fdt_get_property_by_offset_(fdt, offset, lenp);//根据当前偏移量获取属性结构体, lenp 用于存储属性长度，如果属性存在
+		if (!can_assume(LIBFDT_FLAWLESS) && !prop) {//如果 cannot assume LIBFDT_FLAWLESS 且获取属性失败
+			offset = -FDT_ERR_INTERNAL;//设置 offset 为内部错误码，标识发生了错误
 			break;
 		}
 		if (fdt_string_eq_(fdt, fdt32_ld_(&prop->nameoff),
-				   name, namelen)) {
+				   name, namelen)) {//检查当前属性的名称是否与给定名称匹配,使用 fdt32_ld_ 从属性结构中加载名称偏移并与给定名称比较
 			if (poffset)
-				*poffset = offset;
-			return prop;
+				*poffset = offset;//如果提供了 poffset，记录当前属性的偏移量
+			return prop;//返回指向找到的属性的指针
 		}
 	}
 
-	if (lenp)
-		*lenp = offset;
-	return NULL;
+	if (lenp)//如果遍历结束未找到匹配的属性
+		*lenp = offset;// 将当前 offset 赋值给 lenp，表示未找到属性的偏移量
+	return NULL;//返回 NULL，表示未找到属性
 }
 
 
@@ -449,21 +449,21 @@ const struct fdt_property *fdt_get_property(const void *fdt,
 }
 
 const void *fdt_getprop_namelen(const void *fdt, int nodeoffset,
-				const char *name, int namelen, int *lenp)
+				const char *name, int namelen, int *lenp)//用于从设备树中获取指定节点的属性值
 {
 	int poffset;
 	const struct fdt_property *prop;
 
 	prop = fdt_get_property_namelen_(fdt, nodeoffset, name, namelen, lenp,
-					 &poffset);
+					 &poffset);//调用内部函数获取具有指定名称和长度的属性
 	if (!prop)
-		return NULL;
+		return NULL;//如果未找到属性，返回 NULL
 
 	/* Handle realignment */
 	if (!can_assume(LATEST) && fdt_version(fdt) < 0x10 &&
-	    (poffset + sizeof(*prop)) % 8 && fdt32_ld_(&prop->len) >= 8)
-		return prop->data + 4;
-	return prop->data;
+	    (poffset + sizeof(*prop)) % 8 && fdt32_ld_(&prop->len) >= 8)//检查设备树版本，并确保属性长度大于等于 8
+		return prop->data + 4;// 返回属性数据的偏移量为 4 的位置
+	return prop->data;//返回属性数据的起始位置
 }
 
 const void *fdt_getprop_by_offset(const void *fdt, int offset,

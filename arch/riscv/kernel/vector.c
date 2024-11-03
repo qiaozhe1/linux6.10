@@ -51,18 +51,18 @@ int riscv_v_setup_vsize(void)
 	return 0;
 }
 
-void __init riscv_v_setup_ctx_cache(void)
+void __init riscv_v_setup_ctx_cache(void)//初始化 RISC-V 向量上下文缓存
 {
-	if (!has_vector())
+	if (!has_vector())//检查系统是否支持向量扩展
 		return;
 
 	riscv_v_user_cachep = kmem_cache_create_usercopy("riscv_vector_ctx",
 							 riscv_v_vsize, 16, SLAB_PANIC,
-							 0, riscv_v_vsize, NULL);
+							 0, riscv_v_vsize, NULL);// 创建用户向量上下文的缓存
 #ifdef CONFIG_RISCV_ISA_V_PREEMPTIVE
 	riscv_v_kernel_cachep = kmem_cache_create("riscv_vector_kctx",
 						  riscv_v_vsize, 16,
-						  SLAB_PANIC, NULL);
+						  SLAB_PANIC, NULL);//创建内核向量上下文的缓存
 #endif
 }
 

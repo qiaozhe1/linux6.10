@@ -786,22 +786,22 @@ static struct kobject *kobject_create(void)
  *
  * If the kobject was not able to be created, NULL will be returned.
  */
-struct kobject *kobject_create_and_add(const char *name, struct kobject *parent)
+struct kobject *kobject_create_and_add(const char *name, struct kobject *parent)//创建一个新的 kobject 实例并将其添加到指定的父 kobject 中。
 {
 	struct kobject *kobj;
 	int retval;
 
-	kobj = kobject_create();
+	kobj = kobject_create();//创建一个新的 kobject 实例，并将其指针存储在 kobj 中
 	if (!kobj)
 		return NULL;
 
-	retval = kobject_add(kobj, parent, "%s", name);
+	retval = kobject_add(kobj, parent, "%s", name);//将新创建的 kobject 添加到父对象中，并设置其名称。
 	if (retval) {
 		pr_warn("%s: kobject_add error: %d\n", __func__, retval);
-		kobject_put(kobj);
+		kobject_put(kobj);//释放之前创建的 kobject，然后将 kobj 设置为 NULL。
 		kobj = NULL;
 	}
-	return kobj;
+	return kobj;//返回创建并成功添加的 kobject 指针
 }
 EXPORT_SYMBOL_GPL(kobject_create_and_add);
 
