@@ -94,15 +94,15 @@ void __init proc_init_kmemcache(void)
 					     0, (SLAB_RECLAIM_ACCOUNT|
 						SLAB_ACCOUNT|
 						SLAB_PANIC),
-					     init_once);
+					     init_once);//创建一个新的内存缓存池，用于存储struct proc_inode类型的对象。用于管理/proc文件系统中每个进程目录项的proc_inode对象，init_once是初始化每个缓存对象时调用的函数。
 	pde_opener_cache =
 		kmem_cache_create("pde_opener", sizeof(struct pde_opener), 0,
-				  SLAB_ACCOUNT|SLAB_PANIC, NULL);
+				  SLAB_ACCOUNT|SLAB_PANIC, NULL);//创建了一个新的内存缓存池，用于 struct pde_opener 类型的对象。pde_opener 用于 /proc 目录项的打开操作
 	proc_dir_entry_cache = kmem_cache_create_usercopy(
 		"proc_dir_entry", SIZEOF_PDE, 0, SLAB_PANIC,
 		offsetof(struct proc_dir_entry, inline_name),
-		SIZEOF_PDE_INLINE_NAME, NULL);
-	BUILD_BUG_ON(sizeof(struct proc_dir_entry) >= SIZEOF_PDE);
+		SIZEOF_PDE_INLINE_NAME, NULL);//创建一个内存缓存池，用于 struct proc_dir_entry 类型的对象。这个函数用于创建可以进行内存复制的缓存池。
+	BUILD_BUG_ON(sizeof(struct proc_dir_entry) >= SIZEOF_PDE);//确保 struct proc_dir_entry 的大小不超过 SIZEOF_PDE 的限制
 }
 
 void proc_invalidate_siblings_dcache(struct hlist_head *inodes, spinlock_t *lock)

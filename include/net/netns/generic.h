@@ -26,14 +26,14 @@
  * accessed with the net_generic() call.
  */
 
-struct net_generic {
+struct net_generic {//一个网络相关的通用结构体。
 	union {
 		struct {
-			unsigned int len;
-			struct rcu_head rcu;
+			unsigned int len;//存储长度信息
+			struct rcu_head rcu;//关联的 RCU 头部，用于RCU（Read-Copy-Update）机制
 		} s;
 
-		DECLARE_FLEX_ARRAY(void *, ptr);
+		DECLARE_FLEX_ARRAY(void *, ptr);//声明一个灵活数组，可以容纳指针
 	};
 };
 

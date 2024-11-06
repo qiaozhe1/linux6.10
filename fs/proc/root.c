@@ -282,32 +282,32 @@ static struct file_system_type proc_fs_type = {
 	.fs_flags		= FS_USERNS_MOUNT | FS_DISALLOW_NOTIFY_PERM,
 };
 
-void __init proc_root_init(void)
+void __init proc_root_init(void)//初始化 /proc 文件系统的根目录及相关的子目录和文件。
 {
-	proc_init_kmemcache();
-	set_proc_pid_nlink();
-	proc_self_init();
-	proc_thread_self_init();
-	proc_symlink("mounts", NULL, "self/mounts");
+	proc_init_kmemcache();//初始化与 /proc 相关的内存缓存池。通常是为 /proc 文件系统中的各类数据结构分配和管理内存。
+	set_proc_pid_nlink();//设置与进程相关的 /proc 目录条目链接数。每个进程在 /proc 中都有一个目录，nlink 是指向该目录的硬链接数目，这个函数会对每个进程的 nlink 进行初始化。
+	proc_self_init();//动态分配/proc/self目录的inode编号。/proc/self 是一个符号链接，指向当前进程在 /proc 文件系统中的进程目录。
+	proc_thread_self_init();//初始化 /proc/thread-self 目录的 inode编号。/proc/thread-self 是 Linux 内核中的一个符号链接，通常指向当前线程在 /proc 文件系统中的线程目录
+	proc_symlink("mounts", NULL, "self/mounts");//创建 /proc/mounts 到 /proc/self/mounts 的符号链接。/proc/mounts 显示所有挂载的文件系统信息，而 /proc/self/mounts 仅表示当前进程的挂载信息。
 
-	proc_net_init();
-	proc_mkdir("fs", NULL);
-	proc_mkdir("driver", NULL);
-	proc_create_mount_point("fs/nfsd"); /* somewhere for the nfsd filesystem to be mounted */
-#if defined(CONFIG_SUN_OPENPROMFS) || defined(CONFIG_SUN_OPENPROMFS_MODULE)
+	proc_net_init();//初始化 /proc/net 子目录，通常包含网络相关的信息，如网络接口、路由表、协议统计等。
+	proc_mkdir("fs", NULL);//创建 /proc/fs 目录，该目录包含了与文件系统相关的信息。
+	proc_mkdir("driver", NULL);//创建 /proc/driver 目录，用于存放驱动相关的信息。
+	proc_create_mount_point("fs/nfsd");//在 /proc/fs 下创建一个目录 nfsd，这是用于挂载 nfsd 文件系统的一个挂载点。
+#if defined(CONFIG_SUN_OPENPROMFS) || defined(CONFIG_SUN_OPENPROMFS_MODULE)//仅在配置中启用了 CONFIG_SUN_OPENPROMFS 或 CONFIG_SUN_OPENPROMFS_MODULE 时执行
 	/* just give it a mountpoint */
-	proc_create_mount_point("openprom");
+	proc_create_mount_point("openprom");//创建一个 /proc/openprom 挂载点，通常用于开放式 PROM (OpenPROM) 文件系统。
 #endif
-	proc_tty_init();
-	proc_mkdir("bus", NULL);
-	proc_sys_init();
+	proc_tty_init();//初始化 /proc/tty 目录，用于管理终端信息。TTY 代表终端设备。
+	proc_mkdir("bus", NULL);//创建 /proc/bus 目录，通常用于访问和管理总线设备的信息。
+	proc_sys_init();//初始化 /proc/sys 目录，包含内核参数和系统配置文件。这个目录允许用户查看和修改内核的运行时配置。
 
 	/*
 	 * Last things last. It is not like userspace processes eager
 	 * to open /proc files exist at this point but register last
 	 * anyway.
 	 */
-	register_filesystem(&proc_fs_type);
+	register_filesystem(&proc_fs_type);//注册 /proc 文件系统类型
 }
 
 static int proc_root_getattr(struct mnt_idmap *idmap,

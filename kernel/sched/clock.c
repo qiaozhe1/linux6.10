@@ -196,12 +196,12 @@ notrace void clear_sched_clock_stable(void)
 
 notrace static void __sched_clock_gtod_offset(void)
 {
-	struct sched_clock_data *scd = this_scd();
+	struct sched_clock_data *scd = this_scd();// 获取当前调度时钟数据结构的指针
 
-	__scd_stamp(scd);
-	__gtod_offset = (scd->tick_raw + __sched_clock_offset) - scd->tick_gtod;
+	__scd_stamp(scd);//更新调度时钟数据的时间戳
+	__gtod_offset = (scd->tick_raw + __sched_clock_offset) - scd->tick_gtod;//计算全局时间偏移量
 }
-
+/*用于初始化调度时钟，确保系统在运行调度器之前能够正确跟踪时间*/
 void __init sched_clock_init(void)
 {
 	/*
@@ -211,11 +211,11 @@ void __init sched_clock_init(void)
 	 * Even if TSC is buggered, we're still UP at this point so it
 	 * can't really be out of sync.
 	 */
-	local_irq_disable();
-	__sched_clock_gtod_offset();
-	local_irq_enable();
+	local_irq_disable();//禁用本地中断，以确保在初始化期间不被中断
+	__sched_clock_gtod_offset();//调用函数初始化全局时间偏移量
+	local_irq_enable();// 启用本地中断，恢复中断响应
 
-	static_branch_inc(&sched_clock_running);
+	static_branch_inc(&sched_clock_running);//增加静态分支计数，标记调度时钟已启动
 }
 /*
  * We run this as late_initcall() such that it runs after all built-in drivers,
@@ -475,10 +475,10 @@ EXPORT_SYMBOL_GPL(sched_clock_idle_wakeup_event);
 
 void __init sched_clock_init(void)
 {
-	static_branch_inc(&sched_clock_running);
-	local_irq_disable();
-	generic_sched_clock_init();
-	local_irq_enable();
+	static_branch_inc(&sched_clock_running);// 增加调度时钟运行状态的计数，标记调度时钟已启动(sched_clock_running = struct static_key_false)
+	local_irq_disable();// 禁用本地中断，确保在初始化期间不会被中断打断
+	generic_sched_clock_init();//调用通用调度时钟初始化函数，完成调度时钟的具体初始化工作
+	local_irq_enable();//启用本地中断，允许后续的中断处理
 }
 
 notrace u64 sched_clock_cpu(int cpu)

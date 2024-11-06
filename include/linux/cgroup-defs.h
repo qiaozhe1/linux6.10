@@ -596,23 +596,23 @@ struct cgroup_root {
  *	- the cgroup to use is file->f_path.dentry->d_parent->d_fsdata
  *	- the 'cftype' of the file is file->f_path.dentry->d_fsdata
  */
-struct cftype {
+struct cftype {//表示控制组（cgroup）中的一个控制文件，用于管理与 cgroup 子系统相关的控制文件操作和文件的内部属性
 	/*
 	 * By convention, the name should begin with the name of the
 	 * subsystem, followed by a period.  Zero length string indicates
 	 * end of cftype array.
 	 */
-	char name[MAX_CFTYPE_NAME];
-	unsigned long private;
+	char name[MAX_CFTYPE_NAME];//表示该控制文件类型的名称，通常命名为子系统名称后加一个点（如 cpu.shares）
+	unsigned long private;//用于存储与该文件类型相关的私有数据。具体的用途通常由 cgroup 子系统定义。
 
 	/*
 	 * The maximum length of string, excluding trailing nul, that can
 	 * be passed to write.  If < PAGE_SIZE-1, PAGE_SIZE-1 is assumed.
 	 */
-	size_t max_write_len;
+	size_t max_write_len;//表示可以写入该文件的最大字符数（不包括字符串结束符 \0）。如果小于 PAGE_SIZE - 1，则默认为 PAGE_SIZE - 1。
 
 	/* CFTYPE_* flags */
-	unsigned int flags;
+	unsigned int flags;//用于标识该文件类型的标志，定义了文件的行为特性，如是否可以写、是否是可读的等。
 
 	/*
 	 * If non-zero, should contain the offset from the start of css to
@@ -620,36 +620,36 @@ struct cftype {
 	 * the created file into it.  The recorded handle can be used as
 	 * long as the containing css remains accessible.
 	 */
-	unsigned int file_offset;
+	unsigned int file_offset;//如果该值非零，表示从 cgroup_subsys_state 结构体开始的偏移量，指向该文件类型的某个字段
 
 	/*
 	 * Fields used for internal bookkeeping.  Initialized automatically
 	 * during registration.
 	 */
-	struct cgroup_subsys *ss;	/* NULL for cgroup core files */
-	struct list_head node;		/* anchored at ss->cfts */
-	struct kernfs_ops *kf_ops;
+	struct cgroup_subsys *ss;//指向对应的 cgroup_subsys 结构体。如果是 cgroup 核心文件（即不属于任何子系统的文件），该字段为 NULL。
+	struct list_head node;//链表节点，用于将该 cftype 连接到其对应的 cgroup_subsys 结构体的 cfts 链表中。
+	struct kernfs_ops *kf_ops;//指向 kernfs_ops 的指针，定义了与文件系统相关的操作合集。
 
-	int (*open)(struct kernfs_open_file *of);
-	void (*release)(struct kernfs_open_file *of);
+	int (*open)(struct kernfs_open_file *of);//用于打开该控制文件的回调函数
+	void (*release)(struct kernfs_open_file *of);//释放该控制文件时调用的回调函数。
 
 	/*
 	 * read_u64() is a shortcut for the common case of returning a
 	 * single integer. Use it in place of read()
 	 */
-	u64 (*read_u64)(struct cgroup_subsys_state *css, struct cftype *cft);
+	u64 (*read_u64)(struct cgroup_subsys_state *css, struct cftype *cft);//读取 u64 类型的数据，通常用于返回单一整数值的场景。
 	/*
 	 * read_s64() is a signed version of read_u64()
 	 */
-	s64 (*read_s64)(struct cgroup_subsys_state *css, struct cftype *cft);
+	s64 (*read_s64)(struct cgroup_subsys_state *css, struct cftype *cft);//读取带符号的 s64 类型的数据。
 
 	/* generic seq_file read interface */
-	int (*seq_show)(struct seq_file *sf, void *v);
+	int (*seq_show)(struct seq_file *sf, void *v);//读取文件的通用回调函数，使用 seq_file API 显示内容。
 
-	/* optional ops, implement all or none */
-	void *(*seq_start)(struct seq_file *sf, loff_t *ppos);
-	void *(*seq_next)(struct seq_file *sf, void *v, loff_t *ppos);
-	void (*seq_stop)(struct seq_file *sf, void *v);
+	/* 用于序列化读取操作的回调函数，这些函数用于处理 seq_file 的遍历。可选操作，全部执行或不执行 */
+	void *(*seq_start)(struct seq_file *sf, loff_t *ppos);//指定读取文件时的起始回调函数,初始化需要的资源或状态
+	void *(*seq_next)(struct seq_file *sf, void *v, loff_t *ppos);//指定文件中下一项进程的获取回调函数,遍历控制文件的进程列表并在读取文件内容时，返回下一个进程。
+	void (*seq_stop)(struct seq_file *sf, void *v);//指定显示文件内容的回调函数
 
 	/*
 	 * write_u64() is a shortcut for the common case of accepting
@@ -657,12 +657,12 @@ struct cftype {
 	 * userspace. Use in place of write(); return 0 or error.
 	 */
 	int (*write_u64)(struct cgroup_subsys_state *css, struct cftype *cft,
-			 u64 val);
+			 u64 val);//写入一个 u64 类型的数据，通常用于接收单一整数值。
 	/*
 	 * write_s64() is a signed version of write_u64()
 	 */
 	int (*write_s64)(struct cgroup_subsys_state *css, struct cftype *cft,
-			 s64 val);
+			 s64 val);//写入带符号的 s64 类型的数据。
 
 	/*
 	 * write() is the generic write callback which maps directly to
@@ -671,13 +671,13 @@ struct cftype {
 	 * of_css/cft() to access the associated css and cft.
 	 */
 	ssize_t (*write)(struct kernfs_open_file *of,
-			 char *buf, size_t nbytes, loff_t off);
+			 char *buf, size_t nbytes, loff_t off);//通用的写操作函数，直接映射到 kernfs 的写操作，最大写入大小由 max_write_len 确定。
 
 	__poll_t (*poll)(struct kernfs_open_file *of,
-			 struct poll_table_struct *pt);
+			 struct poll_table_struct *pt);//文件的轮询操作，用于处理文件的事件监听。
 
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
-	struct lock_class_key	lockdep_key;
+	struct lock_class_key	lockdep_key;//用于调试目的，帮助追踪锁的依赖关系，在 CONFIG_DEBUG_LOCK_ALLOC 配置启用时才会使用。
 #endif
 };
 
@@ -685,32 +685,32 @@ struct cftype {
  * Control Group subsystem type.
  * See Documentation/admin-guide/cgroup-v1/cgroups.rst for details
  */
-struct cgroup_subsys {
-	struct cgroup_subsys_state *(*css_alloc)(struct cgroup_subsys_state *parent_css);
-	int (*css_online)(struct cgroup_subsys_state *css);
-	void (*css_offline)(struct cgroup_subsys_state *css);
-	void (*css_released)(struct cgroup_subsys_state *css);
-	void (*css_free)(struct cgroup_subsys_state *css);
-	void (*css_reset)(struct cgroup_subsys_state *css);
-	void (*css_rstat_flush)(struct cgroup_subsys_state *css, int cpu);
+struct cgroup_subsys {//表示一个 cgroup 子系统的各种操作和属性
+	struct cgroup_subsys_state *(*css_alloc)(struct cgroup_subsys_state *parent_css);//为 cgroup 子系统分配一个 cgroup_subsys_state 结构体，该结构体表示与该子系统相关的状态。
+	int (*css_online)(struct cgroup_subsys_state *css);//将 cgroup 子系统的状态设为在线，通常在 cgroup 子系统初始化时调用。
+	void (*css_offline)(struct cgroup_subsys_state *css);//将 cgroup 子系统的状态设为离线，通常在子系统销毁时调用。
+	void (*css_released)(struct cgroup_subsys_state *css);//在 cgroup 子系统被释放时调用，通常用于清理与该子系统相关的资源。
+	void (*css_free)(struct cgroup_subsys_state *css);// 释放与该子系统相关的资源。
+	void (*css_reset)(struct cgroup_subsys_state *css);//重置 cgroup 子系统的状态。
+	void (*css_rstat_flush)(struct cgroup_subsys_state *css, int cpu);// 用于刷新 cgroup 子系统的资源统计信息。
 	int (*css_extra_stat_show)(struct seq_file *seq,
-				   struct cgroup_subsys_state *css);
+				   struct cgroup_subsys_state *css);//显示额外的统计信息，通常用于 seq_file 输出。
 	int (*css_local_stat_show)(struct seq_file *seq,
-				   struct cgroup_subsys_state *css);
-
-	int (*can_attach)(struct cgroup_taskset *tset);
-	void (*cancel_attach)(struct cgroup_taskset *tset);
-	void (*attach)(struct cgroup_taskset *tset);
-	void (*post_attach)(void);
+				   struct cgroup_subsys_state *css);//显示与该 cgroup 子系统相关的本地统计信息。
+	/*与任务集（taskset）和进程管理相关的函数指针*/
+	int (*can_attach)(struct cgroup_taskset *tset);// 判断是否可以将任务集（taskset）附加到该 cgroup 子系统中。
+	void (*cancel_attach)(struct cgroup_taskset *tset);//取消任务集的附加。
+	void (*attach)(struct cgroup_taskset *tset);//将任务集附加到该 cgroup 子系统。
+	void (*post_attach)(void);// 任务附加完成后的操作。
 	int (*can_fork)(struct task_struct *task,
-			struct css_set *cset);
-	void (*cancel_fork)(struct task_struct *task, struct css_set *cset);
-	void (*fork)(struct task_struct *task);
-	void (*exit)(struct task_struct *task);
-	void (*release)(struct task_struct *task);
-	void (*bind)(struct cgroup_subsys_state *root_css);
+			struct css_set *cset);//判断一个任务是否可以被添加到该 cgroup 子系统。
+	void (*cancel_fork)(struct task_struct *task, struct css_set *cset);//取消一个任务的 fork 操作。
+	void (*fork)(struct task_struct *task);//处理任务的 fork 操作。
+	void (*exit)(struct task_struct *task);//任务退出时的操作。
+	void (*release)(struct task_struct *task);//释放任务在 cgroup 中占用的资源。
+	void (*bind)(struct cgroup_subsys_state *root_css);//将 cgroup 子系统的根子系统（root_css）与该子系统绑定。
 
-	bool early_init:1;
+	bool early_init:1;//如果为 true，表示该控制器是早期初始化的。
 
 	/*
 	 * If %true, the controller, on the default hierarchy, doesn't show
@@ -723,7 +723,7 @@ struct cgroup_subsys {
 	 * anytime and thus must be okay with offline csses from previous
 	 * hierarchies coexisting with csses for the current one.
 	 */
-	bool implicit_on_dfl:1;
+	bool implicit_on_dfl:1;//如果为 true，表示在默认层次结构中该控制器不会出现在 cgroup.controllers 或 cgroup.subtree_control 文件中，它在默认层次结构上是隐式启用的。
 
 	/*
 	 * If %true, the controller, supports threaded mode on the default
@@ -735,30 +735,31 @@ struct cgroup_subsys {
 	 * all cgroups on the default hierarchy, it should also be
 	 * threaded.  implicit && !threaded is not supported.
 	 */
-	bool threaded:1;
+	bool threaded:1;//如果为 true，表示该控制器支持线程模式。在线程模式下，进程粒度和无内核进程的约束会被忽略。
 
 	/* the following two fields are initialized automatically during boot */
-	int id;
-	const char *name;
+	int id;//cgroup 子系统的标识符。
+	const char *name;//cgroup 子系统的名称。
 
 	/* optional, initialized automatically during boot if not set */
-	const char *legacy_name;
+	const char *legacy_name;//如果未设置，会自动初始化为 name，表示该子系统在 cgroup v1 中的名称。
 
 	/* link to parent, protected by cgroup_lock() */
-	struct cgroup_root *root;
+	struct cgroup_root *root;//指向 cgroup_root 的指针，表示该子系统的根节点，通常由 cgroup_lock() 来保护。
 
 	/* idr for css->id */
-	struct idr css_idr;
+	struct idr css_idr;//idr（ID 分配器）用于管理该子系统状态的 ID。
 
 	/*
 	 * List of cftypes.  Each entry is the first entry of an array
 	 * terminated by zero length name.
 	 */
-	struct list_head cfts;
+	struct list_head cfts;//控制类型（cftypes）的链表，用于表示该子系统支持的所有控制文件类型。
 
 	/*
 	 * Base cftypes which are automatically registered.  The two can
 	 * point to the same array.
+	 * dfl_cftypes 和 legacy_cftypes: 默认和旧的 cgroup 控制文件类型数组，分别用于默认层次结构和遗留层次结构。
 	 */
 	struct cftype *dfl_cftypes;	/* for the default hierarchy */
 	struct cftype *legacy_cftypes;	/* for the legacy hierarchies */
@@ -770,7 +771,7 @@ struct cgroup_subsys {
 	 * not visible to userland until explicitly enabled.  The following
 	 * specifies the mask of subsystems that this one depends on.
 	 */
-	unsigned int depends_on;
+	unsigned int depends_on;//该子系统依赖的其他子系统的掩码，表示该子系统启动时需要哪些其他子系统一起启用。
 };
 
 extern struct percpu_rw_semaphore cgroup_threadgroup_rwsem;

@@ -91,10 +91,10 @@ static const char * const perr_strings[] = {
 	[PERR_HKEEPING]  = "partition config conflicts with housekeeping setup",
 };
 
-struct cpuset {
-	struct cgroup_subsys_state css;
+struct cpuset {//用于控制和管理特定 cgroup 中任务的 CPU 和内存节点的分配。主要功能是为系统中的进程提供 CPU 和内存节点的隔离，以实现更精细的资源管理和调度控制。
+	struct cgroup_subsys_state css;	//表示 cgroup 子系统状态的结构体
 
-	unsigned long flags;		/* "unsigned long" so bitops work */
+	unsigned long flags;		//用于存储 cpuset 的标志，"unsigned long" 是为了支持位操作
 
 	/*
 	 * On default hierarchy:
@@ -117,12 +117,12 @@ struct cpuset {
 	 */
 
 	/* user-configured CPUs and Memory Nodes allow to tasks */
-	cpumask_var_t cpus_allowed;
-	nodemask_t mems_allowed;
+	cpumask_var_t cpus_allowed;	//用户配置的允许使用的 CPU 集合
+	nodemask_t mems_allowed;	//用户配置的允许使用的内存节点集合
 
 	/* effective CPUs and Memory Nodes allow to tasks */
-	cpumask_var_t effective_cpus;
-	nodemask_t effective_mems;
+	cpumask_var_t effective_cpus;	//实际生效的 CPU 集合
+	nodemask_t effective_mems;	//实际生效的内存节点集合
 
 	/*
 	 * Exclusive CPUs dedicated to current cgroup (default hierarchy only)
@@ -136,12 +136,12 @@ struct cpuset {
 	 * effective_xcpus may be distributed to sub-partitions below & hence
 	 * excluded from its effective_cpus.
 	 */
-	cpumask_var_t effective_xcpus;
+	cpumask_var_t effective_xcpus;	//当前 cgroup 有效分区根的独占 CPU
 
 	/*
 	 * Exclusive CPUs as requested by the user (default hierarchy only)
 	 */
-	cpumask_var_t exclusive_cpus;
+	cpumask_var_t exclusive_cpus;	//用户请求的独占 CPU 集合
 
 	/*
 	 * This is old Memory Nodes tasks took on.
@@ -153,52 +153,52 @@ struct cpuset {
 	 *   cpuset.mems_allowed and have tasks' nodemask updated, and
 	 *   then old_mems_allowed is updated to mems_allowed.
 	 */
-	nodemask_t old_mems_allowed;
+	nodemask_t old_mems_allowed;	//存储旧的内存节点信息
 
-	struct fmeter fmeter;		/* memory_pressure filter */
+	struct fmeter fmeter;		//内存压力过滤器
 
 	/*
 	 * Tasks are being attached to this cpuset.  Used to prevent
 	 * zeroing cpus/mems_allowed between ->can_attach() and ->attach().
 	 */
-	int attach_in_progress;
+	int attach_in_progress;		//附加过程中的任务数量
 
 	/* partition number for rebuild_sched_domains() */
-	int pn;
+	int pn;				// rebuild_sched_domains() 的分区号
 
 	/* for custom sched domain */
-	int relax_domain_level;
+	int relax_domain_level;		//自定义调度域级别
 
 	/* number of valid sub-partitions */
-	int nr_subparts;
+	int nr_subparts;		//有效子分区的数量
 
 	/* partition root state */
-	int partition_root_state;
+	int partition_root_state;	//分区根状态
 
 	/*
 	 * Default hierarchy only:
 	 * use_parent_ecpus - set if using parent's effective_cpus
 	 * child_ecpus_count - # of children with use_parent_ecpus set
 	 */
-	int use_parent_ecpus;
-	int child_ecpus_count;
+	int use_parent_ecpus;		//标志是否使用父级的 effective_cpus
+	int child_ecpus_count;		// 使用父级 effective_cpus 的子 cgroup 数量
 
 	/*
 	 * number of SCHED_DEADLINE tasks attached to this cpuset, so that we
 	 * know when to rebuild associated root domain bandwidth information.
 	 */
-	int nr_deadline_tasks;
-	int nr_migrate_dl_tasks;
-	u64 sum_migrate_dl_bw;
+	int nr_deadline_tasks;		//SCHED_DEADLINE 任务的数量
+	int nr_migrate_dl_tasks;	//需要迁移的 SCHED_DEADLINE 任务数量
+	u64 sum_migrate_dl_bw;		//迁移 SCHED_DEADLINE 任务的总带宽
 
 	/* Invalid partition error code, not lock protected */
-	enum prs_errcode prs_err;
+	enum prs_errcode prs_err;	//无效分区的错误代码
 
 	/* Handle for cpuset.cpus.partition */
-	struct cgroup_file partition_file;
+	struct cgroup_file partition_file;	//cpuset.cpus.partition 的句柄
 
 	/* Remote partition silbling list anchored at remote_children */
-	struct list_head remote_sibling;
+	struct list_head remote_sibling;	//存储远程分区的兄弟节点列表
 };
 
 /*
@@ -4287,24 +4287,24 @@ struct cgroup_subsys cpuset_cgrp_subsys = {
 
 int __init cpuset_init(void)
 {
-	BUG_ON(!alloc_cpumask_var(&top_cpuset.cpus_allowed, GFP_KERNEL));
-	BUG_ON(!alloc_cpumask_var(&top_cpuset.effective_cpus, GFP_KERNEL));
-	BUG_ON(!alloc_cpumask_var(&top_cpuset.effective_xcpus, GFP_KERNEL));
-	BUG_ON(!alloc_cpumask_var(&top_cpuset.exclusive_cpus, GFP_KERNEL));
-	BUG_ON(!zalloc_cpumask_var(&subpartitions_cpus, GFP_KERNEL));
-	BUG_ON(!zalloc_cpumask_var(&isolated_cpus, GFP_KERNEL));
+	BUG_ON(!alloc_cpumask_var(&top_cpuset.cpus_allowed, GFP_KERNEL));//分配变量 `cpus_allowed`，用于描述可用的 CPU 集合
+	BUG_ON(!alloc_cpumask_var(&top_cpuset.effective_cpus, GFP_KERNEL));//分配 `effective_cpus`，用于描述当前生效的 CPU 集合
+	BUG_ON(!alloc_cpumask_var(&top_cpuset.effective_xcpus, GFP_KERNEL));//分配 `effective_xcpus`，用于描述扩展的生效 CPU 集合
+	BUG_ON(!alloc_cpumask_var(&top_cpuset.exclusive_cpus, GFP_KERNEL));//分配 `exclusive_cpus`，用于描述独占使用的 CPU 集合
+	BUG_ON(!zalloc_cpumask_var(&subpartitions_cpus, GFP_KERNEL));//分配并初始化为 0 的 `subpartitions_cpus`，用于描述子分区 CPU 集合
+	BUG_ON(!zalloc_cpumask_var(&isolated_cpus, GFP_KERNEL));//分配并初始化为 0 的 `isolated_cpus`，用于描述隔离的 CPU 集合
 
-	cpumask_setall(top_cpuset.cpus_allowed);
-	nodes_setall(top_cpuset.mems_allowed);
-	cpumask_setall(top_cpuset.effective_cpus);
-	cpumask_setall(top_cpuset.effective_xcpus);
-	cpumask_setall(top_cpuset.exclusive_cpus);
-	nodes_setall(top_cpuset.effective_mems);
+	cpumask_setall(top_cpuset.cpus_allowed);//将 `top_cpuset.cpus_allowed` 中的所有位设置为 1，表示所有 CPU 都可用
+	nodes_setall(top_cpuset.mems_allowed);//将 `top_cpuset.mems_allowed` 中的所有位设置为 1，表示所有内存节点都可用
+	cpumask_setall(top_cpuset.effective_cpus);// 将 `effective_cpus` 的所有位设置为 1，表示所有 CPU 生效
+	cpumask_setall(top_cpuset.effective_xcpus);// 将 `effective_xcpus` 的所有位设置为 1，表示扩展的所有 CPU 生效
+	cpumask_setall(top_cpuset.exclusive_cpus);//将 `exclusive_cpus` 的所有位设置为 1，表示所有 CPU 都作为独占 CPU
+	nodes_setall(top_cpuset.effective_mems);//将 `effective_mems` 的所有位设置为 1，表示所有内存节点生效
 
-	fmeter_init(&top_cpuset.fmeter);
-	INIT_LIST_HEAD(&remote_children);
+	fmeter_init(&top_cpuset.fmeter);//初始化 `top_cpuset` 中的流量计 `fmeter`
+	INIT_LIST_HEAD(&remote_children);//初始化 `remote_children` 链表头，用于记录远程子节点
 
-	BUG_ON(!alloc_cpumask_var(&cpus_attach, GFP_KERNEL));
+	BUG_ON(!alloc_cpumask_var(&cpus_attach, GFP_KERNEL));//分配 `cpus_attach`，用于描述当前正在附加的 CPU 集合
 
 	return 0;
 }

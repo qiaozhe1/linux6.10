@@ -239,8 +239,8 @@ static struct file_system_type nsfs = {
 
 void __init nsfs_init(void)
 {
-	nsfs_mnt = kern_mount(&nsfs);
+	nsfs_mnt = kern_mount(&nsfs);//将 nsfs 文件系统挂载到内核中，返回指向挂载点的指针
 	if (IS_ERR(nsfs_mnt))
-		panic("can't set nsfs up\n");
-	nsfs_mnt->mnt_sb->s_flags &= ~SB_NOUSER;
+		panic("can't set nsfs up\n");//如果挂载失败，则终止系统并输出错误信息
+	nsfs_mnt->mnt_sb->s_flags &= ~SB_NOUSER;//移除超级块标志中的 SB_NOUSER 标志，允许用户访问 nsfs 文件系统
 }

@@ -166,7 +166,7 @@ const struct proc_ns_operations utsns_operations = {
 	.owner		= utsns_owner,
 };
 
-void __init uts_ns_init(void)
+void __init uts_ns_init(void)//创建用于 UTS（UNIX Time Sharing）命名空间的内存缓存池
 {
 	uts_ns_cache = kmem_cache_create_usercopy(
 			"uts_namespace", sizeof(struct uts_namespace), 0,

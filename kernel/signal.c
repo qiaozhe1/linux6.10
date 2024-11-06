@@ -4850,9 +4850,9 @@ early_initcall(init_signal_sysctls);
 
 void __init signals_init(void)
 {
-	siginfo_buildtime_checks();
+	siginfo_buildtime_checks();//对信号信息结构体（siginfo_t）和kernel_siginfo_t结构体在编译时进行一些检查
 
-	sigqueue_cachep = KMEM_CACHE(sigqueue, SLAB_PANIC | SLAB_ACCOUNT);
+	sigqueue_cachep = KMEM_CACHE(sigqueue, SLAB_PANIC | SLAB_ACCOUNT);//创建了一个名为sigqueue的内存缓存池。该缓存用于分配sigqueue类型的内存。
 }
 
 #ifdef CONFIG_KGDB_KDB

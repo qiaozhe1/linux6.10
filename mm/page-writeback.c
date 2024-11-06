@@ -622,18 +622,18 @@ static void writeout_period(struct timer_list *t)
 		dom->period_time = 0;
 	}
 }
-
+/* 用于初始化写回域（writeback domain）*/
 int wb_domain_init(struct wb_domain *dom, gfp_t gfp)
 {
-	memset(dom, 0, sizeof(*dom));
+	memset(dom, 0, sizeof(*dom));//将 wb_domain 结构体的所有字节清零，初始化为默认值
 
-	spin_lock_init(&dom->lock);
+	spin_lock_init(&dom->lock);//初始化写回域的自旋锁，用于同步访问该域的共享数据
 
-	timer_setup(&dom->period_timer, writeout_period, TIMER_DEFERRABLE);
+	timer_setup(&dom->period_timer, writeout_period, TIMER_DEFERRABLE);//设置周期性定时器，用于定期执行写回操作。writeout_period 是一个回调函数，当定时器触发时会调用此函数进行写回操作。period_timer是一个周期性定时器，用于定期执行页面写回操作。
 
-	dom->dirty_limit_tstamp = jiffies;
+	dom->dirty_limit_tstamp = jiffies;//初始化脏页面写回的时间戳为当前 jiffies
 
-	return fprop_global_init(&dom->completions, gfp);
+	return fprop_global_init(&dom->completions, gfp);//初始化完成状态的全局跟踪属性
 }
 
 #ifdef CONFIG_CGROUP_WRITEBACK
@@ -2332,16 +2332,17 @@ static struct ctl_table vm_page_writeback_sysctls[] = {
  * But we might still want to scale the dirty_ratio by how
  * much memory the box has..
  */
-void __init page_writeback_init(void)
+void __init page_writeback_init(void)//用于初始化页面写回相关的机制
 {
-	BUG_ON(wb_domain_init(&global_wb_domain, GFP_KERNEL));
+	BUG_ON(wb_domain_init(&global_wb_domain, GFP_KERNEL));//用于初始化写回域（writeback domain），这是内核中管理页面写回操作的结构。global_wb_domain 是一个全局变量，表示整个系统的写回域。
 
+	/*配置 CPU 在线和下线时的回调函数，这些回调处理与页面写回相关的操作*/
 	cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "mm/writeback:online",
-			  page_writeback_cpu_online, NULL);
+			  page_writeback_cpu_online, NULL);//用于设置 CPU 热插拔的回调状态,page_writeback_cpu_online 是该状态的回调函数，当 CPU 上线时，这个函数会被调用。
 	cpuhp_setup_state(CPUHP_MM_WRITEBACK_DEAD, "mm/writeback:dead", NULL,
-			  page_writeback_cpu_online);
+			  page_writeback_cpu_online);//设置了当 CPU 被移除时（即 CPU 下线时）的回调状态。绑定 CPU 下线时调用的函数为page_writeback_cpu_online
 #ifdef CONFIG_SYSCTL
-	register_sysctl_init("vm", vm_page_writeback_sysctls);
+	register_sysctl_init("vm", vm_page_writeback_sysctls);// 注册了一个 sysctl 配置项，使得用户能够通过用户空间的接口来控制页面写回机制。"vm" 表示这是虚拟内存相关的设置，vm_page_writeback_sysctls 是一个定义的 sysctl 配置表，用户可以通过它来调整页面写回的行为。
 #endif
 }
 

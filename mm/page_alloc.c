@@ -5583,12 +5583,12 @@ static void per_cpu_pages_init(struct per_cpu_pages *pcp, struct per_cpu_zonesta
 {
 	int pindex;
 
-	memset(pcp, 0, sizeof(*pcp));
-	memset(pzstats, 0, sizeof(*pzstats));
+	memset(pcp, 0, sizeof(*pcp));//将 per_cpu_pages 结构体的所有字段清零，避免使用未初始化的数据
+	memset(pzstats, 0, sizeof(*pzstats));//将 per_cpu_zonestat 结构体的所有字段清零，确保统计信息有效
 
-	spin_lock_init(&pcp->lock);
-	for (pindex = 0; pindex < NR_PCP_LISTS; pindex++)
-		INIT_LIST_HEAD(&pcp->lists[pindex]);
+	spin_lock_init(&pcp->lock);//初始化自旋锁，用于保护对页面列表的并发访问
+	for (pindex = 0; pindex < NR_PCP_LISTS; pindex++)// 遍历每种迁移类型的页面列表
+		INIT_LIST_HEAD(&pcp->lists[pindex]);// 初始化每个页面列表头，确保列表处于有效状态
 
 	/*
 	 * Set batch and high values safe for a boot pageset. A true percpu
@@ -5596,12 +5596,12 @@ static void per_cpu_pages_init(struct per_cpu_pages *pcp, struct per_cpu_zonesta
 	 * need to be as careful as pageset_update() as nobody can access the
 	 * pageset yet.
 	 */
-	pcp->high_min = BOOT_PAGESET_HIGH;
-	pcp->high_max = BOOT_PAGESET_HIGH;
-	pcp->batch = BOOT_PAGESET_BATCH;
-	pcp->free_count = 0;
+	pcp->high_min = BOOT_PAGESET_HIGH;// 设置高水位线的最小值，定义需要清空的页面数量的下限
+	pcp->high_max = BOOT_PAGESET_HIGH;//设置高水位线的最大值，定义需要清空的页面数量的上限
+	pcp->batch = BOOT_PAGESET_BATCH;//设置在分配页面时的批量操作大小，优化性能
+	pcp->free_count = 0;//初始化空闲页面计数为0，跟踪当前的空闲页面数量
 }
-
+/*为内存管理区中每个cpu的内存管理结构per_cpu_pageset设置水位线等信息*/
 static void __zone_set_pageset_high_and_batch(struct zone *zone, unsigned long high_min,
 					      unsigned long high_max, unsigned long batch)
 {
@@ -5620,55 +5620,55 @@ static void __zone_set_pageset_high_and_batch(struct zone *zone, unsigned long h
  */
 static void zone_set_pageset_high_and_batch(struct zone *zone, int cpu_online)
 {
-	int new_high_min, new_high_max, new_batch;
+	int new_high_min, new_high_max, new_batch;//定义新的高水位线和批量值
 
-	new_batch = max(1, zone_batchsize(zone));
-	if (percpu_pagelist_high_fraction) {
+	new_batch = max(1, zone_batchsize(zone));//计算新的批量值，确保至少为 1，避免出现零值
+	if (percpu_pagelist_high_fraction) {//检查是否手动设置了高水位线的比例
 		new_high_min = zone_highsize(zone, new_batch, cpu_online,
-					     percpu_pagelist_high_fraction);
+					     percpu_pagelist_high_fraction);// 计算新的最低高水位线，考虑当前区域、批量大小、在线 CPU 数量和手动设置的比例
 		/*
 		 * PCP high is tuned manually, disable auto-tuning via
 		 * setting high_min and high_max to the manual value.
 		 */
-		new_high_max = new_high_min;
+		new_high_max = new_high_min;//将最高水位线设置为新的最低水位线
 	} else {
-		new_high_min = zone_highsize(zone, new_batch, cpu_online, 0);
+		new_high_min = zone_highsize(zone, new_batch, cpu_online, 0);// 计算新的最低高水位线，未指定手动比例
 		new_high_max = zone_highsize(zone, new_batch, cpu_online,
-					     MIN_PERCPU_PAGELIST_HIGH_FRACTION);
+					     MIN_PERCPU_PAGELIST_HIGH_FRACTION);// 计算新的最高高水位线，使用最小的高水位线比例
 	}
 
 	if (zone->pageset_high_min == new_high_min &&
 	    zone->pageset_high_max == new_high_max &&
-	    zone->pageset_batch == new_batch)
+	    zone->pageset_batch == new_batch)//检查当前设置的高水位线和批量值是否与新值相同
 		return;
 
-	zone->pageset_high_min = new_high_min;
-	zone->pageset_high_max = new_high_max;
-	zone->pageset_batch = new_batch;
+	zone->pageset_high_min = new_high_min;//设置新的最低高水位线
+	zone->pageset_high_max = new_high_max;//设置新的最高高水位线
+	zone->pageset_batch = new_batch;//设置新的批量值
 
 	__zone_set_pageset_high_and_batch(zone, new_high_min, new_high_max,
-					  new_batch);
+					  new_batch);//将新的高水位线和批量值应用于每个cpu的指定内存区域管理结构中
 }
 
-void __meminit setup_zone_pageset(struct zone *zone)
+void __meminit setup_zone_pageset(struct zone *zone)//用于初始化指定内存区域的页面集
 {
 	int cpu;
 
 	/* Size may be 0 on !SMP && !NUMA */
-	if (sizeof(struct per_cpu_zonestat) > 0)
-		zone->per_cpu_zonestats = alloc_percpu(struct per_cpu_zonestat);
+	if (sizeof(struct per_cpu_zonestat) > 0)//如果结构体 per_cpu_zonestat 的大小大于零，则为每个 CPU 分配 zonestat 结构
+		zone->per_cpu_zonestats = alloc_percpu(struct per_cpu_zonestat);//为每个 CPU 分配一个zonestat(统计当前cpu在当前zone中页面使用情况)
 
-	zone->per_cpu_pageset = alloc_percpu(struct per_cpu_pages);
-	for_each_possible_cpu(cpu) {
+	zone->per_cpu_pageset = alloc_percpu(struct per_cpu_pages);//为每个 CPU 分配一个页面集
+	for_each_possible_cpu(cpu) {// 遍历每个可能的 CPU
 		struct per_cpu_pages *pcp;
 		struct per_cpu_zonestat *pzstats;
 
-		pcp = per_cpu_ptr(zone->per_cpu_pageset, cpu);
-		pzstats = per_cpu_ptr(zone->per_cpu_zonestats, cpu);
-		per_cpu_pages_init(pcp, pzstats);
+		pcp = per_cpu_ptr(zone->per_cpu_pageset, cpu);//获取当前 CPU 的页面集指针
+		pzstats = per_cpu_ptr(zone->per_cpu_zonestats, cpu);//获取当前 CPU 的 zonestat 指针
+		per_cpu_pages_init(pcp, pzstats);//初始化当前 CPU 的页面集和 zonestat
 	}
 
-	zone_set_pageset_high_and_batch(zone, 0);
+	zone_set_pageset_high_and_batch(zone, 0);//设置页面集的高水位和批处理数量
 }
 
 /*
@@ -5716,14 +5716,14 @@ void setup_pcp_cacheinfo(unsigned int cpu)
  * Allocate per cpu pagesets and initialize them.
  * Before this call only boot pagesets were available.
  */
-void __init setup_per_cpu_pageset(void)
+void __init setup_per_cpu_pageset(void)//初始化每个 CPU 的页面集设置
 {
-	struct pglist_data *pgdat;
-	struct zone *zone;
+	struct pglist_data *pgdat;//指向每个节点的页面列表数据
+	struct zone *zone;//指向内存区域（zone）
 	int __maybe_unused cpu;
 
-	for_each_populated_zone(zone)
-		setup_zone_pageset(zone);
+	for_each_populated_zone(zone)//遍历每个已被分配的内存区域，设置相应的页面集
+		setup_zone_pageset(zone);//初始化指定区域的页面集
 
 #ifdef CONFIG_NUMA
 	/*
@@ -5732,16 +5732,16 @@ void __init setup_per_cpu_pageset(void)
 	 * Otherwise, they will end up skewing the stats of
 	 * the nodes these zones are associated with.
 	 */
-	for_each_possible_cpu(cpu) {
-		struct per_cpu_zonestat *pzstats = &per_cpu(boot_zonestats, cpu);
+	for_each_possible_cpu(cpu) {//遍历所有可能的 CPU，重置每个 CPU 的 NUMA 统计信息
+		struct per_cpu_zonestat *pzstats = &per_cpu(boot_zonestats, cpu);//获取当前 CPU 的引导区域统计信息
 		memset(pzstats->vm_numa_event, 0,
-		       sizeof(pzstats->vm_numa_event));
+		       sizeof(pzstats->vm_numa_event));//将NUMA事件统计信息重置为零
 	}
 #endif
 
-	for_each_online_pgdat(pgdat)
+	for_each_online_pgdat(pgdat)//遍历在线的页面数据节点，并为每个节点分配每个 CPU 的节点统计信息
 		pgdat->per_cpu_nodestats =
-			alloc_percpu(struct per_cpu_nodestat);
+			alloc_percpu(struct per_cpu_nodestat);//为每个页面数据节点分配 per_cpu_nodestats 结构
 }
 
 __meminit void zone_pcp_init(struct zone *zone)

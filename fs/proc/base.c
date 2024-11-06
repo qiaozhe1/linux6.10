@@ -3928,7 +3928,7 @@ static const struct file_operations proc_task_operations = {
 	.llseek		= generic_file_llseek,
 };
 
-void __init set_proc_pid_nlink(void)
+void __init set_proc_pid_nlink(void)//为 /proc 文件系统中的进程 PID 目录条目设置链接计数.nlink 是一个表示链接数的字段，通常用于跟踪文件系统中的文件和目录有多少个硬链接。nlink_tid 和 nlink_tgid 分别用于跟踪线程 ID（tid）和线程组 ID（tgid）目录条目的链接数。
 {
 	nlink_tid = pid_entry_nlink(tid_base_stuff, ARRAY_SIZE(tid_base_stuff));
 	nlink_tgid = pid_entry_nlink(tgid_base_stuff, ARRAY_SIZE(tgid_base_stuff));

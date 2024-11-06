@@ -901,15 +901,15 @@ void __init softirq_init(void)
 {
 	int cpu;
 
-	for_each_possible_cpu(cpu) {
+	for_each_possible_cpu(cpu) {//遍历系统中每个可能的 CPU，确保每个 CPU 都能正确处理软中断
 		per_cpu(tasklet_vec, cpu).tail =
-			&per_cpu(tasklet_vec, cpu).head;
+			&per_cpu(tasklet_vec, cpu).head;//对于当前 CPU，初始化 tasklet_vec 的尾指针为头指针,确保在初始化时，任务列表为空
 		per_cpu(tasklet_hi_vec, cpu).tail =
-			&per_cpu(tasklet_hi_vec, cpu).head;
+			&per_cpu(tasklet_hi_vec, cpu).head;// 对于当前 CPU，初始化 tasklet_hi_vec 的尾指针为头指针,保证高优先级任务列表的状态也是空的
 	}
 
-	open_softirq(TASKLET_SOFTIRQ, tasklet_action);
-	open_softirq(HI_SOFTIRQ, tasklet_hi_action);
+	open_softirq(TASKLET_SOFTIRQ, tasklet_action);//注册低优先级软中断处理程序
+	open_softirq(HI_SOFTIRQ, tasklet_hi_action);//注册高优先级软中断处理程序
 }
 
 static int ksoftirqd_should_run(unsigned int cpu)

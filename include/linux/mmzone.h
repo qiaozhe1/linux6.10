@@ -685,7 +685,7 @@ enum zone_watermarks {
  */
 #define	PCPF_PREV_FREE_HIGH_ORDER	BIT(0)
 #define	PCPF_FREE_HIGH_BATCH		BIT(1)
-/*用于在内核中管理per_CPU 的页面信息*/
+/*用于在内核中管理每个CPU核心上的页面分配和回收等*/
 struct per_cpu_pages {
 	spinlock_t lock;	/* Protects lists field 自旋锁，用于保护页面列表*/
 	int count;		/* number of pages in the list 列表中页面的数量*/

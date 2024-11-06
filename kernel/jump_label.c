@@ -182,9 +182,9 @@ bool static_key_slow_inc(struct static_key *key)
 {
 	bool ret;
 
-	cpus_read_lock();
-	ret = static_key_slow_inc_cpuslocked(key);
-	cpus_read_unlock();
+	cpus_read_lock();//获取 CPU 读锁，确保在多核环境中安全访问静态键
+	ret = static_key_slow_inc_cpuslocked(key);//调用带锁的静态键增加函数，更新静态键并获取返回值
+	cpus_read_unlock();//释放 CPU 读锁，允许其他 CPU 访问静态键
 	return ret;
 }
 EXPORT_SYMBOL_GPL(static_key_slow_inc);

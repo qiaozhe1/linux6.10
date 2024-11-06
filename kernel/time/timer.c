@@ -896,12 +896,12 @@ static void do_init_timer(struct timer_list *timer,
 			  unsigned int flags,
 			  const char *name, struct lock_class_key *key)
 {
-	timer->entry.pprev = NULL;
-	timer->function = func;
-	if (WARN_ON_ONCE(flags & ~TIMER_INIT_FLAGS))
-		flags &= TIMER_INIT_FLAGS;
-	timer->flags = flags | raw_smp_processor_id();
-	lockdep_init_map(&timer->lockdep_map, name, key, 0);
+	timer->entry.pprev = NULL;//将定时器的链表指针设置为 NULL，表示该定时器尚未加入任何链表
+	timer->function = func;//设置定时器触发时调用的回调函数
+	if (WARN_ON_ONCE(flags & ~TIMER_INIT_FLAGS))//如果 flags 中包含无效的标志，打印警告信息
+		flags &= TIMER_INIT_FLAGS;// 将 flags 限制为有效的定时器标志
+	timer->flags = flags | raw_smp_processor_id();//设置定时器标志，并附加当前处理器的 ID
+	lockdep_init_map(&timer->lockdep_map, name, key, 0);//初始化定时器的锁依赖映射，用于锁检查
 }
 
 /**
@@ -2704,7 +2704,7 @@ static void __init init_timer_cpu(int cpu)//用于初始化指定CPU的定时器
 		base->cpu = cpu;//设置定时器基的 CPU 字段
 		raw_spin_lock_init(&base->lock);//初始化定时器基的自旋锁，确保线程安全
 		base->clk = jiffies;//将当前的 jiffies 值赋给定时器基的时钟字段
-		base->next_expiry = base->clk + NEXT_TIMER_MAX_DELTA;//计算下一个到期时间
+		base->next_expiry = base->clk + NEXT_TIMER_MAX_DELTA;//计算下一个到期时间(NEXT_TIMER_MAX_DELTA=1秒)
 		timer_base_init_expiry_lock(base);//初始化定时器基的过期锁
 	}
 }

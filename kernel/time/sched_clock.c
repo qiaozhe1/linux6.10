@@ -35,13 +35,13 @@
  * performance. In particular 'seq' and 'read_data[0]' (combined) should fit
  * into a single 64-byte cache line.
  */
-struct clock_data {
-	seqcount_latch_t	seq;
-	struct clock_read_data	read_data[2];
-	ktime_t			wrap_kt;
-	unsigned long		rate;
+struct clock_data {//用于存储与调度时钟相关的多个数据项
+	seqcount_latch_t	seq;//用于保护对 read_data 的并发访问，确保在读取时钟数据时的一致性和有效性。
+	struct clock_read_data	read_data[2];//实现双缓冲机制，允许在更新时钟数据时，旧数据可以继续被读取，从而避免数据冲突和不一致。
+	ktime_t			wrap_kt;//当时钟计数达到其最大值后回绕时，记录此时的时间，以便于正确计算时间差。
+	unsigned long		rate;//存储时钟频率，通常用于确定调度时钟的更新速率。
 
-	u64 (*actual_read_sched_clock)(void);
+	u64 (*actual_read_sched_clock)(void);//指向实际的调度时钟读取函数，允许调用者获取当前的调度周期数。
 };
 
 static struct hrtimer sched_clock_timer;
@@ -134,22 +134,32 @@ static void update_clock_read_data(struct clock_read_data *rd)
 
 /*
  * Atomically update the sched_clock() epoch.
+ * 用于更新系统的调度时钟，计算并存储新的时间戳（以纳秒为单位），
  */
 static void update_sched_clock(void)
 {
-	u64 cyc;
-	u64 ns;
-	struct clock_read_data rd;
+	u64 cyc;//用于存储当前的周期数
+	u64 ns;//用于存储转换后的纳秒值
+	struct clock_read_data rd;//用于读取时钟数据
 
-	rd = cd.read_data[0];
+	rd = cd.read_data[0];// 从调度时钟数据数组中获取当前的时钟读取数据
 
-	cyc = cd.actual_read_sched_clock();
-	ns = rd.epoch_ns + cyc_to_ns((cyc - rd.epoch_cyc) & rd.sched_clock_mask, rd.mult, rd.shift);
+	cyc = cd.actual_read_sched_clock();//调用实际的调度时钟读取函数，获取当前的周期数
 
-	rd.epoch_ns = ns;
-	rd.epoch_cyc = cyc;
+       /*
+	* 将当前周期数转换为纳秒，并加上上一次的 epoch_ns，
+	* 以得到更新后的纳秒值。
+	* 具体步骤为：
+	* 1. 计算周期数的变化量 (cyc - rd.epoch_cyc)，
+	* 2. 通过与 sched_clock_mask 进行按位与操作确保在合理范围内，
+	* 3. 使用 mult 和 shift 进行转换得到对应的纳秒数。
+	*/				 
+	ns = rd.epoch_ns + cyc_to_ns((cyc - rd.epoch_cyc) & rd.sched_clock_mask, rd.mult, rd.shift);//计算新的纳秒值
 
-	update_clock_read_data(&rd);
+	rd.epoch_ns = ns;//更新 epoch_ns 为新的纳秒值
+	rd.epoch_cyc = cyc;// 更新 epoch_cyc 为当前周期数
+
+	update_clock_read_data(&rd);//更新调度时钟的读取数据
 }
 
 static enum hrtimer_restart sched_clock_poll(struct hrtimer *hrt)
@@ -233,25 +243,25 @@ sched_clock_register(u64 (*read)(void), int bits, unsigned long rate)
 
 	pr_debug("Registered %pS as sched_clock source\n", read);
 }
-
+/* 用于初始化调度时钟，确保系统中调度时钟的正确性和及时更新 */
 void __init generic_sched_clock_init(void)
 {
 	/*
 	 * If no sched_clock() function has been provided at that point,
 	 * make it the final one.
 	 */
-	if (cd.actual_read_sched_clock == jiffy_sched_clock_read)
-		sched_clock_register(jiffy_sched_clock_read, BITS_PER_LONG, HZ);
+	if (cd.actual_read_sched_clock == jiffy_sched_clock_read)//检查当前的调度时钟读取函数是否为 jiffy_sched_clock_read。如果是，表示尚未注册其他调度时钟。
+		sched_clock_register(jiffy_sched_clock_read, BITS_PER_LONG, HZ);//注册jiffy_sched_clock_read函数为系统的调度时钟，指定其位数和时钟频率（HZ）。
 
-	update_sched_clock();
+	update_sched_clock();//更新调度时钟的状态，确保调度时钟的信息是最新的。
 
 	/*
 	 * Start the timer to keep sched_clock() properly updated and
 	 * sets the initial epoch.
 	 */
-	hrtimer_init(&sched_clock_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_HARD);
-	sched_clock_timer.function = sched_clock_poll;
-	hrtimer_start(&sched_clock_timer, cd.wrap_kt, HRTIMER_MODE_REL_HARD);
+	hrtimer_init(&sched_clock_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_HARD);//初始化一个高分辨率定时器，使用单调时钟（CLOCK_MONOTONIC）和相对硬实时模式
+	sched_clock_timer.function = sched_clock_poll;//将定时器的回调函数设置为 sched_clock_poll，该函数将在定时器到期时被调用，负责更新调度时钟。
+	hrtimer_start(&sched_clock_timer, cd.wrap_kt, HRTIMER_MODE_REL_HARD);//启动定时器，指定定时器的初始延迟（cd.wrap_kt），以相对硬实时模式启动。
 }
 
 /*

@@ -1066,15 +1066,15 @@ static wait_queue_head_t *folio_waitqueue(struct folio *folio)
 {
 	return &folio_wait_table[hash_ptr(folio, PAGE_WAIT_TABLE_BITS)];
 }
-
+/*初始化页面缓存（page cache）相关的数据结构*/
 void __init pagecache_init(void)
 {
 	int i;
 
-	for (i = 0; i < PAGE_WAIT_TABLE_SIZE; i++)
-		init_waitqueue_head(&folio_wait_table[i]);
+	for (i = 0; i < PAGE_WAIT_TABLE_SIZE; i++)//遍历页面等待队列表，有256个等待队列
+		init_waitqueue_head(&folio_wait_table[i]);//初始化每个 folio_wait_table 的等待队列头
 
-	page_writeback_init();
+	page_writeback_init();//初始化页面写回机制
 }
 
 /*

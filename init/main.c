@@ -1077,7 +1077,7 @@ void start_kernel(void)
 		initrd_start = 0;
 	}
 #endif
-	setup_per_cpu_pageset();//初始化per_CPU的页面集，设置页面管理结构
+	setup_per_cpu_pageset();//初始化每个CPU的页面集，设置每个cpu的页面管理结构
 	numa_policy_init();//初始化 NUMA 策略，设置 NUMA 相关的管理结构
 	acpi_early_init();//早期初始化 ACPI，设置 ACPI 管理结构
 	if (late_time_init)//如果存在延迟时间初始化函数，则调用它
@@ -1104,12 +1104,12 @@ void start_kernel(void)
 	dbg_late_init();//进行调试晚期初始化，设置调试相关的管理结构
 	net_ns_init();//初始化网络命名空间，设置网络相关的命名空间管理结构
 	vfs_caches_init();//初始化虚拟文件系统缓存，设置文件系统相关的缓存管理结构
-	pagecache_init();//初始化页面缓存，设置页面缓存管理结构
+	pagecache_init();//初始化页面缓存，设置页面缓存管理结构(页面回写操作相关)
 	signals_init();//初始化信号子系统，设置信号相关的管理结构
-	seq_file_init();//初始化序列文件子系统，设置序列文件相关的管理结构
+	seq_file_init();//初始化内核中的 seq_file 缓存池
 	proc_root_init();//初始化 proc 根文件系统，设置 proc 文件系统相关的管理结构
-	nsfs_init();//初始化命名空间文件系统，设置命名空间相关的文件系统管理结构
-	pidfs_init();//初始化 PID 文件系统，设置 PID 相关的文件系统管理结构
+	nsfs_init();//挂载命名空间文件系统
+	pidfs_init();//挂载 PID 文件系统
 	cpuset_init();//初始化 CPU 集合，设置 CPU 集合管理结构
 	cgroup_init();//初始化控制组，设置控制组相关的管理结构
 	taskstats_init_early();//早期初始化任务统计，设置任务统计管理结构

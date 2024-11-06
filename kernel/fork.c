@@ -3181,12 +3181,12 @@ void __init proc_caches_init(void)
 			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_ACCOUNT,
 			NULL);//创建文件系统结构缓存，存储文件系统结构 (fs_struct) 的实例
 
-	vm_area_cachep = KMEM_CACHE(vm_area_struct, SLAB_PANIC|SLAB_ACCOUNT);// 创建虚拟内存区域结构缓存，存储虚拟内存区域结构 (vm_area_struct) 的实例。
+	vm_area_cachep = KMEM_CACHE(vm_area_struct, SLAB_PANIC|SLAB_ACCOUNT);// 创建虚拟内存区域结构缓存池，存储虚拟内存区域结构 (vm_area_struct) 的实例。
 #ifdef CONFIG_PER_VMA_LOCK
-	vma_lock_cachep = KMEM_CACHE(vma_lock, SLAB_PANIC|SLAB_ACCOUNT);//创建虚拟内存区域锁的缓存
+	vma_lock_cachep = KMEM_CACHE(vma_lock, SLAB_PANIC|SLAB_ACCOUNT);//创建虚拟内存区域锁的缓存池
 #endif
 	mmap_init();//初始化内存映射
-	nsproxy_cache_init();//初始化命名空间代理缓存
+	nsproxy_cache_init();//初始化命名空间代理缓存池
 }
 
 /*

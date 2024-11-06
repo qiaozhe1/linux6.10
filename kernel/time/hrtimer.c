@@ -2145,27 +2145,27 @@ SYSCALL_DEFINE2(nanosleep_time32, struct old_timespec32 __user *, rqtp,
  */
 int hrtimers_prepare_cpu(unsigned int cpu)
 {
-	struct hrtimer_cpu_base *cpu_base = &per_cpu(hrtimer_bases, cpu);
+	struct hrtimer_cpu_base *cpu_base = &per_cpu(hrtimer_bases, cpu);//获取当前 CPU 的 hrtimer_cpu_base 结构体
 	int i;
 
-	for (i = 0; i < HRTIMER_MAX_CLOCK_BASES; i++) {
-		struct hrtimer_clock_base *clock_b = &cpu_base->clock_base[i];
+	for (i = 0; i < HRTIMER_MAX_CLOCK_BASES; i++) {//初始化每个高分辨率定时器时钟基
+		struct hrtimer_clock_base *clock_b = &cpu_base->clock_base[i];//获取当前时钟基结构体
 
-		clock_b->cpu_base = cpu_base;
-		seqcount_raw_spinlock_init(&clock_b->seq, &cpu_base->lock);
-		timerqueue_init_head(&clock_b->active);
+		clock_b->cpu_base = cpu_base;//设置时钟基的 CPU 基础指针
+		seqcount_raw_spinlock_init(&clock_b->seq, &cpu_base->lock);//初始化序列计数器和锁
+		timerqueue_init_head(&clock_b->active);//初始化时钟基的活动定时器队列
 	}
 
-	cpu_base->cpu = cpu;
-	cpu_base->active_bases = 0;
-	cpu_base->hres_active = 0;
-	cpu_base->hang_detected = 0;
-	cpu_base->next_timer = NULL;
-	cpu_base->softirq_next_timer = NULL;
-	cpu_base->expires_next = KTIME_MAX;
-	cpu_base->softirq_expires_next = KTIME_MAX;
-	cpu_base->online = 1;
-	hrtimer_cpu_base_init_expiry_lock(cpu_base);
+	cpu_base->cpu = cpu;//设置 CPU ID
+	cpu_base->active_bases = 0;// 活动基数初始化为 0
+	cpu_base->hres_active = 0;// 高分辨率定时器活动状态初始化为 0
+	cpu_base->hang_detected = 0;//初始化未检测到挂起
+	cpu_base->next_timer = NULL;//下一个定时器初始化为空
+	cpu_base->softirq_next_timer = NULL;//下一个软中断定时器初始化为空
+	cpu_base->expires_next = KTIME_MAX;//下一个到期时间初始化为最大值
+	cpu_base->softirq_expires_next = KTIME_MAX;//软中断到期时间初始化为最大值
+	cpu_base->online = 1;//设置 CPU 为在线状态
+	hrtimer_cpu_base_init_expiry_lock(cpu_base);//初始化到期锁
 	return 0;
 }
 
@@ -2240,8 +2240,8 @@ int hrtimers_cpu_dying(unsigned int dying_cpu)
 
 void __init hrtimers_init(void)
 {
-	hrtimers_prepare_cpu(smp_processor_id());
-	open_softirq(HRTIMER_SOFTIRQ, hrtimer_run_softirq);
+	hrtimers_prepare_cpu(smp_processor_id());//准备当前 CPU 的高分辨率定时器
+	open_softirq(HRTIMER_SOFTIRQ, hrtimer_run_softirq);//注册高分辨率定时器软中断处理函数
 }
 
 /**

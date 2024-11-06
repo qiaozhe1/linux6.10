@@ -325,11 +325,11 @@ struct wq_device;
  * and decrement ->nr, node_activate_pending_pwq() activates the pending pwqs in
  * round-robin order.
  */
-struct wq_node_nr_active {
-	int			max;		/* per-node max_active */
-	atomic_t		nr;		/* per-node nr_active */
-	raw_spinlock_t		lock;		/* nests inside pool locks */
-	struct list_head	pending_pwqs;	/* LN: pwqs with inactive works */
+struct wq_node_nr_active {//用于表示每个 NUMA 节点的工作队列活动状态
+	int			max;		//每个节点的最大活动工作项数量
+	atomic_t		nr;		//每个节点当前活动工作项的数量
+	raw_spinlock_t		lock;		//保护该结构体的自旋锁，用于保证在池锁内的安全
+	struct list_head	pending_pwqs;	//与挂起的工作项相关的工作队列结构体链表
 };
 
 /*
@@ -4842,26 +4842,27 @@ static void init_node_nr_active(struct wq_node_nr_active *nna)
 /*
  * Each node's nr_active counter will be accessed mostly from its own node and
  * should be allocated in the node.
+ * 用于为每个 NUMA 节点分配和初始化 wq_node_nr_active 结构
  */
 static int alloc_node_nr_active(struct wq_node_nr_active **nna_ar)
 {
-	struct wq_node_nr_active *nna;
-	int node;
-
-	for_each_node(node) {
-		nna = kzalloc_node(sizeof(*nna), GFP_KERNEL, node);
+	struct wq_node_nr_active *nna;//声明一个指向 wq_node_nr_active 结构的指针
+	int node;// 声明一个整数变量，用于遍历节点
+ 
+	for_each_node(node) {// 遍历每个 NUMA 节点
+		nna = kzalloc_node(sizeof(*nna), GFP_KERNEL, node);//为当前节点分配 wq_node_nr_active 结构的内存
 		if (!nna)
-			goto err_free;
-		init_node_nr_active(nna);
-		nna_ar[node] = nna;
+			goto err_free;//如果分配失败，跳转到错误处理
+		init_node_nr_active(nna);//初始化分配的 wq_node_nr_active 结构
+		nna_ar[node] = nna;//将分配的结构指针保存到数组中
 	}
 
 	/* [nr_node_ids] is used as the fallback */
-	nna = kzalloc_node(sizeof(*nna), GFP_KERNEL, NUMA_NO_NODE);
+	nna = kzalloc_node(sizeof(*nna), GFP_KERNEL, NUMA_NO_NODE);//为备用情况分配内存（非特定节点）
 	if (!nna)
-		goto err_free;
-	init_node_nr_active(nna);
-	nna_ar[nr_node_ids] = nna;
+		goto err_free;//如果分配失败，跳转到错误处理
+	init_node_nr_active(nna);// 初始化备用结构
+	nna_ar[nr_node_ids] = nna;//将备用结构指针保存到数组中
 
 	return 0;
 
@@ -5126,19 +5127,19 @@ static void init_pwq(struct pool_workqueue *pwq, struct workqueue_struct *wq,
 /* sync @pwq with the current state of its associated wq and link it */
 static void link_pwq(struct pool_workqueue *pwq)
 {
-	struct workqueue_struct *wq = pwq->wq;
+	struct workqueue_struct *wq = pwq->wq;//获取与当前工作池链接结构相关联的工作队列
 
-	lockdep_assert_held(&wq->mutex);
+	lockdep_assert_held(&wq->mutex);// 确保在操作前持有工作队列的互斥锁
 
 	/* may be called multiple times, ignore if already linked */
-	if (!list_empty(&pwq->pwqs_node))
+	if (!list_empty(&pwq->pwqs_node))//检查当前工作池链接节点是否已链接
 		return;
 
 	/* set the matching work_color */
-	pwq->work_color = wq->work_color;
+	pwq->work_color = wq->work_color;// 设置当前工作池链接结构的工作颜色，与工作队列相匹配
 
 	/* link in @pwq */
-	list_add_tail_rcu(&pwq->pwqs_node, &wq->pwqs);
+	list_add_tail_rcu(&pwq->pwqs_node, &wq->pwqs);// 将当前工作池链接结构节点添加到工作队列的末尾
 }
 
 /* obtain a pool matching @attr and create a pwq associating the pool and @wq */
@@ -5472,86 +5473,86 @@ out_unlock:
 
 static int alloc_and_link_pwqs(struct workqueue_struct *wq)
 {
-	bool highpri = wq->flags & WQ_HIGHPRI;
+	bool highpri = wq->flags & WQ_HIGHPRI;//检查工作队列是否标记为高优先级
 	int cpu, ret;
 
-	wq->cpu_pwq = alloc_percpu(struct pool_workqueue *);
+	wq->cpu_pwq = alloc_percpu(struct pool_workqueue *);//为每个 CPU 分配工作池连接结构
 	if (!wq->cpu_pwq)
-		goto enomem;
+		goto enomem;//如果分配失败，跳转到内存不足的处理
 
-	if (!(wq->flags & WQ_UNBOUND)) {
-		for_each_possible_cpu(cpu) {
-			struct pool_workqueue **pwq_p;
-			struct worker_pool __percpu *pools;
-			struct worker_pool *pool;
+	if (!(wq->flags & WQ_UNBOUND)) {//如果不是无绑定工作队列
+		for_each_possible_cpu(cpu) {//遍历所有可能的 CPU
+			struct pool_workqueue **pwq_p;//指向每个 CPU 工作池的连接结构
+			struct worker_pool __percpu *pools;//每个 CPU 的工作池
+			struct worker_pool *pool;//指向当前 CPU 的工作池
 
-			if (wq->flags & WQ_BH)
-				pools = bh_worker_pools;
+			if (wq->flags & WQ_BH)// 如果是BH(软中断)工作队列
+				pools = bh_worker_pools;//获取底半部工作池
 			else
-				pools = cpu_worker_pools;
+				pools = cpu_worker_pools;//否则获取常规 CPU 工作池
 
-			pool = &(per_cpu_ptr(pools, cpu)[highpri]);
-			pwq_p = per_cpu_ptr(wq->cpu_pwq, cpu);
+			pool = &(per_cpu_ptr(pools, cpu)[highpri]);// 获取当前 CPU 的工作池
+			pwq_p = per_cpu_ptr(wq->cpu_pwq, cpu);//获取当前 CPU 的工作池链接结构
 
 			*pwq_p = kmem_cache_alloc_node(pwq_cache, GFP_KERNEL,
-						       pool->node);
+						       pool->node);//从缓存中分配工作池链接结构
 			if (!*pwq_p)
-				goto enomem;
+				goto enomem;//如果分配失败，跳转到内存不足的处理
 
-			init_pwq(*pwq_p, wq, pool);
+			init_pwq(*pwq_p, wq, pool);//初始化工作池链接结构
 
-			mutex_lock(&wq->mutex);
-			link_pwq(*pwq_p);
-			mutex_unlock(&wq->mutex);
+			mutex_lock(&wq->mutex);//锁定工作队列的互斥锁
+			link_pwq(*pwq_p);//将工作队列链接到工作队列结构中
+			mutex_unlock(&wq->mutex);//解锁工作队列的互斥锁
 		}
 		return 0;
 	}
 
-	cpus_read_lock();
-	if (wq->flags & __WQ_ORDERED) {
-		struct pool_workqueue *dfl_pwq;
+	cpus_read_lock();//获取 CPU 读取锁
+	if (wq->flags & __WQ_ORDERED) {// 如果是有序工作队列
+		struct pool_workqueue *dfl_pwq;//默认工作队列指针
 
-		ret = apply_workqueue_attrs(wq, ordered_wq_attrs[highpri]);
+		ret = apply_workqueue_attrs(wq, ordered_wq_attrs[highpri]);//应用工作队列属性
 		/* there should only be single pwq for ordering guarantee */
-		dfl_pwq = rcu_access_pointer(wq->dfl_pwq);
+		dfl_pwq = rcu_access_pointer(wq->dfl_pwq);// 访问默认工作队列
 		WARN(!ret && (wq->pwqs.next != &dfl_pwq->pwqs_node ||
 			      wq->pwqs.prev != &dfl_pwq->pwqs_node),
 		     "ordering guarantee broken for workqueue %s\n", wq->name);
 	} else {
-		ret = apply_workqueue_attrs(wq, unbound_std_wq_attrs[highpri]);
+		ret = apply_workqueue_attrs(wq, unbound_std_wq_attrs[highpri]);//应用标准无绑定工作队列属性
 	}
-	cpus_read_unlock();
+	cpus_read_unlock();//解锁 CPU 读取锁
 
 	/* for unbound pwq, flush the pwq_release_worker ensures that the
 	 * pwq_release_workfn() completes before calling kfree(wq).
 	 */
-	if (ret)
-		kthread_flush_worker(pwq_release_worker);
+	if (ret)//如果返回值不为 0，表示发生错误
+		kthread_flush_worker(pwq_release_worker);//确保工作释放线程完成
 
-	return ret;
+	return ret;//返回操作结果
 
-enomem:
-	if (wq->cpu_pwq) {
-		for_each_possible_cpu(cpu) {
-			struct pool_workqueue *pwq = *per_cpu_ptr(wq->cpu_pwq, cpu);
+enomem://内存不足处理
+	if (wq->cpu_pwq) {//如果已分配了 CPU 工作队列指针
+		for_each_possible_cpu(cpu) {// 遍历所有可能的 CPU
+			struct pool_workqueue *pwq = *per_cpu_ptr(wq->cpu_pwq, cpu);//获取每个 CPU 的工作队列
 
-			if (pwq)
-				kmem_cache_free(pwq_cache, pwq);
+			if (pwq)// 如果工作队列指针有效
+				kmem_cache_free(pwq_cache, pwq);//释放工作队列
 		}
-		free_percpu(wq->cpu_pwq);
-		wq->cpu_pwq = NULL;
+		free_percpu(wq->cpu_pwq);//释放 CPU 工作队列指针的存储
+		wq->cpu_pwq = NULL;//设置指针为 NULL
 	}
-	return -ENOMEM;
+	return -ENOMEM;// 返回内存不足错误
 }
-
+/*用于限制工作队列的最大活动数量*/
 static int wq_clamp_max_active(int max_active, unsigned int flags,
 			       const char *name)
 {
-	if (max_active < 1 || max_active > WQ_MAX_ACTIVE)
+	if (max_active < 1 || max_active > WQ_MAX_ACTIVE)//检查最大活动数量是否在有效范围内
 		pr_warn("workqueue: max_active %d requested for %s is out of range, clamping between %d and %d\n",
-			max_active, name, 1, WQ_MAX_ACTIVE);
+			max_active, name, 1, WQ_MAX_ACTIVE);// 显示请求的最大活动数和有效范围
 
-	return clamp_val(max_active, 1, WQ_MAX_ACTIVE);
+	return clamp_val(max_active, 1, WQ_MAX_ACTIVE);//调用 clamp_val 函数，将 max_active 限制在 1 到 WQ_MAX_ACTIVE 之间
 }
 
 /*
@@ -5662,87 +5663,88 @@ static void wq_adjust_max_active(struct workqueue_struct *wq)
 __printf(1, 4)
 struct workqueue_struct *alloc_workqueue(const char *fmt,
 					 unsigned int flags,
-					 int max_active, ...)
+					 int max_active, ...)//用于分配并初始化一个工作队列
 {
-	va_list args;
-	struct workqueue_struct *wq;
-	size_t wq_size;
-	int name_len;
+	va_list args;//可变参数列表
+	struct workqueue_struct *wq;//指向分配的工作队列结构的指针
+	size_t wq_size;//工作队列大小
+	int name_len;//工作队列名称长度
 
-	if (flags & WQ_BH) {
-		if (WARN_ON_ONCE(flags & ~__WQ_BH_ALLOWS))
-			return NULL;
-		if (WARN_ON_ONCE(max_active))
-			return NULL;
+	if (flags & WQ_BH) {//检查标志，如果是 BH 工作队列，确保无其他标志
+		if (WARN_ON_ONCE(flags & ~__WQ_BH_ALLOWS))//检查无效标志
+			return NULL;//返回 NULL，表示失败
+		if (WARN_ON_ONCE(max_active))//检查最大活动数是否非零
+			return NULL;//返回 NULL，表示失败
 	}
 
 	/* see the comment above the definition of WQ_POWER_EFFICIENT */
-	if ((flags & WQ_POWER_EFFICIENT) && wq_power_efficient)
-		flags |= WQ_UNBOUND;
+	if ((flags & WQ_POWER_EFFICIENT) && wq_power_efficient)//检查是否使用节能模式，如果是，则设置为无绑定模式
+		flags |= WQ_UNBOUND;//添加无绑定标志
 
-	/* allocate wq and format name */
-	if (flags & WQ_UNBOUND)
-		wq_size = struct_size(wq, node_nr_active, nr_node_ids + 1);
+	/*分配工作队列及格式化名称*/
+	if (flags & WQ_UNBOUND)//如果是无绑定工作队列
+		wq_size = struct_size(wq, node_nr_active, nr_node_ids + 1);//根据节点数量计算大小
 	else
-		wq_size = sizeof(*wq);
+		wq_size = sizeof(*wq);//否则，只分配工作队列结构的大小
 
-	wq = kzalloc(wq_size, GFP_KERNEL);
+	wq = kzalloc(wq_size, GFP_KERNEL);//分配内存并初始化
 	if (!wq)
-		return NULL;
+		return NULL;//分配失败，返回NULL
 
-	if (flags & WQ_UNBOUND) {
-		wq->unbound_attrs = alloc_workqueue_attrs();
-		if (!wq->unbound_attrs)
-			goto err_free_wq;
+	if (flags & WQ_UNBOUND) {//如果是无绑定工作队列
+		wq->unbound_attrs = alloc_workqueue_attrs();//分配无绑定工作队列属性
+		if (!wq->unbound_attrs)//检查属性分配是否成功
+			goto err_free_wq;//如果失败，跳转到清理错误处理
 	}
 
-	va_start(args, max_active);
-	name_len = vsnprintf(wq->name, sizeof(wq->name), fmt, args);
-	va_end(args);
+	va_start(args, max_active);//初始化可变参数
+	name_len = vsnprintf(wq->name, sizeof(wq->name), fmt, args);//格式化工作队列名称
+	va_end(args);//结束可变参数处理
 
-	if (name_len >= WQ_NAME_LEN)
+	if (name_len >= WQ_NAME_LEN)//检查名称长度是否超出限制
 		pr_warn_once("workqueue: name exceeds WQ_NAME_LEN. Truncating to: %s\n",
-			     wq->name);
+			     wq->name);//打印警告并截断名称
 
-	if (flags & WQ_BH) {
+	if (flags & WQ_BH) {//如果是 BH 工作队列
 		/*
 		 * BH workqueues always share a single execution context per CPU
 		 * and don't impose any max_active limit.
+		 *  BH 工作队列每个 CPU 共享一个执行上下文，并且不强加任何 max_active 限制。
 		 */
-		max_active = INT_MAX;
+		max_active = INT_MAX;// 设置最大活动数为无限制
 	} else {
-		max_active = max_active ?: WQ_DFL_ACTIVE;
-		max_active = wq_clamp_max_active(max_active, flags, wq->name);
+		max_active = max_active ?: WQ_DFL_ACTIVE;// 设置默认最大活动数
+		max_active = wq_clamp_max_active(max_active, flags, wq->name);// 限制最大活动数
 	}
 
 	/* init wq */
-	wq->flags = flags;
-	wq->max_active = max_active;
-	wq->min_active = min(max_active, WQ_DFL_MIN_ACTIVE);
-	wq->saved_max_active = wq->max_active;
-	wq->saved_min_active = wq->min_active;
-	mutex_init(&wq->mutex);
-	atomic_set(&wq->nr_pwqs_to_flush, 0);
-	INIT_LIST_HEAD(&wq->pwqs);
-	INIT_LIST_HEAD(&wq->flusher_queue);
-	INIT_LIST_HEAD(&wq->flusher_overflow);
-	INIT_LIST_HEAD(&wq->maydays);
+	wq->flags = flags;//设置工作队列标志
+	wq->max_active = max_active;// 设置最大活动数量
+	wq->min_active = min(max_active, WQ_DFL_MIN_ACTIVE);//设置最小活动数量
+	wq->saved_max_active = wq->max_active;//保存最大活动数量
+	wq->saved_min_active = wq->min_active;//保存最小活动数量
+	mutex_init(&wq->mutex);//初始化互斥锁
+	atomic_set(&wq->nr_pwqs_to_flush, 0);//初始化需要刷新的工作队列数量
+	INIT_LIST_HEAD(&wq->pwqs);//初始化工作队列指针列表
+	INIT_LIST_HEAD(&wq->flusher_queue);//初始化清除队列
+	INIT_LIST_HEAD(&wq->flusher_overflow);//初始化清除溢出队列
+	INIT_LIST_HEAD(&wq->maydays);//初始化紧急工作列表
 
-	wq_init_lockdep(wq);
-	INIT_LIST_HEAD(&wq->list);
+	wq_init_lockdep(wq);// 初始化锁依赖追踪
+	INIT_LIST_HEAD(&wq->list);// 初始化工作队列列表
 
-	if (flags & WQ_UNBOUND) {
-		if (alloc_node_nr_active(wq->node_nr_active) < 0)
-			goto err_unreg_lockdep;
+	if (flags & WQ_UNBOUND) {//如果是无绑定工作队列
+		if (alloc_node_nr_active(wq->node_nr_active) < 0)//分配节点活跃工作项状态结构
+			goto err_unreg_lockdep;//如果失败，跳转到清理错误处理
 	}
 
-	if (alloc_and_link_pwqs(wq) < 0)
-		goto err_free_node_nr_active;
+	if (alloc_and_link_pwqs(wq) < 0)//分配并链接工作队列
+		goto err_free_node_nr_active;//如果失败，跳转到清理错误处理
 
-	if (wq_online && init_rescuer(wq) < 0)
-		goto err_destroy;
+	if (wq_online && init_rescuer(wq) < 0)//如果工作队列在线并初始化失败
+		goto err_destroy;//跳转到清理错误处理
 
-	if ((wq->flags & WQ_SYSFS) && workqueue_sysfs_register(wq))
+	if ((wq->flags & WQ_SYSFS) && workqueue_sysfs_register(wq))// 如果有 sysfs 标志并注册失败
 		goto err_destroy;
 
 	/*
@@ -5750,30 +5752,30 @@ struct workqueue_struct *alloc_workqueue(const char *fmt,
 	 * Grab it, adjust max_active and add the new @wq to workqueues
 	 * list.
 	 */
-	mutex_lock(&wq_pool_mutex);
+	mutex_lock(&wq_pool_mutex);//获取工作队列池的互斥锁
 
-	mutex_lock(&wq->mutex);
-	wq_adjust_max_active(wq);
-	mutex_unlock(&wq->mutex);
+	mutex_lock(&wq->mutex);// 获取工作队列的互斥锁
+	wq_adjust_max_active(wq);//调整工作队列的最大活动数量
+	mutex_unlock(&wq->mutex);//释放工作队列的互斥锁
 
-	list_add_tail_rcu(&wq->list, &workqueues);
+	list_add_tail_rcu(&wq->list, &workqueues);//将工作队列添加到全局工作队列列表
 
-	mutex_unlock(&wq_pool_mutex);
+	mutex_unlock(&wq_pool_mutex);//释放工作队列池的互斥锁
 
-	return wq;
+	return wq;//返回分配并初始化的工作队列
 
 err_free_node_nr_active:
-	if (wq->flags & WQ_UNBOUND)
-		free_node_nr_active(wq->node_nr_active);
+	if (wq->flags & WQ_UNBOUND)//如果是无绑定工作队列
+		free_node_nr_active(wq->node_nr_active);//释放节点活动数量
 err_unreg_lockdep:
-	wq_unregister_lockdep(wq);
-	wq_free_lockdep(wq);
+	wq_unregister_lockdep(wq);//取消注册锁依赖
+	wq_free_lockdep(wq);//释放锁依赖
 err_free_wq:
-	free_workqueue_attrs(wq->unbound_attrs);
-	kfree(wq);
-	return NULL;
+	free_workqueue_attrs(wq->unbound_attrs);//释放无绑定属性
+	kfree(wq);//释放工作队列内存
+	return NULL;// 返回 NULL，表示失败
 err_destroy:
-	destroy_workqueue(wq);
+	destroy_workqueue(wq);//销毁工作队列
 	return NULL;
 }
 EXPORT_SYMBOL_GPL(alloc_workqueue);

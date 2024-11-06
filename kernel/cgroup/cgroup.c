@@ -4309,47 +4309,49 @@ static void cgroup_exit_cftypes(struct cftype *cfts)
 				__CFTYPE_ADDED);
 	}
 }
-
+/*初始化 cgroup 的控制文件类型（cftypes），ss 是 cgroup 子系统，cfts 是要初始化的 cftype 数组*/
 static int cgroup_init_cftypes(struct cgroup_subsys *ss, struct cftype *cfts)
 {
-	struct cftype *cft;
+	struct cftype *cft;//定义指向 cftype 的指针，遍历 cfts 数组
 	int ret = 0;
 
-	for (cft = cfts; cft->name[0] != '\0'; cft++) {
-		struct kernfs_ops *kf_ops;
+	for (cft = cfts; cft->name[0] != '\0'; cft++) {//遍历 cfts 数组，直到遇到名字为空的 cft （即结束符）
+		struct kernfs_ops *kf_ops;//定义 kernfs 操作指针，用于保存对应的操作
 
-		WARN_ON(cft->ss || cft->kf_ops);
+		WARN_ON(cft->ss || cft->kf_ops);//如果当前 cft 的 ss 或 kf_ops 已经被设置，则触发警告
 
-		if (cft->flags & __CFTYPE_ADDED) {
-			ret = -EBUSY;
+		if (cft->flags & __CFTYPE_ADDED) {//如果 cft 的 flags 包含 __CFTYPE_ADDED 标志，说明该 cft 已经被添加过
+			ret = -EBUSY;//返回繁忙错误
 			break;
 		}
 
-		if (cft->seq_start)
-			kf_ops = &cgroup_kf_ops;
+		if (cft->seq_start)//如果 cft 定义了 seq_start 函数，表示该 cft 类型需要做自定义操作
+			kf_ops = &cgroup_kf_ops;//使用 cgroup_kf_ops 作为 kernfs 操作
 		else
-			kf_ops = &cgroup_kf_single_ops;
+			kf_ops = &cgroup_kf_single_ops;//否则使用 cgroup_kf_single_ops
 
 		/*
 		 * Ugh... if @cft wants a custom max_write_len, we need to
 		 * make a copy of kf_ops to set its atomic_write_len.
+		 * 如果 cft 想要自定义 max_write_len，则需要复制 kernfs 操作结构
+		 * 并设置 atomic_write_len。
 		 */
-		if (cft->max_write_len && cft->max_write_len != PAGE_SIZE) {
-			kf_ops = kmemdup(kf_ops, sizeof(*kf_ops), GFP_KERNEL);
-			if (!kf_ops) {
-				ret = -ENOMEM;
+		if (cft->max_write_len && cft->max_write_len != PAGE_SIZE) {//如果 cft 定义了 max_write_len 且不是默认的 PAGE_SIZE
+			kf_ops = kmemdup(kf_ops, sizeof(*kf_ops), GFP_KERNEL);//复制 kf_ops 结构
+			if (!kf_ops) {//如果复制失败
+				ret = -ENOMEM;// 返回内存分配失败错误
 				break;
 			}
-			kf_ops->atomic_write_len = cft->max_write_len;
+			kf_ops->atomic_write_len = cft->max_write_len;//设置自定义的 atomic_write_len
 		}
 
-		cft->kf_ops = kf_ops;
-		cft->ss = ss;
-		cft->flags |= __CFTYPE_ADDED;
+		cft->kf_ops = kf_ops;//设置 cft 的 kf_ops 操作
+		cft->ss = ss;// 设置 cft 所属的 cgroup 子系统
+		cft->flags |= __CFTYPE_ADDED;//设置 __CFTYPE_ADDED 标志，标记该 cft 已被添加
 	}
 
 	if (ret)
-		cgroup_exit_cftypes(cfts);
+		cgroup_exit_cftypes(cfts);//如果发生错误，调用函数清理已添加的 cftypes
 	return ret;
 }
 
@@ -5201,13 +5203,13 @@ static ssize_t cgroup_threads_write(struct kernfs_open_file *of,
 
 /* cgroup core interface files for the default hierarchy */
 static struct cftype cgroup_base_files[] = {
-	{
+	{	//表示控制组类型文件
 		.name = "cgroup.type",
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.seq_show = cgroup_type_show,
 		.write = cgroup_type_write,
 	},
-	{
+	{	//表示控制组中进程的列表文件。
 		.name = "cgroup.procs",
 		.flags = CFTYPE_NS_DELEGATABLE,
 		.file_offset = offsetof(struct cgroup, procs_file),
@@ -5217,7 +5219,7 @@ static struct cftype cgroup_base_files[] = {
 		.seq_show = cgroup_procs_show,
 		.write = cgroup_procs_write,
 	},
-	{
+	{	//管理 cgroup 中的线程文件
 		.name = "cgroup.threads",
 		.flags = CFTYPE_NS_DELEGATABLE,
 		.release = cgroup_procs_release,
@@ -5226,52 +5228,52 @@ static struct cftype cgroup_base_files[] = {
 		.seq_show = cgroup_procs_show,
 		.write = cgroup_threads_write,
 	},
-	{
+	{	//控制器的文件，显示当前 cgroup 支持的所有控制器
 		.name = "cgroup.controllers",
 		.seq_show = cgroup_controllers_show,
 	},
-	{
+	{	//控制子树控制的文件，用于控制树结构中的子cgroup。
 		.name = "cgroup.subtree_control",
 		.flags = CFTYPE_NS_DELEGATABLE,
 		.seq_show = cgroup_subtree_control_show,
 		.write = cgroup_subtree_control_write,
 	},
-	{
+	{	//事件相关文件，用于显示 cgroup 的事件信息。
 		.name = "cgroup.events",
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.file_offset = offsetof(struct cgroup, events_file),
 		.seq_show = cgroup_events_show,
 	},
-	{
+	{	//表示 cgroup 最大后代数目文件
 		.name = "cgroup.max.descendants",
 		.seq_show = cgroup_max_descendants_show,
 		.write = cgroup_max_descendants_write,
 	},
-	{
+	{	//控制 cgroup 最大深度的文件。
 		.name = "cgroup.max.depth",
 		.seq_show = cgroup_max_depth_show,
 		.write = cgroup_max_depth_write,
 	},
-	{
+	{	//显示 cgroup 状态的文件
 		.name = "cgroup.stat",
 		.seq_show = cgroup_stat_show,
 	},
-	{
+	{	//用于冻结 cgroup 的文件
 		.name = "cgroup.freeze",
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.seq_show = cgroup_freeze_show,
 		.write = cgroup_freeze_write,
 	},
-	{
+	{	//用于杀死 cgroup 中的进程文件
 		.name = "cgroup.kill",
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.write = cgroup_kill_write,
 	},
-	{
+	{	//显示 CPU 使用统计信息的文件
 		.name = "cpu.stat",
 		.seq_show = cpu_stat_show,
 	},
-	{
+	{	//显示本地 CPU 统计信息的文件
 		.name = "cpu.stat.local",
 		.seq_show = cpu_local_stat_show,
 	},
@@ -6074,97 +6076,101 @@ int __init cgroup_init_early(void)
  */
 int __init cgroup_init(void)
 {
-	struct cgroup_subsys *ss;
-	int ssid;
+	struct cgroup_subsys *ss;// 定义一个指向 cgroup 子系统的指针，用于遍历所有子系统
+	int ssid;//子系统的索引 ID，用于标识当前遍历的子系统
 
-	BUILD_BUG_ON(CGROUP_SUBSYS_COUNT > 16);
-	BUG_ON(cgroup_init_cftypes(NULL, cgroup_base_files));
-	BUG_ON(cgroup_init_cftypes(NULL, cgroup_psi_files));
-	BUG_ON(cgroup_init_cftypes(NULL, cgroup1_base_files));
+	BUILD_BUG_ON(CGROUP_SUBSYS_COUNT > 16);//如果 cgroup 子系统数量大于 16，编译时触发错误，保证系统设计符合预期
+	BUG_ON(cgroup_init_cftypes(NULL, cgroup_base_files));//初始化 cgroup 基本文件时出错，调用 BUG_ON 触发内核 panic
+	BUG_ON(cgroup_init_cftypes(NULL, cgroup_psi_files));//初始化 cgroup PSI 文件时出错，调用 BUG_ON 触发内核 panic
+	BUG_ON(cgroup_init_cftypes(NULL, cgroup1_base_files));//初始化 cgroup 1.x 基本文件时出错，调用 BUG_ON 触发内核 panic
 
-	cgroup_rstat_boot();
+	cgroup_rstat_boot();//启动 cgroup 的统计信息收集功能，用于监控资源使用情况
 
-	get_user_ns(init_cgroup_ns.user_ns);
+	get_user_ns(init_cgroup_ns.user_ns);//获取当前进程的用户命名空间信息，并保存到初始化的 cgroup 命名空间中
 
-	cgroup_lock();
+	cgroup_lock();//获取 cgroup 锁，防止多线程或多处理器之间对 cgroup 状态的并发修改
 
 	/*
 	 * Add init_css_set to the hash table so that dfl_root can link to
 	 * it during init.
+	 * 将 init_css_set（初始化的 cgroup 子系统状态集合）添加到哈希表中，供默认根 cgroup 在初始化时使用。
+	 * 通过哈希表来查找和管理 cgroup 子系统的状态
 	 */
 	hash_add(css_set_table, &init_css_set.hlist,
-		 css_set_hash(init_css_set.subsys));
+		 css_set_hash(init_css_set.subsys));//将初始化的 css_set 哈希表节点加入全局哈希表
 
-	BUG_ON(cgroup_setup_root(&cgrp_dfl_root, 0));
+	BUG_ON(cgroup_setup_root(&cgrp_dfl_root, 0));//初始化 cgroup 默认根时出错，调用 BUG_ON 触发内核 panic
 
-	cgroup_unlock();
+	cgroup_unlock();//释放 cgroup 锁，允许其他进程访问和修改 cgroup 状态
 
-	for_each_subsys(ss, ssid) {
-		if (ss->early_init) {
+	for_each_subsys(ss, ssid) {//遍历每个 cgroup 子系统（如 cpu, memory 等）
+		if (ss->early_init) {//如果当前子系统需要早期初始化（即在默认的根 cgroup 初始化前完成）
 			struct cgroup_subsys_state *css =
-				init_css_set.subsys[ss->id];
+				init_css_set.subsys[ss->id];//获取该子系统的状态
 
 			css->id = cgroup_idr_alloc(&ss->css_idr, css, 1, 2,
-						   GFP_KERNEL);
-			BUG_ON(css->id < 0);
+						   GFP_KERNEL);//为子系统状态分配一个唯一的 ID
+			BUG_ON(css->id < 0);//如果分配 ID 失败，调用 BUG_ON 触发内核 panic
 		} else {
-			cgroup_init_subsys(ss, false);
+			cgroup_init_subsys(ss, false);//对不需要早期初始化的子系统进行正常初始化
 		}
 
 		list_add_tail(&init_css_set.e_cset_node[ssid],
-			      &cgrp_dfl_root.cgrp.e_csets[ssid]);
+			      &cgrp_dfl_root.cgrp.e_csets[ssid]);//将该子系统的状态节点添加到默认 cgroup 的子系统列表中
 
 		/*
 		 * Setting dfl_root subsys_mask needs to consider the
 		 * disabled flag and cftype registration needs kmalloc,
 		 * both of which aren't available during early_init.
+		 * 设置 dfl_root 的 subsys_mask 时需要考虑禁用标志，并且 cftype 注册需要通过 kmalloc，
+		 * 这两个操作在 early_init 阶段不可用，因此在初始化过程中不能完成
 		 */
-		if (!cgroup_ssid_enabled(ssid))
+		if (!cgroup_ssid_enabled(ssid))//如果当前子系统未启用，跳过此子系统的处理
 			continue;
 
-		if (cgroup1_ssid_disabled(ssid))
+		if (cgroup1_ssid_disabled(ssid))// 如果 cgroup 1.x 版本的子系统被禁用
 			pr_info("Disabling %s control group subsystem in v1 mounts\n",
-				ss->legacy_name);
+				ss->legacy_name);//输出禁用信息
 
-		cgrp_dfl_root.subsys_mask |= 1 << ss->id;
+		cgrp_dfl_root.subsys_mask |= 1 << ss->id;//启用当前子系统，通过设置 dfl_root 的 subsys_mask 位图来标记启用
 
-		/* implicit controllers must be threaded too */
-		WARN_ON(ss->implicit_on_dfl && !ss->threaded);
+		/* 隐式控制器必须是线程化的，否则会发出警 */
+		WARN_ON(ss->implicit_on_dfl && !ss->threaded);//如果隐式启用的子系统没有线程化，输出警告
 
-		if (ss->implicit_on_dfl)
-			cgrp_dfl_implicit_ss_mask |= 1 << ss->id;
-		else if (!ss->dfl_cftypes)
-			cgrp_dfl_inhibit_ss_mask |= 1 << ss->id;
+		if (ss->implicit_on_dfl)// 如果子系统启用了隐式功能
+			cgrp_dfl_implicit_ss_mask |= 1 << ss->id;// 标记该子系统为隐式控制器
+		else if (!ss->dfl_cftypes)//如果子系统没有默认的 cftypes
+			cgrp_dfl_inhibit_ss_mask |= 1 << ss->id;//禁用该子系统的默认配置
 
-		if (ss->threaded)
-			cgrp_dfl_threaded_ss_mask |= 1 << ss->id;
+		if (ss->threaded)//如果子系统支持线程化
+			cgrp_dfl_threaded_ss_mask |= 1 << ss->id;// 标记该子系统为线程化控制器
 
-		if (ss->dfl_cftypes == ss->legacy_cftypes) {
-			WARN_ON(cgroup_add_cftypes(ss, ss->dfl_cftypes));
+		if (ss->dfl_cftypes == ss->legacy_cftypes) {//如果默认 cftypes 和旧版 cftypes 相同
+			WARN_ON(cgroup_add_cftypes(ss, ss->dfl_cftypes));//添加 cgroup 类型失败时发出警告
 		} else {
-			WARN_ON(cgroup_add_dfl_cftypes(ss, ss->dfl_cftypes));
-			WARN_ON(cgroup_add_legacy_cftypes(ss, ss->legacy_cftypes));
+			WARN_ON(cgroup_add_dfl_cftypes(ss, ss->dfl_cftypes));// 添加默认 cftypes 失败时发出警告
+			WARN_ON(cgroup_add_legacy_cftypes(ss, ss->legacy_cftypes));//添加旧版 cftypes 失败时发出警告
 		}
 
-		if (ss->bind)
-			ss->bind(init_css_set.subsys[ssid]);
+		if (ss->bind)//如果该子系统支持绑定操作
+			ss->bind(init_css_set.subsys[ssid]);//执行绑定操作
 
-		cgroup_lock();
-		css_populate_dir(init_css_set.subsys[ssid]);
-		cgroup_unlock();
+		cgroup_lock();//获取 cgroup 锁，确保线程安全
+		css_populate_dir(init_css_set.subsys[ssid]);// 填充子系统的目录结构
+		cgroup_unlock();//释放 cgroup 锁
 	}
 
 	/* init_css_set.subsys[] has been updated, re-hash */
-	hash_del(&init_css_set.hlist);
+	hash_del(&init_css_set.hlist);//从哈希表中删除旧的 css_set 条目
 	hash_add(css_set_table, &init_css_set.hlist,
-		 css_set_hash(init_css_set.subsys));
+		 css_set_hash(init_css_set.subsys));//重新将更新后的 css_set 添加到全局哈希表
 
-	WARN_ON(sysfs_create_mount_point(fs_kobj, "cgroup"));
-	WARN_ON(register_filesystem(&cgroup_fs_type));
-	WARN_ON(register_filesystem(&cgroup2_fs_type));
-	WARN_ON(!proc_create_single("cgroups", 0, NULL, proc_cgroupstats_show));
+	WARN_ON(sysfs_create_mount_point(fs_kobj, "cgroup"));//创建 cgroup sysfs 挂载点时出错则警告
+	WARN_ON(register_filesystem(&cgroup_fs_type));// 注册 cgroup 文件系统时出错则警告
+	WARN_ON(register_filesystem(&cgroup2_fs_type));// 注册 cgroup2 文件系统时出错则警告
+	WARN_ON(!proc_create_single("cgroups", 0, NULL, proc_cgroupstats_show));//创建 cgroup 统计文件时出错则警告
 #ifdef CONFIG_CPUSETS
-	WARN_ON(register_filesystem(&cpuset_fs_type));
+	WARN_ON(register_filesystem(&cpuset_fs_type));//如果启用了 CPU 集群功能，则注册 cpuset 文件系统
 #endif
 
 	return 0;

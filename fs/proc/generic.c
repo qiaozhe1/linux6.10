@@ -198,16 +198,16 @@ static DEFINE_IDA(proc_inum_ida);
  * Return an inode number between PROC_DYNAMIC_FIRST and
  * 0xffffffff, or zero on failure.
  */
-int proc_alloc_inum(unsigned int *inum)
+int proc_alloc_inum(unsigned int *inum)//为 /proc 文件系统动态分配一个唯一的 inode 编号
 {
 	int i;
 
 	i = ida_simple_get(&proc_inum_ida, 0, UINT_MAX - PROC_DYNAMIC_FIRST + 1,
-			   GFP_KERNEL);
+			   GFP_KERNEL);//从 proc_inum_ida IDA（ID 分配器）中分配一个唯一的 ID。proc_inum_ida 是一个全局 IDA 结构体，用于管理 /proc 文件系统中动态分配的 inode 号。
 	if (i < 0)
-		return i;
+		return i;//失败返回错误码
 
-	*inum = PROC_DYNAMIC_FIRST + (unsigned int)i;
+	*inum = PROC_DYNAMIC_FIRST + (unsigned int)i;//通过将 i 加上 PROC_DYNAMIC_FIRST，生成实际的 inode 编号。确保分配的 inode 编号不与静态分配的编号冲突。
 	return 0;
 }
 
@@ -456,25 +456,25 @@ out:
 }
 
 struct proc_dir_entry *proc_symlink(const char *name,
-		struct proc_dir_entry *parent, const char *dest)
+		struct proc_dir_entry *parent, const char *dest)// 用于在 /proc 文件系统中创建符号链接条目
 {
-	struct proc_dir_entry *ent;
+	struct proc_dir_entry *ent;//定义一个指向 proc 目录项的指针，用于存储符号链接的条目
 
 	ent = __proc_create(&parent, name,
-			  (S_IFLNK | S_IRUGO | S_IWUGO | S_IXUGO),1);
+			  (S_IFLNK | S_IRUGO | S_IWUGO | S_IXUGO),1);//创建一个新的 proc 目录项，类型为符号链接 (S_IFLNK)，并设置其权限为用户可读写执行
 
 	if (ent) {
-		ent->data = kmalloc((ent->size=strlen(dest))+1, GFP_KERNEL);
+		ent->data = kmalloc((ent->size=strlen(dest))+1, GFP_KERNEL);//为符号链接目标路径分配内存，大小为目标路径的长度加 1（用于存储字符串的末尾空字符）
 		if (ent->data) {
-			strcpy((char*)ent->data,dest);
-			ent->proc_iops = &proc_link_inode_operations;
-			ent = proc_register(parent, ent);
+			strcpy((char*)ent->data,dest);//将目标路径复制到分配的内存区域中
+			ent->proc_iops = &proc_link_inode_operations;//设置符号链接的 inode 操作函数
+			ent = proc_register(parent, ent);//将符号链接注册到父目录中
 		} else {
-			pde_free(ent);
-			ent = NULL;
+			pde_free(ent);// 释放已创建的 proc 目录项
+			ent = NULL;//将指针置为空，表示失败
 		}
 	}
-	return ent;
+	return ent;//返回创建的符号链接条目
 }
 EXPORT_SYMBOL(proc_symlink);
 

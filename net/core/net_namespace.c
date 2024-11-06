@@ -1174,47 +1174,47 @@ static void __init netns_ipv4_struct_check(void)
 }
 #endif
 
-void __init net_ns_init(void)
+void __init net_ns_init(void)//初始化网络命名空间的函数
 {
-	struct net_generic *ng;
+	struct net_generic *ng;//声明指向网络通用结构的指针
 
-#ifdef CONFIG_NET_NS
-	netns_ipv4_struct_check();
+#ifdef CONFIG_NET_NS// 如果网络命名空间支持被编译进内核
+	netns_ipv4_struct_check();//检查 IPv4 网络命名空间的结构
 	net_cachep = kmem_cache_create("net_namespace", sizeof(struct net),
 					SMP_CACHE_BYTES,
-					SLAB_PANIC|SLAB_ACCOUNT, NULL);
+					SLAB_PANIC|SLAB_ACCOUNT, NULL);//创建用于网络命名空间的内存缓存池
 
 	/* Create workqueue for cleanup */
-	netns_wq = create_singlethread_workqueue("netns");
-	if (!netns_wq)
-		panic("Could not create netns workq");
+	netns_wq = create_singlethread_workqueue("netns");//创建单线程工作队列
+	if (!netns_wq)//检查工作队列是否创建成功
+		panic("Could not create netns workq");// 如果失败则引发恐慌
 #endif
 
-	ng = net_alloc_generic();
-	if (!ng)
-		panic("Could not allocate generic netns");
+	ng = net_alloc_generic();//分配一个通用的网络命名空间结构
+	if (!ng)//检查分配是否成功
+		panic("Could not allocate generic netns");//如果失败则引发恐慌
 
-	rcu_assign_pointer(init_net.gen, ng);
+	rcu_assign_pointer(init_net.gen, ng);//将分配的通用网络命名空间指针赋值给初始化网络的通用指针
 
-#ifdef CONFIG_KEYS
-	init_net.key_domain = &init_net_key_domain;
+#ifdef CONFIG_KEYS//如果密钥功能被启用
+	init_net.key_domain = &init_net_key_domain;//设置初始化网络的密钥域
 #endif
-	down_write(&pernet_ops_rwsem);
-	preinit_net(&init_net);
-	if (setup_net(&init_net, &init_user_ns))
-		panic("Could not setup the initial network namespace");
+	down_write(&pernet_ops_rwsem);// 获取网络命名空间操作的写锁
+	preinit_net(&init_net);// 预初始化网络命名空间
+	if (setup_net(&init_net, &init_user_ns))// 设置初始化网络，分配给初始用户命名空间
+		panic("Could not setup the initial network namespace");//如果失败则引发恐慌
 
-	init_net_initialized = true;
-	up_write(&pernet_ops_rwsem);
+	init_net_initialized = true;//标记初始化网络为已完成
+	up_write(&pernet_ops_rwsem);//释放网络命名空间操作的写锁
 
-	if (register_pernet_subsys(&net_ns_ops))
-		panic("Could not register network namespace subsystems");
+	if (register_pernet_subsys(&net_ns_ops))//注册网络命名空间子系统
+		panic("Could not register network namespace subsystems");// 如果失败则引发恐慌
 
 	rtnl_register(PF_UNSPEC, RTM_NEWNSID, rtnl_net_newid, NULL,
-		      RTNL_FLAG_DOIT_UNLOCKED);
+		      RTNL_FLAG_DOIT_UNLOCKED);//注册新的命名空间 ID
 	rtnl_register(PF_UNSPEC, RTM_GETNSID, rtnl_net_getid, rtnl_net_dumpid,
 		      RTNL_FLAG_DOIT_UNLOCKED |
-		      RTNL_FLAG_DUMP_UNLOCKED);
+		      RTNL_FLAG_DUMP_UNLOCKED);//注册获取命名空间 ID 的请求
 }
 
 static void free_exit_list(struct pernet_operations *ops, struct list_head *net_exit_list)

@@ -268,13 +268,13 @@ struct kernfs_open_file {
 	const struct vm_operations_struct *vm_ops;
 };
 
-struct kernfs_ops {
+struct kernfs_ops {// kernfs 文件系统的操作结构体，用于定义与 kernfs 文件交互的各种操作，包括打开、释放、读写、mmap、poll 等
 	/*
 	 * Optional open/release methods.  Both are called with
 	 * @of->seq_file populated.
 	 */
-	int (*open)(struct kernfs_open_file *of);
-	void (*release)(struct kernfs_open_file *of);
+	int (*open)(struct kernfs_open_file *of);//用于打开文件的操作，通常在访问文件之前调用
+	void (*release)(struct kernfs_open_file *of);// 用于释放文件资源的操作，一般在文件关闭时调用。
 
 	/*
 	 * Read is handled by either seq_file or raw_read().
@@ -287,14 +287,14 @@ struct kernfs_ops {
 	 * read() is bounced through kernel buffer and a read larger than
 	 * PAGE_SIZE results in partial operation of PAGE_SIZE.
 	 */
-	int (*seq_show)(struct seq_file *sf, void *v);
+	int (*seq_show)(struct seq_file *sf, void *v);//用于序列化显示文件内容。如果启用了 seq_file 路径，该函数会显示内容。
 
-	void *(*seq_start)(struct seq_file *sf, loff_t *ppos);
-	void *(*seq_next)(struct seq_file *sf, void *v, loff_t *ppos);
-	void (*seq_stop)(struct seq_file *sf, void *v);
+	void *(*seq_start)(struct seq_file *sf, loff_t *ppos);//开始读取序列化数据的方法，返回数据的起始位置
+	void *(*seq_next)(struct seq_file *sf, void *v, loff_t *ppos);//获取序列化数据中的下一个数据项
+	void (*seq_stop)(struct seq_file *sf, void *v);//停止读取序列化数据的方法
 
 	ssize_t (*read)(struct kernfs_open_file *of, char *buf, size_t bytes,
-			loff_t off);
+			loff_t off);//读取数据的方法，接受 kernfs_open_file 指针、缓冲区、读取字节数和偏移量
 
 	/*
 	 * write() is bounced through kernel buffer.  If atomic_write_len
@@ -303,22 +303,22 @@ struct kernfs_ops {
 	 * writes upto the specified size are executed atomically but
 	 * larger ones are rejected with -E2BIG.
 	 */
-	size_t atomic_write_len;
+	size_t atomic_write_len;//原子写入长度限制，表示可以原子写入的最大字节数，超过该值会被拒绝
 	/*
 	 * "prealloc" causes a buffer to be allocated at open for
 	 * all read/write requests.  As ->seq_show uses seq_read()
 	 * which does its own allocation, it is incompatible with
 	 * ->prealloc.  Provide ->read and ->write with ->prealloc.
 	 */
-	bool prealloc;
+	bool prealloc;// 是否预分配缓冲区，预分配后所有读取/写入请求都会使用已分配的缓冲区
 	ssize_t (*write)(struct kernfs_open_file *of, char *buf, size_t bytes,
-			 loff_t off);
+			 loff_t off);//写入数据的方法，接受 kernfs_open_file 指针、数据缓冲区、字节数和偏移量
 
 	__poll_t (*poll)(struct kernfs_open_file *of,
-			 struct poll_table_struct *pt);
+			 struct poll_table_struct *pt);// 用于文件的 poll 操作，接受 kernfs_open_file 指针和 poll 表
 
-	int (*mmap)(struct kernfs_open_file *of, struct vm_area_struct *vma);
-	loff_t (*llseek)(struct kernfs_open_file *of, loff_t offset, int whence);
+	int (*mmap)(struct kernfs_open_file *of, struct vm_area_struct *vma);//mmap 操作方法，用于文件映射到内存
+	loff_t (*llseek)(struct kernfs_open_file *of, loff_t offset, int whence);//llseek 操作，用于文件偏移量的修改
 };
 
 /*
