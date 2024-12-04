@@ -968,25 +968,25 @@ void __init setup_nr_cpu_ids(void)
 }
 
 /* Called by boot processor to activate the rest. */
-void __init smp_init(void)
+void __init smp_init(void)//用于初始化多处理器系统（SMP 环境），它的主要任务是在启动阶段将系统中的辅助 CPU（即非启动 CPU）启动起来，使它们可以参与到系统的工作中
 {
-	int num_nodes, num_cpus;
+	int num_nodes, num_cpus;//定义两个变量 `num_nodes` 和 `num_cpus` 用于存储在线的节点和 CPU 数量
 
-	idle_threads_init();
-	cpuhp_threads_init();
+	idle_threads_init();//初始化空闲线程，为每个 CPU 创建空闲线程
+	cpuhp_threads_init();// 初始化 CPU 热插拔线程，用于管理 CPU 的上线和下线过程
 
-	pr_info("Bringing up secondary CPUs ...\n");
+	pr_info("Bringing up secondary CPUs ...\n");//打印信息，通知系统正在启动辅助 CPU（即非启动 CPU）
 
-	bringup_nonboot_cpus(setup_max_cpus);
+	bringup_nonboot_cpus(setup_max_cpus);//启动非启动（secondary）CPU，直到`setup_max_cpus` 指定的数量,这个函数会遍历系统中所有的 CPU，并尝试将它们上线
 
-	num_nodes = num_online_nodes();
-	num_cpus  = num_online_cpus();
+	num_nodes = num_online_nodes();//获取系统中当前在线的节点数，存储在 `num_nodes` 中
+	num_cpus  = num_online_cpus();//获取系统中当前在线的 CPU 数量，存储在 `num_cpus` 中
 	pr_info("Brought up %d node%s, %d CPU%s\n",
 		num_nodes, (num_nodes > 1 ? "s" : ""),
-		num_cpus,  (num_cpus  > 1 ? "s" : ""));
+		num_cpus,  (num_cpus  > 1 ? "s" : ""));//打印信息，通知系统已启动的节点和 CPU 数量
 
 	/* Any cleanup work */
-	smp_cpus_done(setup_max_cpus);
+	smp_cpus_done(setup_max_cpus);//完成 SMP 的 CPU 初始化后的清理工作，以确保所有辅助 CPU 的状态正确
 }
 
 /*

@@ -20,29 +20,29 @@ struct css_set;
 /* All the bits taken by the old clone syscall. */
 #define CLONE_LEGACY_FLAGS 0xffffffffULL
 
-struct kernel_clone_args {
-	u64 flags;
-	int __user *pidfd;
-	int __user *child_tid;
-	int __user *parent_tid;
-	const char *name;
-	int exit_signal;
-	u32 kthread:1;
-	u32 io_thread:1;
-	u32 user_worker:1;
-	u32 no_files:1;
-	unsigned long stack;
-	unsigned long stack_size;
-	unsigned long tls;
-	pid_t *set_tid;
+struct kernel_clone_args {//用于描述创建新进程或线程时的各种参数
+	u64 flags;// 进程克隆的标志，用于指定各种克隆选项，例如共享内存、文件描述符等
+	int __user *pidfd;// 指向用户空间中的 PID 文件描述符的指针，用于存储新创建进程的 PID
+	int __user *child_tid;//指向用户空间中的子线程 ID 存储位置的指针
+	int __user *parent_tid;//指向用户空间中的父线程 ID 存储位置的指针
+	const char *name;//新进程的名称指针
+	int exit_signal;//进程退出时发送给父进程的信号
+	u32 kthread:1;//标志是否为内核线程
+	u32 io_thread:1;//标志是否为 I/O 线程
+	u32 user_worker:1;//标志是否为用户工作线程
+	u32 no_files:1;//标志是否不复制父进程的文件描述符表
+	unsigned long stack;//新进程的栈地址
+	unsigned long stack_size;//新进程的栈大小
+	unsigned long tls;//线程本地存储的地址
+	pid_t *set_tid;//指向需要设置的 TID 的数组指针
 	/* Number of elements in *set_tid */
-	size_t set_tid_size;
-	int cgroup;
-	int idle;
-	int (*fn)(void *);
-	void *fn_arg;
-	struct cgroup *cgrp;
-	struct css_set *cset;
+	size_t set_tid_size;//`set_tid` 数组中的元素数量
+	int cgroup;//cgroup 控制组的标识符
+	int idle;//标识新进程是否为 idle 进程
+	int (*fn)(void *);//指向新进程的函数指针，该函数是新进程的执行入口
+	void *fn_arg;//传递给新进程函数的参数
+	struct cgroup *cgrp;// 指向新进程的 cgroup 结构体指针
+	struct css_set *cset;//指向 cgroup 子系统设置的指针
 };
 
 /*

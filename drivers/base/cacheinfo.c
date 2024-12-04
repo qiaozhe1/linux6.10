@@ -262,67 +262,68 @@ static bool of_check_cache_nodes(struct device_node *np)
 
 static int of_count_cache_leaves(struct device_node *np)
 {
-	unsigned int leaves = 0;
+	unsigned int leaves = 0;//用于统计缓存叶子节点的数量
 
-	if (of_property_read_bool(np, "cache-size"))
+	if (of_property_read_bool(np, "cache-size"))//如果设备节点中存在 "cache-size" 属性
 		++leaves;
-	if (of_property_read_bool(np, "i-cache-size"))
+	if (of_property_read_bool(np, "i-cache-size"))//如果设备节点中存在 "i-cache-size" 属性（指令缓存大小）
 		++leaves;
-	if (of_property_read_bool(np, "d-cache-size"))
+	if (of_property_read_bool(np, "d-cache-size"))//如果设备节点中存在 "d-cache-size" 属性（数据缓存大小）
 		++leaves;
 
-	if (!leaves) {
+	if (!leaves) {//如果没有找到任何缓存大小属性
 		/* The '[i-|d-|]cache-size' property is required, but
 		 * if absent, fallback on the 'cache-unified' property.
+		 * '[i-|d-|]cache-size' 属性是必须的，但如果不存在，则回退使用 'cache-unified' 属性来确定缓存信息。
 		 */
-		if (of_property_read_bool(np, "cache-unified"))
-			return 1;
+		if (of_property_read_bool(np, "cache-unified"))//如果存在 "cache-unified" 属性，表示统一缓存
+			return 1;//返回 1，表示存在一个统一缓存
 		else
-			return 2;
+			return 2;//如果既没有缓存大小属性也没有统一缓存属性,返回 2，表示需要使用更复杂的方式来处理缓存
 	}
 
 	return leaves;
 }
 
-int init_of_cache_level(unsigned int cpu)
+int init_of_cache_level(unsigned int cpu)//通过遍历设备树节点，为指定 CPU 初始化缓存级别和叶子节点的信息
 {
-	struct cpu_cacheinfo *this_cpu_ci = get_cpu_cacheinfo(cpu);
-	struct device_node *np = of_cpu_device_node_get(cpu);
-	struct device_node *prev = NULL;
-	unsigned int levels = 0, leaves, level;
+	struct cpu_cacheinfo *this_cpu_ci = get_cpu_cacheinfo(cpu);//获取与指定 CPU 相关的缓存信息结构体指针
+	struct device_node *np = of_cpu_device_node_get(cpu);//获取与指定 CPU 相关的设备树节点
+	struct device_node *prev = NULL;//定义一个指向设备树节点的指针，用于记录前一个节点，初始为空
+	unsigned int levels = 0, leaves, level;//定义缓存级别、叶子节点数量和缓存层次变量
 
-	if (!of_check_cache_nodes(np)) {
-		of_node_put(np);
+	if (!of_check_cache_nodes(np)) {//检查设备树节点是否包含有效的缓存节点信息
+		of_node_put(np);// 如果无效，释放设备树节点引用
 		return -ENOENT;
 	}
 
-	leaves = of_count_cache_leaves(np);
-	if (leaves > 0)
-		levels = 1;
+	leaves = of_count_cache_leaves(np);//统计缓存叶子节点的数量
+	if (leaves > 0)//如果存在叶子节点
+		levels = 1;//将缓存级别设为 1
 
-	prev = np;
-	while ((np = of_find_next_cache_node(np))) {
-		of_node_put(prev);
-		prev = np;
-		if (!of_device_is_compatible(np, "cache"))
-			goto err_out;
-		if (of_property_read_u32(np, "cache-level", &level))
-			goto err_out;
-		if (level <= levels)
-			goto err_out;
+	prev = np;//将当前节点赋值给 prev，以便后续遍历
+	while ((np = of_find_next_cache_node(np))) {//查找下一个缓存节点，直到找不到为止
+		of_node_put(prev);//释放前一个节点的引用
+		prev = np;//更新 prev 为当前节点
+		if (!of_device_is_compatible(np, "cache"))//检查节点是否与 "cache" 兼容
+			goto err_out;//如果不兼容，跳转到错误处理部分
+		if (of_property_read_u32(np, "cache-level", &level))//读取缓存级别属性
+			goto err_out;//如果读取失败，跳转到错误处理部分
+		if (level <= levels)//如果当前级别小于等于已有的级别
+			goto err_out;//跳转到错误处理部分
 
-		leaves += of_count_cache_leaves(np);
-		levels = level;
+		leaves += of_count_cache_leaves(np);//累加叶子节点数量
+		levels = level;//更新缓存级别
 	}
 
-	of_node_put(np);
-	this_cpu_ci->num_levels = levels;
-	this_cpu_ci->num_leaves = leaves;
+	of_node_put(np);//释放当前节点的引用
+	this_cpu_ci->num_levels = levels;//将缓存级别数量存储到 CPU 缓存信息结构体中
+	this_cpu_ci->num_leaves = leaves;//将缓存叶子节点数量存储到 CPU 缓存信息结构体中
 
 	return 0;
 
 err_out:
-	of_node_put(np);
+	of_node_put(np);//释放当前节点的引用
 	return -EINVAL;
 }
 
@@ -479,52 +480,52 @@ int __weak populate_cache_leaves(unsigned int cpu)
 }
 
 static inline
-int allocate_cache_info(int cpu)
+int allocate_cache_info(int cpu)//用于为指定的 CPU 分配用于存储缓存信息的内存
 {
 	per_cpu_cacheinfo(cpu) = kcalloc(cache_leaves(cpu),
-					 sizeof(struct cacheinfo), GFP_ATOMIC);
-	if (!per_cpu_cacheinfo(cpu)) {
-		cache_leaves(cpu) = 0;
-		return -ENOMEM;
+					 sizeof(struct cacheinfo), GFP_ATOMIC);//为指定 CPU 分配存储缓存信息的内存，分配的数量为缓存叶子节点数
+	if (!per_cpu_cacheinfo(cpu)) {//如果分配内存失败
+		cache_leaves(cpu) = 0;//将缓存叶子节点数设为 0，表示分配失败
+		return -ENOMEM;//返回错误码，表示内存不足
 	}
 
 	return 0;
 }
 
-int fetch_cache_info(unsigned int cpu)
+int fetch_cache_info(unsigned int cpu)//为指定的 CPU 获取缓存的相关信息，包括缓存级别和叶子节点数量。
 {
-	struct cpu_cacheinfo *this_cpu_ci = get_cpu_cacheinfo(cpu);
-	unsigned int levels = 0, split_levels = 0;
+	struct cpu_cacheinfo *this_cpu_ci = get_cpu_cacheinfo(cpu);//获取与指定 CPU 相关的缓存信息结构体指针
+	unsigned int levels = 0, split_levels = 0;//定义缓存级别和分裂缓存级别的变量，并初始化为 0
 	int ret;
 
-	if (acpi_disabled) {
-		ret = init_of_cache_level(cpu);
+	if (acpi_disabled) {//如果 ACPI 功能被禁用
+		ret = init_of_cache_level(cpu);//使用设备树初始化缓存级别信息
 	} else {
-		ret = acpi_get_cache_info(cpu, &levels, &split_levels);
+		ret = acpi_get_cache_info(cpu, &levels, &split_levels);//使用 ACPI 获取缓存信息，包括级别和分裂级别
 		if (!ret) {
-			this_cpu_ci->num_levels = levels;
+			this_cpu_ci->num_levels = levels;//将缓存级别信息存储在 CPU 缓存信息结构体中
 			/*
 			 * This assumes that:
 			 * - there cannot be any split caches (data/instruction)
 			 *   above a unified cache
 			 * - data/instruction caches come by pair
 			 */
-			this_cpu_ci->num_leaves = levels + split_levels;
+			this_cpu_ci->num_leaves = levels + split_levels;//计算缓存叶子节点数，包含统一缓存和分裂缓存
 		}
 	}
 
-	if (ret || !cache_leaves(cpu)) {
-		ret = early_cache_level(cpu);
-		if (ret)
+	if (ret || !cache_leaves(cpu)) {//如果获取缓存信息失败，或者缓存叶子节点数为 0
+		ret = early_cache_level(cpu);//使用早期的方式初始化缓存级别信息
+		if (ret)// 如果初始化失败,返回错误码
 			return ret;
 
-		if (!cache_leaves(cpu))
-			return -ENOENT;
+		if (!cache_leaves(cpu))//如果缓存叶子节点数仍然为 0
+			return -ENOENT;//返回错误码，表示没有找到缓存信息
 
-		this_cpu_ci->early_ci_levels = true;
+		this_cpu_ci->early_ci_levels = true;//标记该 CPU 使用了早期缓存信息级别
 	}
 
-	return allocate_cache_info(cpu);
+	return allocate_cache_info(cpu);//为该 CPU 分配缓存信息并返回结果
 }
 
 static inline int init_level_allocate_ci(unsigned int cpu)

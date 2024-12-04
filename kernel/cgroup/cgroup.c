@@ -5977,58 +5977,52 @@ static struct kernfs_syscall_ops cgroup_kf_syscall_ops = {
 	.rmdir			= cgroup_rmdir,
 	.show_path		= cgroup_show_path,
 };
-
+/*用于初始化 cgroup 子系统，ss 是子系统指针，early 表示是否在早期初始化阶段*/
 static void __init cgroup_init_subsys(struct cgroup_subsys *ss, bool early)
 {
-	struct cgroup_subsys_state *css;
+	struct cgroup_subsys_state *css;//定义 cgroup 子系统状态指针
 
-	pr_debug("Initializing cgroup subsys %s\n", ss->name);
+	pr_debug("Initializing cgroup subsys %s\n", ss->name);//打印调试信息，输出正在初始化的 cgroup 子系统的名称
 
-	cgroup_lock();
+	cgroup_lock();// 获取cgroup锁，以确保初始化过程中的一致性
 
-	idr_init(&ss->css_idr);
-	INIT_LIST_HEAD(&ss->cfts);
+	idr_init(&ss->css_idr);//初始化IDR，管理子系统状态的ID
+	INIT_LIST_HEAD(&ss->cfts);//初始化子系统控制文件类型列表
 
-	/* Create the root cgroup state for this subsystem */
-	ss->root = &cgrp_dfl_root;
-	css = ss->css_alloc(NULL);
-	/* We don't handle early failures gracefully */
-	BUG_ON(IS_ERR(css));
-	init_and_link_css(css, ss, &cgrp_dfl_root.cgrp);
+	/* 创建该子系统的根 cgroup 状态 */
+	ss->root = &cgrp_dfl_root;//将子系统的根设置为默认cgroup根
+	css = ss->css_alloc(NULL);//分配子系统状态结构体，传入 NULL 表示根状态
+	/* 不能优雅地处理早期的分配失败情况 */
+	BUG_ON(IS_ERR(css));//如果分配失败，则触发 BUG，停止内核
+	init_and_link_css(css, ss, &cgrp_dfl_root.cgrp);//初始化并链接子系统状态与默认的 cgroup 根节点
 
 	/*
-	 * Root csses are never destroyed and we can't initialize
-	 * percpu_ref during early init.  Disable refcnting.
+	 * 根状态不会被销毁，且在早期初始化中无法初始化 percpu_ref，因此禁用引用计数
 	 */
-	css->flags |= CSS_NO_REF;
+	css->flags |= CSS_NO_REF;//设置 CSS_NO_REF 标志，禁用引用计数
 
 	if (early) {
-		/* allocation can't be done safely during early init */
-		css->id = 1;
+		/* 在早期初始化期间无法安全地进行分配 */
+		css->id = 1;//在早期初始化期间，将ID直接设置为1
 	} else {
-		css->id = cgroup_idr_alloc(&ss->css_idr, css, 1, 2, GFP_KERNEL);
-		BUG_ON(css->id < 0);
+		css->id = cgroup_idr_alloc(&ss->css_idr, css, 1, 2, GFP_KERNEL);//为子系统状态分配 ID，从 1 开始
+		BUG_ON(css->id < 0);//如果 ID 分配失败，触发 BUG
 	}
 
-	/* Update the init_css_set to contain a subsys
-	 * pointer to this state - since the subsystem is
-	 * newly registered, all tasks and hence the
-	 * init_css_set is in the subsystem's root cgroup. */
-	init_css_set.subsys[ss->id] = css;
+	/* 更新 init_css_set 以包含该子系统的指针,由于该子系统刚刚注册，所有任务及 init_css_set 都在子系统的根 cgroup 中 */
+	init_css_set.subsys[ss->id] = css;//将子系统状态指针设置到初始化的css集合中。init_css_set是初始任务在多个子系统上的状态合集
 
-	have_fork_callback |= (bool)ss->fork << ss->id;
-	have_exit_callback |= (bool)ss->exit << ss->id;
-	have_release_callback |= (bool)ss->release << ss->id;
-	have_canfork_callback |= (bool)ss->can_fork << ss->id;
+	have_fork_callback |= (bool)ss->fork << ss->id;//如果该子系统定义了 fork 回调，设置相应标志
+	have_exit_callback |= (bool)ss->exit << ss->id;//如果定义了 exit 回调，设置相应标志
+	have_release_callback |= (bool)ss->release << ss->id;//如果定义了 release 回调，设置相应标志
+	have_canfork_callback |= (bool)ss->can_fork << ss->id;//如果定义了 can_fork 回调，设置相应标志
 
-	/* At system boot, before all subsystems have been
-	 * registered, no tasks have been forked, so we don't
-	 * need to invoke fork callbacks here. */
-	BUG_ON(!list_empty(&init_task.tasks));
+	/* 在系统引导期间，所有子系统注册之前，尚未有任务被 fork,因此这里无需调用 fork 回调 */
+	BUG_ON(!list_empty(&init_task.tasks));//确保在系统启动时没有任务处于运行状态，否则触发 BUG
 
-	BUG_ON(online_css(css));
+	BUG_ON(online_css(css));//确保子系统状态未上线，若已上线则触发 BUG
 
-	cgroup_unlock();
+	cgroup_unlock();//释放 cgroup 锁
 }
 
 /**
@@ -6086,9 +6080,9 @@ int __init cgroup_init(void)
 
 	cgroup_rstat_boot();//启动 cgroup 的统计信息收集功能，用于监控资源使用情况
 
-	get_user_ns(init_cgroup_ns.user_ns);//获取当前进程的用户命名空间信息，并保存到初始化的 cgroup 命名空间中
+	get_user_ns(init_cgroup_ns.user_ns);//获取当前进程的用户命名空间信息，并保存到初始化的cgroup命名空间中
 
-	cgroup_lock();//获取 cgroup 锁，防止多线程或多处理器之间对 cgroup 状态的并发修改
+	cgroup_lock();//获取cgroup锁，防止多线程或多处理器之间对cgroup状态的并发修改
 
 	/*
 	 * Add init_css_set to the hash table so that dfl_root can link to

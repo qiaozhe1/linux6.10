@@ -40,28 +40,28 @@
 #include "head.h"
 
 static DECLARE_COMPLETION(cpu_running);
-
+/*用于在多处理器系统中为每个 CPU 设置拓扑结构和 NUMA（非统一内存访问）信息。*/
 void __init smp_prepare_cpus(unsigned int max_cpus)
 {
-	int cpuid;
-	unsigned int curr_cpuid;
+	int cpuid;//定义变量 `cpuid` 用于遍历每个可能的 CPU ID
+	unsigned int curr_cpuid;//定义变量 `curr_cpuid`，用于存储当前运行的 CPU ID
 
-	init_cpu_topology();
+	init_cpu_topology();//初始化 CPU 拓扑结构，为系统设置各个 CPU 的硬件结构信息(主要为缓存信息)
 
-	curr_cpuid = smp_processor_id();
-	store_cpu_topology(curr_cpuid);
-	numa_store_cpu_info(curr_cpuid);
-	numa_add_cpu(curr_cpuid);
+	curr_cpuid = smp_processor_id();//获取当前运行 CPU 的 ID，并将其赋值给 `curr_cpuid`
+	store_cpu_topology(curr_cpuid);//存储当前 CPU 的拓扑信息，以便后续多核处理的使用
+	numa_store_cpu_info(curr_cpuid);//存储当前 CPU 的 NUMA（非统一内存访问）信息，确保多节点系统中内存访问的信息正确配置
+	numa_add_cpu(curr_cpuid);//将当前 CPU 添加到 NUMA 拓扑中，设置它在 NUMA 结构中的位置
 
 	/* This covers non-smp usecase mandated by "nosmp" option */
-	if (max_cpus == 0)
-		return;
+	if (max_cpus == 0)//如果系统最大 CPU 数设置为 0（通过 "nosmp" 选项禁用 SMP）
+		return;//直接返回
 
-	for_each_possible_cpu(cpuid) {
-		if (cpuid == curr_cpuid)
+	for_each_possible_cpu(cpuid) {// 遍历系统中每一个可能存在的 CPU
+		if (cpuid == curr_cpuid)//如果当前遍历的 CPU ID 与当前 CPU 相同，跳过
 			continue;
-		set_cpu_present(cpuid, true);
-		numa_store_cpu_info(cpuid);
+		set_cpu_present(cpuid, true);//设置当前遍历的 CPU 为 "present" 状态，表示该 CPU 存在于系统中，可以被使用
+		numa_store_cpu_info(cpuid);//存储该 CPU 的 NUMA 信息，确保系统内所有 CPU 的内存访问信息都被正确配置
 	}
 }
 
@@ -144,14 +144,14 @@ static void __init of_parse_and_init_cpus(void)
 		if (rc < 0)//如果获取hart ID失败，跳过当前节点
 			continue;
 
-		if (is_mpidr_duplicate(cpuid, hart)) {
+		if (is_mpidr_duplicate(cpuid, hart)) {//检查由 cpuid 和 hart 标识的当前 CPU 是否在设备树中存在重复的 MPIDR（多处理器 ID 寄存器）。
 			pr_err("%pOF: duplicate cpu reg properties in the DT\n",
-				dn);
+				dn);//如果发现重复的 MPIDR，调用 pr_err() 输出一条错误信息，格式化字符串中使用了 %pOF，它表示以设备树节点的格式打印指针 dn（指向当前处理器节点的指针）
 			continue;
 		}
 
 		if (hart == cpuid_to_hartid_map(0)) {//检查是否为启动CPU
-			BUG_ON(found_boot_cpu);//如果已经找到过启动 CPU，则触发内核错误
+			BUG_ON(found_boot_cpu);//如果已经找到过启动CPU，则触发内核错误
 			found_boot_cpu = 1;//标记已经找到启动 CPU
 			early_map_cpu_to_node(0, of_node_to_nid(dn));//将启动 CPU 映射到对应的 NUMA 节点
 			continue;//跳过对启动 CPU 的进一步处理
@@ -190,33 +190,33 @@ void __init setup_smp(void)//用于设置对称多处理 (SMP) 系统的相关�
 			set_cpu_possible(cpuid, true);//将该cpuid标记为系统中存在的CPU,这意味着这个 CPU 可以在系统中启用并参与工作负载
 }
 
-static int start_secondary_cpu(int cpu, struct task_struct *tidle)
+static int start_secondary_cpu(int cpu, struct task_struct *tidle)//用于启动指定的 CPU
 {
-	if (cpu_ops->cpu_start)
-		return cpu_ops->cpu_start(cpu, tidle);
+	if (cpu_ops->cpu_start)//检查 CPU 操作接口中是否存在启动函数
+		return cpu_ops->cpu_start(cpu, tidle);//如果存在，则调用该启动函数(sbi_cpu_start)，传递 CPU ID 和空闲线程
 
-	return -EOPNOTSUPP;
+	return -EOPNOTSUPP;//如果启动函数不存在，则返回 -EOPNOTSUPP，表示操作不被支持
 }
 
-int __cpu_up(unsigned int cpu, struct task_struct *tidle)
+int __cpu_up(unsigned int cpu, struct task_struct *tidle)//用于启动指定 CPU，分配相应的任务结构
 {
-	int ret = 0;
-	tidle->thread_info.cpu = cpu;
+	int rvet = 0;//
+	tidle->thread_info.cpu = cpu;//将指定的 CPU 分配给任务结构中的 thread_info
 
-	ret = start_secondary_cpu(cpu, tidle);
-	if (!ret) {
+	ret = start_secondary_cpu(cpu, tidle);//启动指定的 CPU，tidle 是空闲线程
+	if (!ret) {//如果启动成功，继续等待 CPU 完全启动
 		wait_for_completion_timeout(&cpu_running,
-					    msecs_to_jiffies(1000));
+					    msecs_to_jiffies(1000));//等待启动完成的信号，超时时间为 1000 毫秒（转换为时钟节拍 jiffies）
 
-		if (!cpu_online(cpu)) {
-			pr_crit("CPU%u: failed to come online\n", cpu);
+		if (!cpu_online(cpu)) {//检查 CPU 是否已经成功上线（进入工作状态）
+			pr_crit("CPU%u: failed to come online\n", cpu);//如果 CPU 没有上线，则打印错误信息并将返回值设为 -EIO，表示输入/输出错误
 			ret = -EIO;
 		}
 	} else {
-		pr_crit("CPU%u: failed to start\n", cpu);
+		pr_crit("CPU%u: failed to start\n", cpu);//如果启动过程发生错误，则打印启动失败的错误信息
 	}
 
-	return ret;
+	return ret;//返回启动的结果，0 表示成功，负值表示失败
 }
 
 void __init smp_cpus_done(unsigned int max_cpus)

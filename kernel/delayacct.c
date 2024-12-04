@@ -36,11 +36,11 @@ static int __init delayacct_setup_enable(char *str)
 }
 __setup("delayacct", delayacct_setup_enable);
 
-void delayacct_init(void)
+void delayacct_init(void)//用于初始化延迟统计相关的数据结构
 {
-	delayacct_cache = KMEM_CACHE(task_delay_info, SLAB_PANIC|SLAB_ACCOUNT);
-	delayacct_tsk_init(&init_task);
-	set_delayacct(delayacct_on);
+	delayacct_cache = KMEM_CACHE(task_delay_info, SLAB_PANIC|SLAB_ACCOUNT);//创建一个 slab 缓存，用于存储 task_delay_info 结构(用于跟踪任务的延迟信息，例如 I/O 延迟、CPU 延迟等。)。SLAB_PANIC 确保分配失败时系统崩溃，SLAB_ACCOUNT 表示会将分配的内存计入内存使用
+	delayacct_tsk_init(&init_task);//初始化 init_task 的延迟统计信息，将其与 delayacct 系统关联起来
+	set_delayacct(delayacct_on);//设置全局延迟统计状态，根据 delayacct_on 控制延迟统计的启用.如果 delayacct_on 为真，则系统会启用延迟统计，跟踪任务的延迟信息。
 }
 
 #ifdef CONFIG_PROC_SYSCTL

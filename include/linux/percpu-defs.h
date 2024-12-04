@@ -266,7 +266,7 @@ do {									\
 
 #endif	/* CONFIG_SMP */
 
-#define per_cpu(var, cpu)	(*per_cpu_ptr(&(var), cpu))
+#define per_cpu(var, cpu)	(*per_cpu_ptr(&(var), cpu))//每个cpu的per_cpu内存块基地址加上var偏移量，得到具体per_cpu类型数据结构的地址
 
 /*
  * Must be an lvalue. Since @var must be a simple identifier,

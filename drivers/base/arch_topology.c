@@ -673,47 +673,49 @@ static int __init parse_socket(struct device_node *socket)
 
 	return ret;
 }
-
+/* 解析设备树 (Device Tree) 中的 CPU 拓扑结构。*/
 static int __init parse_dt_topology(void)
 {
 	struct device_node *cn, *map;
 	int ret = 0;
 	int cpu;
 
-	cn = of_find_node_by_path("/cpus");
+	cn = of_find_node_by_path("/cpus");//查找设备树中路径为 "/cpus" 的节点，表示包含所有 CPU 的根节点
 	if (!cn) {
-		pr_err("No CPU information found in DT\n");
+		pr_err("No CPU information found in DT\n");//未找到节点，打印错误信息
 		return 0;
 	}
 
 	/*
 	 * When topology is provided cpu-map is essentially a root
 	 * cluster with restricted subnodes.
+	 * 当拓扑结构被提供时，"cpu-map" 通常是一个根簇 (cluster) 节点，其下包含受限的子节点。
 	 */
-	map = of_get_child_by_name(cn, "cpu-map");
+	map = of_get_child_by_name(cn, "cpu-map");/ 获取 "/cpus" 节点下名为 "cpu-map" 的子节点
 	if (!map)
-		goto out;
+		goto out;//若未找到 "cpu-map"，则跳转到 out 标签执行后续操作
 
-	ret = parse_socket(map);
+	ret = parse_socket(map);//解析 socket 信息，map 节点代表 CPU socket 信息
 	if (ret != 0)
-		goto out_map;
+		goto out_map;//若解析失败，跳转到 out_map 标签释放资源
 
-	topology_normalize_cpu_scale();
+	topology_normalize_cpu_scale();//归一化 CPU 拓扑结构中的比例因子
 
 	/*
 	 * Check that all cores are in the topology; the SMP code will
 	 * only mark cores described in the DT as possible.
+	 * 检查所有核心是否都在拓扑结构中；SMP 代码仅会标记设备树中描述的核心为可能存在。
 	 */
 	for_each_possible_cpu(cpu)
-		if (cpu_topology[cpu].package_id < 0) {
-			ret = -EINVAL;
+		if (cpu_topology[cpu].package_id < 0) {//如果某个 CPU 的 package ID 为 -1，说明没有被正确初始化
+			ret = -EINVAL;//返回无效参数错误
 			break;
 		}
 
 out_map:
-	of_node_put(map);
+	of_node_put(map);//释放对 "cpu-map" 节点的引用
 out:
-	of_node_put(cn);
+	of_node_put(cn);//释放对 "/cpus" 节点的引用
 	return ret;
 }
 #endif
@@ -806,33 +808,34 @@ void update_siblings_masks(unsigned int cpuid)
 
 static void clear_cpu_topology(int cpu)
 {
-	struct cpu_topology *cpu_topo = &cpu_topology[cpu];
-
-	cpumask_clear(&cpu_topo->llc_sibling);
-	cpumask_set_cpu(cpu, &cpu_topo->llc_sibling);
-
-	cpumask_clear(&cpu_topo->cluster_sibling);
-	cpumask_set_cpu(cpu, &cpu_topo->cluster_sibling);
-
-	cpumask_clear(&cpu_topo->core_sibling);
-	cpumask_set_cpu(cpu, &cpu_topo->core_sibling);
-	cpumask_clear(&cpu_topo->thread_sibling);
-	cpumask_set_cpu(cpu, &cpu_topo->thread_sibling);
+	struct cpu_topology *cpu_topo = &cpu_topology[cpu];//获取当前 CPU 的拓扑结构信息
+	/*清除并重新设置当前 CPU 在 LLC (Last Level Cache) 同级掩码中的位置*/
+	cpumask_clear(&cpu_topo->llc_sibling);//清除 LLC 同级掩码
+	cpumask_set_cpu(cpu, &cpu_topo->llc_sibling);//将当前 CPU 添加到其 LLC 同级掩码中
+	/*清除并重新设置当前 CPU 在簇 (Cluster) 同级掩码中的位置*/
+	cpumask_clear(&cpu_topo->cluster_sibling);//清除簇同级掩码
+	cpumask_set_cpu(cpu, &cpu_topo->cluster_sibling);//将当前 CPU 添加到其簇同级掩码中
+	/*清除并重新设置当前 CPU 在核心 (Core) 同级掩码中的位置*/
+	cpumask_clear(&cpu_topo->core_sibling);//清除核心同级掩码
+	cpumask_set_cpu(cpu, &cpu_topo->core_sibling);//将当前 CPU 添加到其核心同级掩码中
+	/*清除并重新设置当前 CPU 在线程 (Thread) 同级掩码中的位置*/
+	cpumask_clear(&cpu_topo->thread_sibling);//清除线程同级掩码
+	cpumask_set_cpu(cpu, &cpu_topo->thread_sibling);//将当前 CPU 添加到其线程同级掩码中
 }
 
-void __init reset_cpu_topology(void)
+void __init reset_cpu_topology(void)//用于重置系统中所有可能 CPU 的拓扑信息。
 {
 	unsigned int cpu;
 
-	for_each_possible_cpu(cpu) {
-		struct cpu_topology *cpu_topo = &cpu_topology[cpu];
+	for_each_possible_cpu(cpu) {// 遍历系统中所有可能的 CPU
+		struct cpu_topology *cpu_topo = &cpu_topology[cpu];//获取当前 CPU 的拓扑结构信息
+		/*重置当前 CPU 的拓扑 ID，所有 ID 初始化为 -1 表示无效状态*/
+		cpu_topo->thread_id = -1;//重置线程 ID
+		cpu_topo->core_id = -1;//重置核心 ID
+		cpu_topo->cluster_id = -1;//重置簇 ID
+		cpu_topo->package_id = -1;//重置封装 ID
 
-		cpu_topo->thread_id = -1;
-		cpu_topo->core_id = -1;
-		cpu_topo->cluster_id = -1;
-		cpu_topo->package_id = -1;
-
-		clear_cpu_topology(cpu);
+		clear_cpu_topology(cpu);// 清除当前 CPU 的拓扑信息
 	}
 }
 
@@ -858,50 +861,55 @@ __weak int __init parse_acpi_topology(void)
 }
 
 #if defined(CONFIG_ARM64) || defined(CONFIG_RISCV)
+/*用于初始化 CPU 的拓扑信息，首先尝试通过 ACPI 或设备树（DT）来解析 CPU 的拓扑，
+ * 如果解析失败则重置拓扑信息，避免使用部分数据。
+ * */
 void __init init_cpu_topology(void)
 {
 	int cpu, ret;
 
-	reset_cpu_topology();
-	ret = parse_acpi_topology();
+	reset_cpu_topology();//重置当前的 CPU 拓扑信息，以确保在从头开始初始化时没有残留的状态。
+	ret = parse_acpi_topology();//尝试从 ACPI（高级配置和电源接口）中解析 CPU 的拓扑结构。
 	if (!ret)
-		ret = of_have_populated_dt() && parse_dt_topology();
+		ret = of_have_populated_dt() && parse_dt_topology();//如果没有 ACPI 拓扑信息，且设备树已经填充，则尝试从设备树解析拓扑信息
 
-	if (ret) {
+	if (ret) {//如果解析失败，重置 CPU 拓扑信息，避免使用部分无效的信息
 		/*
 		 * Discard anything that was parsed if we hit an error so we
 		 * don't use partial information. But do not return yet to give
 		 * arch-specific early cache level detection a chance to run.
+		 * 如果解析过程中出错，则丢弃已解析的内容，避免使用部分信息。
+		 * 但不立即返回，仍然允许架构特定的早期缓存级别检测运行。
 		 */
 		reset_cpu_topology();
 	}
 
-	for_each_possible_cpu(cpu) {
-		ret = fetch_cache_info(cpu);
+	for_each_possible_cpu(cpu) {//遍历所有可能的 CPU，获取其缓存信息
+		ret = fetch_cache_info(cpu);//尝试从硬件中读取 CPU 的缓存级别和大小等信息。
 		if (!ret)
-			continue;
-		else if (ret != -ENOENT)
+			continue;//如果缓存信息成功读取（ret 为 0），则继续下一个 CPU 的处理。
+		else if (ret != -ENOENT)//如果缓存信息读取失败且返回的错误不是 -ENOENT（表示没有找到该缓存信息），则打印错误信息。
 			pr_err("Early cacheinfo failed, ret = %d\n", ret);
 		return;
 	}
 }
 
-void store_cpu_topology(unsigned int cpuid)
+void store_cpu_topology(unsigned int cpuid)//用于存储指定 CPU 的拓扑信息
 {
-	struct cpu_topology *cpuid_topo = &cpu_topology[cpuid];
+	struct cpu_topology *cpuid_topo = &cpu_topology[cpuid];//获取指定 CPU 的拓扑结构信息指针
 
-	if (cpuid_topo->package_id != -1)
-		goto topology_populated;
+	if (cpuid_topo->package_id != -1)//如果该 CPU 的 package_id 已经被设置，表示拓扑信息已经存在
+		goto topology_populated;//跳转到拓扑信息更新部分
 
-	cpuid_topo->thread_id = -1;
-	cpuid_topo->core_id = cpuid;
-	cpuid_topo->package_id = cpu_to_node(cpuid);
+	cpuid_topo->thread_id = -1;//将线程 ID 设置为 -1，表示该 CPU 不是超线程
+	cpuid_topo->core_id = cpuid;//设置核心 ID 为当前 CPU 的 ID，假设每个核心对应一个 CPU
+	cpuid_topo->package_id = cpu_to_node(cpuid);//设置 package ID 为与该 CPU 相关的节点 ID
 
 	pr_debug("CPU%u: package %d core %d thread %d\n",
 		 cpuid, cpuid_topo->package_id, cpuid_topo->core_id,
-		 cpuid_topo->thread_id);
+		 cpuid_topo->thread_id);// 打印当前 CPU 的拓扑信息用于调试
 
 topology_populated:
-	update_siblings_masks(cpuid);
+	update_siblings_masks(cpuid);//更新兄弟掩码，用于反映同一个核心或同一个套装中的 CPU
 }
 #endif

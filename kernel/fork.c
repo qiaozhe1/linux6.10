@@ -268,31 +268,31 @@ err:
 		memcg_kmem_uncharge_page(vm->pages[i], 0);
 	return ret;
 }
-
+/*该函数的作用是为任务分配线程栈，优先尝试重用缓存的栈空间，节省资源和提高效率。如果缓存不可用，则分配新的栈空间，同时确保内存控制组的正确计费。*/
 static int alloc_thread_stack_node(struct task_struct *tsk, int node)
 {
 	struct vm_struct *vm;
 	void *stack;
 	int i;
 
-	for (i = 0; i < NR_CACHED_STACKS; i++) {
+	for (i = 0; i < NR_CACHED_STACKS; i++) {//遍历所有缓存的栈空间
 		struct vm_struct *s;
 
-		s = this_cpu_xchg(cached_stacks[i], NULL);
+		s = this_cpu_xchg(cached_stacks[i], NULL);//获取当前CPU的缓存栈，并将其置为空
 
-		if (!s)
-			continue;
+		if (!s)//如果没有找到缓存的栈空间,跳过当前循环，继续下一次迭代
+			continue
 
 		/* Reset stack metadata. */
-		kasan_unpoison_range(s->addr, THREAD_SIZE);
+		kasan_unpoison_range(s->addr, THREAD_SIZE);//解除 KASAN 对栈的标记，表示该范围内的内存有效
 
-		stack = kasan_reset_tag(s->addr);
+		stack = kasan_reset_tag(s->addr);//重置栈的标签，用于 KASAN 的内存管理
 
 		/* Clear stale pointers from reused stack. */
-		memset(stack, 0, THREAD_SIZE);
+		memset(stack, 0, THREAD_SIZE);//将栈内存清零，防止遗留数据影响后续使用
 
-		if (memcg_charge_kernel_stack(s)) {
-			vfree(s->addr);
+		if (memcg_charge_kernel_stack(s)) {//向内存控制组（memcg）申请分配栈空间
+			vfree(s->addr);//
 			return -ENOMEM;
 		}
 
@@ -305,29 +305,32 @@ static int alloc_thread_stack_node(struct task_struct *tsk, int node)
 	 * Allocated stacks are cached and later reused by new threads,
 	 * so memcg accounting is performed manually on assigning/releasing
 	 * stacks to tasks. Drop __GFP_ACCOUNT.
+	 * 已分配的栈会被缓存并在新线程创建时重用，因此在将栈分配给任务时，内存
+	 * 控制组的计费需要手动完成。移除 __GFP_ACCOUNT 标志。
 	 */
 	stack = __vmalloc_node_range(THREAD_SIZE, THREAD_ALIGN,
 				     VMALLOC_START, VMALLOC_END,
 				     THREADINFO_GFP & ~__GFP_ACCOUNT,
 				     PAGE_KERNEL,
-				     0, node, __builtin_return_address(0));
+				     0, node, __builtin_return_address(0));//为指定节点分配新的栈空间
 	if (!stack)
-		return -ENOMEM;
+		return -ENOMEM;//栈分配失败,返回错误码，表示内存不足
 
-	vm = find_vm_area(stack);
-	if (memcg_charge_kernel_stack(vm)) {
-		vfree(stack);
-		return -ENOMEM;
+	vm = find_vm_area(stack);//查找与分配的栈空间对应的虚拟内存区域
+	if (memcg_charge_kernel_stack(vm)) {//向内存控制组申请分配栈空间
+		vfree(stack);//如果分配失败，释放该栈的虚拟内存
+		return -ENOMEM;//返回错误码，表示内存不足
 	}
 	/*
 	 * We can't call find_vm_area() in interrupt context, and
 	 * free_thread_stack() can be called in interrupt context,
 	 * so cache the vm_struct.
+	 * 我们不能在中断上下文中调用 find_vm_area()，而 free_thread_stack() 可能在中断上下文中调用，因此需要缓存 vm_struct。
 	 */
-	tsk->stack_vm_area = vm;
-	stack = kasan_reset_tag(stack);
-	tsk->stack = stack;
-	return 0;
+	tsk->stack_vm_area = vm;//将虚拟内存区域结构体指针赋值给任务结构体中的栈区域字段
+	stack = kasan_reset_tag(stack);//重置栈的标签，用于 KASAN 的内存管理
+	tsk->stack = stack;//将栈指针赋值给任务结构体中的栈字段
+	return 0;//返回 0，表示成功
 }
 
 static void free_thread_stack(struct task_struct *tsk)
@@ -2686,13 +2689,13 @@ fork_out:
 	return ERR_PTR(retval);
 }
 
-static inline void init_idle_pids(struct task_struct *idle)
+static inline void init_idle_pids(struct task_struct *idle)//为空闲线程初始化 PID ，确保每个空闲线程具有正确的 PID 信息
 {
-	enum pid_type type;
+	enum pid_type type;//定义枚举变量 type，用于表示 PID 的类型
 
-	for (type = PIDTYPE_PID; type < PIDTYPE_MAX; ++type) {
-		INIT_HLIST_NODE(&idle->pid_links[type]); /* not really needed */
-		init_task_pid(idle, type, &init_struct_pid);
+	for (type = PIDTYPE_PID; type < PIDTYPE_MAX; ++type) {//遍历所有 PID 类型
+		INIT_HLIST_NODE(&idle->pid_links[type]); //初始化空闲线程的 PID 链表节点（其实不太需要）
+		init_task_pid(idle, type, &init_struct_pid);//初始化空闲线程的 PID，将其与初始结构体 PID 关联
 	}
 }
 
@@ -2702,21 +2705,21 @@ static int idle_dummy(void *dummy)
 	return 0;
 }
 
-struct task_struct * __init fork_idle(int cpu)
+struct task_struct * __init fork_idle(int cpu)//为指定的 CPU 创建并初始化一个新的空闲线程
 {
 	struct task_struct *task;
-	struct kernel_clone_args args = {
-		.flags		= CLONE_VM,
-		.fn		= &idle_dummy,
-		.fn_arg		= NULL,
-		.kthread	= 1,
-		.idle		= 1,
+	struct kernel_clone_args args = {//初始化克隆参数结构体，用于配置新线程的属性
+		.flags		= CLONE_VM,//共享虚拟内存空间
+		.fn		= &idle_dummy,//设置新线程的入口函数为 idle_dummy
+		.fn_arg		= NULL,//不需要传递参数给入口函数
+		.kthread	= 1,//标记这是一个内核线程
+		.idle		= 1,//标记这是一个空闲线程
 	};
 
-	task = copy_process(&init_struct_pid, 0, cpu_to_node(cpu), &args);
-	if (!IS_ERR(task)) {
-		init_idle_pids(task);
-		init_idle(task, cpu);
+	task = copy_process(&init_struct_pid, 0, cpu_to_node(cpu), &args);//创建新线程，使用指定的克隆参数
+	if (!IS_ERR(task)) {//如果线程创建成功
+		init_idle_pids(task);//初始化空闲线程的进程ID=0
+		init_idle(task, cpu);//初始化空闲线程，使其与指定CPU关联
 	}
 
 	return task;
@@ -2753,14 +2756,14 @@ struct task_struct *create_io_thread(int (*fn)(void *), void *arg, int node)
  *
  * args->exit_signal is expected to be checked for sanity by the caller.
  */
-pid_t kernel_clone(struct kernel_clone_args *args)
+pid_t kernel_clone(struct kernel_clone_args *args)//该函数的作用是根据给定的参数创建一个新进程或线程，并对新进程进行适当的初始化和配置。
 {
-	u64 clone_flags = args->flags;
-	struct completion vfork;
-	struct pid *pid;
-	struct task_struct *p;
-	int trace = 0;
-	pid_t nr;
+	u64 clone_flags = args->flags;//获取克隆标志，用于指定如何创建新进程
+	struct completion vfork;//定义完成量变量 vfork，用于处理 vfork 相关的同步
+	struct pid *pid;//定义指向 PID 结构体的指针，用于存储新进程的 PID
+	struct task_struct *p;//定义指向任务结构体的指针，用于表示新创建的进程
+	int trace = 0;//定义跟踪变量 trace，初始化为 0
+	pid_t nr;//定义变量 nr，用于存储新创建进程的虚拟 PID
 
 	/*
 	 * For legacy clone() calls, CLONE_PIDFD uses the parent_tid argument
@@ -2770,74 +2773,80 @@ pid_t kernel_clone(struct kernel_clone_args *args)
 	 * them both point at the same memory location. Performing this check
 	 * here has the advantage that we don't need to have a separate helper
 	 * to check for legacy clone().
+	 * 对于传统的 clone() 调用，CLONE_PIDFD 使用 parent_tid 参数来返回 pidfd。 因此，CLONE_PIDFD 和 CLONE_PARENT_SETTID 是互斥的。
+	 * 在 clone3() 中，CLONE_PIDFD 在 clone_args 结构体中有单独的字段,但让它们都指向相同的内存位置没有意义。在这里执行这个检查的
+	 * 好处是，我们不需要有单独的辅助函数来检查传统的 clone()。
 	 */
 	if ((clone_flags & CLONE_PIDFD) &&
 	    (clone_flags & CLONE_PARENT_SETTID) &&
 	    (args->pidfd == args->parent_tid))
-		return -EINVAL;
+		return -EINVAL;//如果 CLONE_PIDFD 和 CLONE_PARENT_SETTID 互斥标志同时设置并且它们指向相同的内存位置，返回错误码 -EINVAL
 
 	/*
 	 * Determine whether and which event to report to ptracer.  When
 	 * called from kernel_thread or CLONE_UNTRACED is explicitly
 	 * requested, no event is reported; otherwise, report if the event
 	 * for the type of forking is enabled.
+	 * 确定是否以及向 ptracer 报告哪个事件。如果是内核线程或显式请求 CLONE_UNTRACED，则不会报告任何事件；
+	 * 否则，如果启用了相应的事件，则报告该类型的 fork 事件。
 	 */
-	if (!(clone_flags & CLONE_UNTRACED)) {
+	if (!(clone_flags & CLONE_UNTRACED)) {//检查是否有CLONE_UNTRACED标志，如果没有，需要报告跟踪事件
 		if (clone_flags & CLONE_VFORK)
-			trace = PTRACE_EVENT_VFORK;
-		else if (args->exit_signal != SIGCHLD)
-			trace = PTRACE_EVENT_CLONE;
-		else
-			trace = PTRACE_EVENT_FORK;
+			trace = PTRACE_EVENT_VFORK;//设置跟踪事件为 vfork
+		else if (args->exit_signal != SIGCHLD)//如果 exit_signal 不是 SIGCHLD，表示这是一个特殊的克隆操作
+			trace = PTRACE_EVENT_CLONE;//设置跟踪事件为 clone
+		else//否则是普通的 fork 操作
+			trace = PTRACE_EVENT_FORK;//设置跟踪事件为 fork
 
-		if (likely(!ptrace_event_enabled(current, trace)))
+		if (likely(!ptrace_event_enabled(current, trace)))//如果 ptracer 没有启用对应的跟踪事件，则不进行跟踪
 			trace = 0;
 	}
 
-	p = copy_process(NULL, trace, NUMA_NO_NODE, args);
-	add_latent_entropy();
+	p = copy_process(NULL, trace, NUMA_NO_NODE, args);//复制当前进程，创建新进程
+	add_latent_entropy();//增加潜在熵，用于增强随机性
 
 	if (IS_ERR(p))
-		return PTR_ERR(p);
+		return PTR_ERR(p);//如果创建进程失败，返回错误码
 
 	/*
 	 * Do this prior waking up the new thread - the thread pointer
 	 * might get invalid after that point, if the thread exits quickly.
+	 * 在唤醒新线程之前执行此操作——线程指针在此之后可能会失效，如果线程迅速退出的话。
 	 */
-	trace_sched_process_fork(current, p);
+	trace_sched_process_fork(current, p);//跟踪调度过程中的 fork 事件
 
-	pid = get_task_pid(p, PIDTYPE_PID);
-	nr = pid_vnr(pid);
+	pid = get_task_pid(p, PIDTYPE_PID);//获取新进程的 PID 结构体指针
+	nr = pid_vnr(pid);//获取新进程的虚拟 PID
 
-	if (clone_flags & CLONE_PARENT_SETTID)
-		put_user(nr, args->parent_tid);
+	if (clone_flags & CLONE_PARENT_SETTID)//如果设置了CLONE_PARENT_SETTID标志
+		put_user(nr, args->parent_tid);//将新进程的 PID 写入父线程的 TID 存储位置,返回给用户空间
 
-	if (clone_flags & CLONE_VFORK) {
-		p->vfork_done = &vfork;
-		init_completion(&vfork);
-		get_task_struct(p);
+	if (clone_flags & CLONE_VFORK) {// 如果设置了 CLONE_VFORK 标志，表示使用 vfork 机制
+		p->vfork_done = &vfork;//设置 vfork 完成量
+		init_completion(&vfork);//初始化完成量 vfork,用于同步 vfork 进程的执行
+		get_task_struct(p);//增加新进程的引用计数，防止其被释放
 	}
 
-	if (IS_ENABLED(CONFIG_LRU_GEN_WALKS_MMU) && !(clone_flags & CLONE_VM)) {
-		/* lock the task to synchronize with memcg migration */
-		task_lock(p);
-		lru_gen_add_mm(p->mm);
-		task_unlock(p);
+	if (IS_ENABLED(CONFIG_LRU_GEN_WALKS_MMU) && !(clone_flags & CLONE_VM)) {// 如果启用了 LRU 生成器并且没有共享虚拟内存
+		/* 锁定任务以与 memcg 迁移同步 */
+		task_lock(p);//锁定新创建的任务，防止并发访问
+		lru_gen_add_mm(p->mm);//将新进程的内存管理结构添加到 LRU 生成器中
+		task_unlock(p);//解锁任务
 	}
 
-	wake_up_new_task(p);
+	wake_up_new_task(p);//唤醒新创建的进程，使其开始执行
 
-	/* forking complete and child started to run, tell ptracer */
-	if (unlikely(trace))
-		ptrace_event_pid(trace, pid);
+	/* fork 完成且子进程开始运行，通知 ptracer */
+	if (unlikely(trace))//如果需要跟踪事件
+		ptrace_event_pid(trace, pid);//向 ptracer 报告跟踪事件，传递跟踪事件类型和新进程的 PID
 
-	if (clone_flags & CLONE_VFORK) {
-		if (!wait_for_vfork_done(p, &vfork))
-			ptrace_event_pid(PTRACE_EVENT_VFORK_DONE, pid);
+	if (clone_flags & CLONE_VFORK) {//如果设置了 CLONE_VFORK 标志
+		if (!wait_for_vfork_done(p, &vfork))//等待 vfork 完成，如果返回值为 0，表示等待成功
+			ptrace_event_pid(PTRACE_EVENT_VFORK_DONE, pid);//向 ptracer 报告 vfork 完成事件
 	}
 
-	put_pid(pid);
-	return nr;
+	put_pid(pid);//释放 PID 结构体的引用，减少引用计数
+	return nr;//返回新进程的 PID
 }
 
 /*

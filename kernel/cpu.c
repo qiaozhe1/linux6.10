@@ -170,82 +170,82 @@ static int cpuhp_invoke_callback(unsigned int cpu, enum cpuhp_state state,
 				 bool bringup, struct hlist_node *node,
 				 struct hlist_node **lastp)
 {
-	struct cpuhp_cpu_state *st = per_cpu_ptr(&cpuhp_state, cpu);
-	struct cpuhp_step *step = cpuhp_get_step(state);
-	int (*cbm)(unsigned int cpu, struct hlist_node *node);
-	int (*cb)(unsigned int cpu);
+	struct cpuhp_cpu_state *st = per_cpu_ptr(&cpuhp_state, cpu);//获取指定 CPU 的热插拔状态结构 `st`
+	struct cpuhp_step *step = cpuhp_get_step(state);//获取对应状态的 CPU 热插拔步骤 `step`
+	int (*cbm)(unsigned int cpu, struct hlist_node *node);//定义多实例的回调函数指针 `cbm`
+	int (*cb)(unsigned int cpu);//定义单实例的回调函数指针 `cb`
 	int ret, cnt;
 
-	if (st->fail == state) {
-		st->fail = CPUHP_INVALID;
-		return -EAGAIN;
+	if (st->fail == state) {// 如果当前状态的失败标志与指定状态相同
+		st->fail = CPUHP_INVALID;// 将失败标志设置为无效，表示可以重新尝试
+		return -EAGAIN;//返回 -EAGAIN 错误码，表示需要再次尝试
 	}
 
-	if (cpuhp_step_empty(bringup, step)) {
-		WARN_ON_ONCE(1);
-		return 0;
+	if (cpuhp_step_empty(bringup, step)) {//如果该状态的回调函数为空
+		WARN_ON_ONCE(1);// 打印一次性警告信息，表示状态回调函数为空
+		return 0;//返回 0，表示无错误
 	}
 
-	if (!step->multi_instance) {
-		WARN_ON_ONCE(lastp && *lastp);
-		cb = bringup ? step->startup.single : step->teardown.single;
+	if (!step->multi_instance) {//如果该状态不是多实例
+		WARN_ON_ONCE(lastp && *lastp);// 如果 `lastp` 非空且指向的节点非空，则打印一次性警告信息
+		cb = brinvgup ? step->startup.single : step->teardown.single;//根据是否为 CPU 启动操作，获取相应的单实例回调函数
 
-		trace_cpuhp_enter(cpu, st->target, state, cb);
-		ret = cb(cpu);
-		trace_cpuhp_exit(cpu, st->state, state, ret);
-		return ret;
+		trace_cpuhp_enter(cpu, st->target, state, cb);//记录进入回调函数的追踪信息
+		ret = cb(cpu);//调用回调函数，传入 CPU 参数，保存返回值
+		trace_cpuhp_exit(cpu, st->state, state, ret);//记录退出回调函数的追踪信息
+		return ret;//返回回调函数的执行结果
 	}
-	cbm = bringup ? step->startup.multi : step->teardown.multi;
+	cbm = bringup ? step->startup.multi : step->teardown.multi;//根据是否为 CPU 启动操作，获取相应的多实例回调函数
 
 	/* Single invocation for instance add/remove */
-	if (node) {
-		WARN_ON_ONCE(lastp && *lastp);
-		trace_cpuhp_multi_enter(cpu, st->target, state, cbm, node);
-		ret = cbm(cpu, node);
-		trace_cpuhp_exit(cpu, st->state, state, ret);
-		return ret;
+	if (node) {//如果传入了单个节点
+		WARN_ON_ONCE(lastp && *lastp);//如果 `lastp` 非空且指向的节点非空，则打印一次性警告信息
+		trace_cpuhp_multi_enter(cpu, st->target, state, cbm, node);//记录进入多实例回调函数的追踪信息
+		ret = cbm(cpu, node);//调用多实例回调函数，传入 CPU 和节点参数，保存返回值
+		trace_cpuhp_exit(cpu, st->state, state, ret);//记录退出回调函数的追踪信息
+		return ret;//返回回调函数的执行结果
 	}
 
 	/* State transition. Invoke on all instances */
-	cnt = 0;
-	hlist_for_each(node, &step->list) {
-		if (lastp && node == *lastp)
+	cnt = 0;//初始化计数器 `cnt` 为 0
+	hlist_for_each(node, &step->list) {//遍历步骤中的所有节点
+		if (lastp && node == *lastp)// 如果 `lastp` 非空且当前节点等于 `lastp` 指向的节点，则跳出循环
 			break;
 
-		trace_cpuhp_multi_enter(cpu, st->target, state, cbm, node);
-		ret = cbm(cpu, node);
-		trace_cpuhp_exit(cpu, st->state, state, ret);
-		if (ret) {
-			if (!lastp)
+		trace_cpuhp_multi_enter(cpu, st->target, state, cbm, node);//记录进入多实例回调函数的追踪信息
+		ret = cbm(cpu, node);//调用多实例回调函数，传入 CPU 和节点参数，保存返回值
+		trace_cpuhp_exit(cpu, st->state, state, ret);//记录退出回调函数的追踪信息
+		if (ret) {// 如果回调函数返回值非零，表示出错
+			if (!lastp)//如果 `lastp` 为空，直接跳转到错误处理
 				goto err;
 
-			*lastp = node;
+			*lastp = node;//将 `lastp` 设置为当前节点，返回错误
 			return ret;
 		}
-		cnt++;
+		cnt++;//计数器递增，表示已成功处理的节点数
 	}
-	if (lastp)
+	if (lastp)//如果 `lastp` 非空，设置为 NULL，表示已处理所有节点
 		*lastp = NULL;
-	return 0;
+	return 0;//返回 0，表示成功
 err:
 	/* Rollback the instances if one failed */
-	cbm = !bringup ? step->startup.multi : step->teardown.multi;
+	cbm = !bringup ? step->startup.multi : step->teardown.multi;//获取相反操作的回调函数，用于回滚已处理的节点
 	if (!cbm)
-		return ret;
+		return ret;//如果回调函数为空，直接返回错误码
 
-	hlist_for_each(node, &step->list) {
-		if (!cnt--)
+	hlist_for_each(node, &step->list) {//遍历步骤中的所有节点
+		if (!cnt--)//如果计数器为 0，跳出循环，表示已回滚完所有已处理节点
 			break;
 
-		trace_cpuhp_multi_enter(cpu, st->target, state, cbm, node);
-		ret = cbm(cpu, node);
-		trace_cpuhp_exit(cpu, st->state, state, ret);
+		trace_cpuhp_multi_enter(cpu, st->target, state, cbm, node);//记录进入多实例回滚回调函数的追踪信息
+		ret = cbm(cpu, node);//调用多实例回滚回调函数，传入 CPU 和节点参数，保存返回值
+		trace_cpuhp_exit(cpu, st->state, state, ret);//记录退出回滚回调函数的追踪信息
 		/*
 		 * Rollback must not fail,
 		 */
-		WARN_ON_ONCE(ret);
+		WARN_ON_ONCE(ret);// 打印一次性警告信息，表示回滚操作不应失败
 	}
-	return ret;
+	return ret;// 返回回滚的最后一个错误码
 }
 
 #ifdef CONFIG_SMP
@@ -463,9 +463,9 @@ EXPORT_SYMBOL_GPL(cpuhp_tasks_frozen);
  * The following two APIs (cpu_maps_update_begin/done) must be used when
  * attempting to serialize the updates to cpu_online_mask & cpu_present_mask.
  */
-void cpu_maps_update_begin(void)
+void cpu_maps_update_begin(void)//用于在开始更新 CPU 映射之前获取锁，以确保在更新过程中不会有其他线程进行 CPU 增加或移除的操作。
 {
-	mutex_lock(&cpu_add_remove_lock);
+	mutex_lock(&cpu_add_remove_lock);//获取 CPU 增加和移除锁，以防止在更新 CPU 映射期间发生并发更改
 }
 
 void cpu_maps_update_done(void)
@@ -844,13 +844,13 @@ out_unlock:
 	return ret;
 }
 #else
-static int bringup_cpu(unsigned int cpu)
+static int bringup_cpu(unsigned int cpu)//用于为指定的 CPU 启动做准备，并执行相关的启动步骤，确保 CPU 启动到目标状态。
 {
-	struct cpuhp_cpu_state *st = per_cpu_ptr(&cpuhp_state, cpu);
-	struct task_struct *idle = idle_thread_get(cpu);
+	struct cpuhp_cpu_state *st = per_cpu_ptr(&cpuhp_state, cpu);//获取指定 CPU 的热插拔状态指针
+	struct task_struct *idle = idle_thread_get(cpu);// 获取该 CPU 的空闲线程指针
 	int ret;
 
-	if (!cpuhp_can_boot_ap(cpu))
+	if (!cpuhp_can_boot_ap(cpu))//检查该 CPU 是否可以启动，如果不可以返回 -EAGAIN 表示暂时不可用
 		return -EAGAIN;
 
 	/*
@@ -862,29 +862,29 @@ static int bringup_cpu(unsigned int cpu)
 	 * startup in cpuhp_online_idle() which allows to avoid
 	 * intermediate synchronization points in the architecture code.
 	 */
-	irq_lock_sparse();
+	irq_lock_sparse();//锁定 IRQ 以防止在启动过程中分配或释放中断
 
-	ret = __cpu_up(cpu, idle);
+	ret = __cpu_up(cpu, idle);//启动指定的 CPU，并为其分配 idle 线程
 	if (ret)
-		goto out_unlock;
+		goto out_unlock;//启动失败， 跳转到错误处理，解锁并返回错误码
 
-	ret = cpuhp_bp_sync_alive(cpu);
+	ret = cpuhp_bp_sync_alive(cpu);//同步 Boot Processor (BP) 和 Application Processor (AP) 的状态，确保 AP 已经成功启动
 	if (ret)
-		goto out_unlock;
+		goto out_unlock;//同步失败，跳转到错误处理，解锁并返回错误码
 
-	ret = bringup_wait_for_ap_online(cpu);
+	ret = bringup_wait_for_ap_online(cpu);//等待 AP 完全在线，确保其已准备好执行任务
 	if (ret)
-		goto out_unlock;
+		goto out_unlock;//等待失败，跳转到错误处理，解锁并返回错误码
 
-	irq_unlock_sparse();
+	irq_unlock_sparse();//解锁 IRQ，允许中断的分配和释放
 
-	if (st->target <= CPUHP_AP_ONLINE_IDLE)
+	if (st->target <= CPUHP_AP_ONLINE_IDLE)//如果目标状态在 CPUHP_AP_ONLINE_IDLE 及以下，说明 CPU 启动已完成
 		return 0;
 
-	return cpuhp_kick_ap(cpu, st, st->target);
+	return cpuhp_kick_ap(cpu, st, st->target);//如果目标状态更高，则继续推动 AP 达到指定状态
 
 out_unlock:
-	irq_unlock_sparse();
+	irq_unlock_sparse();//如果发生错误，解锁 IRQ
 	return ret;
 }
 #endif
@@ -946,24 +946,24 @@ static int __cpuhp_invoke_callback_range(bool bringup,
 					 enum cpuhp_state target,
 					 bool nofail)
 {
-	enum cpuhp_state state;
+	enum cpuhp_state state;//表示当前的 CPU 热插拔状态。
 	int ret = 0;
 
-	while (cpuhp_next_state(bringup, &state, st, target)) {
+	while (cpuhp_next_state(bringup, &state, st, target)) {//使用 `cpuhp_next_state()` 获取下一步的状态，将状态存储到 `state` 中。循环执行直到到达目标状态。
 		int err;
 
-		err = cpuhp_invoke_callback(cpu, state, bringup, NULL, NULL);
+		err = cpuhp_invoke_callback(cpu, state, bringup, NULL, NULL);//调用 `cpuhp_invoke_callback()` 执行当前状态的回调函数。
 		if (!err)
-			continue;
+			continue;//如果没有错误，则继续处理下一个状态。
 
-		if (nofail) {
+		if (nofail) {//如果 `nofail` 为真，表示不能因错误中止热插拔过程。
 			pr_warn("CPU %u %s state %s (%d) failed (%d)\n",
 				cpu, bringup ? "UP" : "DOWN",
-				cpuhp_get_step(st->state)->name,
-				st->state, err);
-			ret = -1;
+				cpuhp_get_step(st->state)->name,// 
+				st->state, err);//打印警告信息，表示在特定 CPU 状态发生错误，但不终止流程。打印信息包括：CPU 编号，状态是上线（UP）还是下线（DOWN），当前步骤的名称，当前状态值和错误码
+			ret = -1;//设置返回值 `ret` 为 -1，表示在非致命错误下发生了失败。
 		} else {
-			ret = err;
+			ret = err;//否则，如果错误是致命的，应该终止过程。
 			break;
 		}
 	}
@@ -1004,21 +1004,21 @@ static inline bool can_rollback_cpu(struct cpuhp_cpu_state *st)
 static int cpuhp_up_callbacks(unsigned int cpu, struct cpuhp_cpu_state *st,
 			      enum cpuhp_state target)
 {
-	enum cpuhp_state prev_state = st->state;
+	enum cpuhp_state prev_state = st->state;//保存 CPU 当前状态 `prev_state`，以备需要回滚时使用
 	int ret = 0;
 
-	ret = cpuhp_invoke_callback_range(true, cpu, st, target);
+	ret = cpuhp_invoke_callback_range(true, cpu, st, target);//传递 true 以执行从当前状态到目标状态的正向回调函数。
 	if (ret) {
 		pr_debug("CPU UP failed (%d) CPU %u state %s (%d)\n",
 			 ret, cpu, cpuhp_get_step(st->state)->name,
-			 st->state);
+			 st->state);//打印调试信息，说明 CPU 上线失败的原因和失败时的状态
 
-		cpuhp_reset_state(cpu, st, prev_state);
-		if (can_rollback_cpu(st))
+		cpuhp_reset_state(cpu, st, prev_state);//将 CPU 状态重置为原来的状态，以便进行回滚处理
+		if (can_rollback_cpu(st))//如果当前状态支持回滚
 			WARN_ON(cpuhp_invoke_callback_range(false, cpu, st,
-							    prev_state));
+							    prev_state));//传递 `false` 表示逆向执行回调函数，回滚至原始状态
 	}
-	return ret;
+	return ret;//返回执行结果，成功为 0，失败为相应的错误码
 }
 
 /*
@@ -1189,23 +1189,23 @@ static struct smp_hotplug_thread cpuhp_threads = {
 	.selfparking		= true,
 };
 
-static __init void cpuhp_init_state(void)
+static __init void cpuhp_init_state(void)//为每个可能的 CPU 初始化热插拔状态结构体。
 {
-	struct cpuhp_cpu_state *st;
+	struct cpuhp_cpu_state *st;//定义指向 CPU 热插拔状态结构体的指针 st
 	int cpu;
 
-	for_each_possible_cpu(cpu) {
-		st = per_cpu_ptr(&cpuhp_state, cpu);
-		init_completion(&st->done_up);
-		init_completion(&st->done_down);
+	for_each_possible_cpu(cpu) {//遍历系统中所有可能的 CPU
+		st = per_cpu_ptr(&cpuhp_state, cpu);//获取对应于当前 CPU 的热插拔状态结构体指针
+		init_completion(&st->done_up);//初始化热插拔状态中的 `done_up` 完成量，用于标识 CPU 上升过程的完成状态
+		init_completion(&st->done_down);//初始化热插拔状态中的 `done_down` 完成量，用于标识 CPU 下降过程的完成状态
 	}
 }
 
-void __init cpuhp_threads_init(void)
+void __init cpuhp_threads_init(void)//用于初始化 CPU 热插拔相关的线程
 {
-	cpuhp_init_state();
-	BUG_ON(smpboot_register_percpu_thread(&cpuhp_threads));
-	kthread_unpark(this_cpu_read(cpuhp_state.thread));
+	cpuhp_init_state();//初始化 CPU 热插拔状态，设置初始状态
+	BUG_ON(smpboot_register_percpu_thread(&cpuhp_threads));//注册用于 CPU 热插拔的每 CPU 线程，如果失败则触发 BUG
+	kthread_unpark(this_cpu_read(cpuhp_state.thread));//启动当前 CPU 相关的热插拔线程，解除线程的休眠状态
 }
 
 #ifdef CONFIG_HOTPLUG_CPU
@@ -1619,16 +1619,16 @@ void cpuhp_online_idle(enum cpuhp_state state)
 }
 
 /* Requires cpu_add_remove_lock to be held */
-static int _cpu_up(unsigned int cpu, int tasks_frozen, enum cpuhp_state target)
+static int _cpu_up(unsigned int cpu, int tasks_frozen, enum cpuhp_state target)//用于上线指定的 CPU
 {
-	struct cpuhp_cpu_state *st = per_cpu_ptr(&cpuhp_state, cpu);
-	struct task_struct *idle;
+	struct cpuhp_cpu_state *st = per_cpu_ptr(&cpuhp_state, cpu);//获取 CPU 的热插拔状态指针 `st`，该指针用于跟踪 CPU 在热插拔过程中的状态
+	struct task_struct *idle;//定义任务结构体指针 `idle`，用于引用空闲线程
 	int ret = 0;
 
-	cpus_write_lock();
+	cpus_write_lock();//加锁 CPU 状态写操作，以确保 CPU 映射和状态的更新过程是线程安全的
 
-	if (!cpu_present(cpu)) {
-		ret = -EINVAL;
+	if (!cpu_present(cpu)) {//检查指定的 CPU 是否存在（即是否被系统识别到）
+		ret = -EINVAL;//如果 CPU 不存在，返回错误码 `-EINVAL`，表示无效参数
 		goto out;
 	}
 
@@ -1636,82 +1636,86 @@ static int _cpu_up(unsigned int cpu, int tasks_frozen, enum cpuhp_state target)
 	 * The caller of cpu_up() might have raced with another
 	 * caller. Nothing to do.
 	 */
-	if (st->state >= target)
+	if (st->state >= target)//如果当前 CPU 的状态已经达到或超过目标状态，则不再需要进行进一步操作，直接返回
 		goto out;
 
-	if (st->state == CPUHP_OFFLINE) {
+	if (st->state == CPUHP_OFFLINE) {//如果当前 CPU 处于离线状态，则需要进行进一步的初始化操作
 		/* Let it fail before we try to bring the cpu up */
-		idle = idle_thread_get(cpu);
-		if (IS_ERR(idle)) {
-			ret = PTR_ERR(idle);
+		idle = idle_thread_get(cpu);//获取该 CPU 的空闲线程，如果无法获取，则可能无法正常上线 CPU
+		if (IS_ERR(idle)) {//如果获取空闲线程失败，则返回相应的错误码
+			ret = PTR_ERR(idle);//设置返回值为获取空闲线程的错误码
 			goto out;
 		}
 
 		/*
 		 * Reset stale stack state from the last time this CPU was online.
+		 * 重置 CPU 上线前空闲线程的堆栈状态，以清除前一次上线时的状态。
 		 */
-		scs_task_reset(idle);
-		kasan_unpoison_task_stack(idle);
+		scs_task_reset(idle);//重置空闲线程的堆栈状态
+		kasan_unpoison_task_stack(idle);//解除 KASAN 对空闲线程堆栈的标记，以确保堆栈的安全性
 	}
 
-	cpuhp_tasks_frozen = tasks_frozen;
+	cpuhp_tasks_frozen = tasks_frozen;//设置全局标志 `cpuhp_tasks_frozen`，指示是否冻结任务（在 CPU 热插拔过程中有时需要）
 
-	cpuhp_set_state(cpu, st, target);
+	cpuhp_set_state(cpu, st, target);//设置 CPU 的状态为目标状态 `target`
 	/*
 	 * If the current CPU state is in the range of the AP hotplug thread,
 	 * then we need to kick the thread once more.
+	 * 如果当前 CPU 的状态超过 `CPUHP_BRINGUP_CPU`，则需要再次触发 AP 热插拔线程。
 	 */
-	if (st->state > CPUHP_BRINGUP_CPU) {
-		ret = cpuhp_kick_ap_work(cpu);
+	if (st->state > CPUHP_BRINGUP_CPU) {//如果当前状态超过 `CPUHP_BRINGUP_CPU`，表示需要让 AP 热插拔线程来处理剩下的步骤
+		ret = cpuhp_kick_ap_work(cpu);//调用 `cpuhp_kick_ap_work()` 来触发 AP 热插拔线程
 		/*
 		 * The AP side has done the error rollback already. Just
 		 * return the error code..
+		 * 如果 AP 热插拔线程已经回滚错误，只需返回错误码。
 		 */
 		if (ret)
-			goto out;
+			goto out;//如果触发 AP 线程失败，则返回错误码
 	}
 
 	/*
 	 * Try to reach the target state. We max out on the BP at
 	 * CPUHP_BRINGUP_CPU. After that the AP hotplug thread is
 	 * responsible for bringing it up to the target state.
+	 * 尝试达到目标状态。在 `CPUHP_BRINGUP_CPU` 状态之后，剩余的状态转换由 AP 热插拔线程负责。
 	 */
-	target = min((int)target, CPUHP_BRINGUP_CPU);
-	ret = cpuhp_up_callbacks(cpu, st, target);
+	target = min((int)target, CPUHP_BRINGUP_CPU);//将目标状态限制为不超过 `CPUHP_BRINGUP_CPU`
+	ret = cpuhp_up_callbacks(cpu, st, target);//执行 CPU 上线的回调函数，尝试将 CPU 状态更新到目标状态
 out:
-	cpus_write_unlock();
-	arch_smt_update();
-	return ret;
+	cpus_write_unlock();//解锁 CPU 状态写操作，以允许其他线程进行修改
+	arch_smt_update();//更新 SMT（超线程）信息，确保体系结构的线程状态一致
+	return ret;//返回操作结果，成功为 0，失败为相应的错误码
 }
-
+/*用于将指定的 CPU 上线，即从“脱机”状态转变为“在线”状态*/
 static int cpu_up(unsigned int cpu, enum cpuhp_state target)
 {
 	int err = 0;
 
-	if (!cpu_possible(cpu)) {
+	if (!cpu_possible(cpu)) {//检查指定的 CPU 是否可以上线。如果 `cpu_possible(cpu)` 返回 false，表示该 CPU 无法上线
 		pr_err("can't online cpu %d because it is not configured as may-hotadd at boot time\n",
-		       cpu);
-		return -EINVAL;
+		       cpu);//如果 CPU 在启动时未被配置为可添加（hotadd），输出错误信息
+		return -EINVAL;//返回 `-EINVAL` 表示参数无效，无法上线该 CPU
 	}
 
-	err = try_online_node(cpu_to_node(cpu));
+	err = try_online_node(cpu_to_node(cpu));//尝试将该 CPU 所在的节点上线。`cpu_to_node(cpu)` 获取该 CPU 所属的节点，`try_online_node()` 尝试将节点上线
 	if (err)
-		return err;
+		return err;//如果节点上线失败，则返回错误码
 
-	cpu_maps_update_begin();
+	cpu_maps_update_begin();//获取更新 CPU 映射的锁
 
-	if (cpu_hotplug_disabled) {
-		err = -EBUSY;
+	if (cpu_hotplug_disabled) {//检查 CPU 热插拔功能是否被禁用。如果禁用，则返回错误
+		err = -EBUSY;//错误码 `-EBUSY` 表示设备或资源忙
 		goto out;
 	}
-	if (!cpu_bootable(cpu)) {
-		err = -EPERM;
+	if (!cpu_bootable(cpu)) {// 检查指定的 CPU 是否可启动（即是否具备启动所需条件）
+		err = -EPERM;//错误码 `-EPERM` 表示操作不被允许
 		goto out;
 	}
 
-	err = _cpu_up(cpu, 0, target);
+	err = _cpu_up(cpu, 0, target);//尝试将指定的 CPU 上线，并设置状态。如果失败，则返回错误码
 out:
-	cpu_maps_update_done();
+	cpu_maps_update_done();//结束 CPU 映射更新，解锁并通知其他组件映射已更新
 	return err;
 }
 
@@ -1766,25 +1770,27 @@ int bringup_hibernate_cpu(unsigned int sleep_cpu)
 	}
 	return 0;
 }
-
+/*用于根据指定的 cpumask 启动一定数量的 CPU，并将它们状态调整到指定的目标状态。*/
 static void __init cpuhp_bringup_mask(const struct cpumask *mask, unsigned int ncpus,
 				      enum cpuhp_state target)
 {
-	unsigned int cpu;
+	unsigned int cpu;//定义变量 `cpu`，用于遍历 mask 中的每个 CPU
 
-	for_each_cpu(cpu, mask) {
-		struct cpuhp_cpu_state *st = per_cpu_ptr(&cpuhp_state, cpu);
+	for_each_cpu(cpu, mask) {//遍历 mask 中的每一个 CPU
+		struct cpuhp_cpu_state *st = per_cpu_ptr(&cpuhp_state, cpu);//获取 CPU 的热插拔状态，`per_cpu_ptr` 用于获取每个 CPU 特有的状态数据指针 `st`
 
-		if (cpu_up(cpu, target) && can_rollback_cpu(st)) {
+		if (cpu_up(cpu, target) && can_rollback_cpu(st)) {//尝试启动当前 CPU，如果启动失败并且可以回滚到之前的状态，则执行回滚逻辑
 			/*
 			 * If this failed then cpu_up() might have only
 			 * rolled back to CPUHP_BP_KICK_AP for the final
 			 * online. Clean it up. NOOP if already rolled back.
+			 * 如果启动失败，可能已经只回滚到 CPUHP_BP_KICK_AP 状态，因此需要进一步进行清理。
+			 * 如果已经回滚，则调用 `cpuhp_invoke_callback_range` 时不会有任何操作
 			 */
-			WARN_ON(cpuhp_invoke_callback_range(false, cpu, st, CPUHP_OFFLINE));
+			WARN_ON(cpuhp_invoke_callback_range(false, cpu, st, CPUHP_OFFLINE));//进行回滚，确保回到 `CPUHP_OFFLINE` 状态
 		}
 
-		if (!--ncpus)
+		if (!--ncpus)//检查是否已经达到指定的 CPU 启动数量 `ncpus`，如果已经达到，则退出循环
 			break;
 	}
 }
@@ -1857,14 +1863,14 @@ static bool __init cpuhp_bringup_cpus_parallel(unsigned int ncpus)
 static inline bool cpuhp_bringup_cpus_parallel(unsigned int ncpus) { return false; }
 #endif /* CONFIG_HOTPLUG_PARALLEL */
 
-void __init bringup_nonboot_cpus(unsigned int max_cpus)
+void __init bringup_nonboot_cpus(unsigned int max_cpus)//用于启动所有非启动（secondary）CPU
 {
 	/* Try parallel bringup optimization if enabled */
-	if (cpuhp_bringup_cpus_parallel(max_cpus))
+	if (cpuhp_bringup_cpus_parallel(max_cpus))//如果启用了并行启动优化，尝试并行启动 CPU
 		return;
 
 	/* Full per CPU serialized bringup */
-	cpuhp_bringup_mask(cpu_present_mask, max_cpus, CPUHP_ONLINE);
+	cpuhp_bringup_mask(cpu_present_mask, max_cpus, CPUHP_ONLINE);//如果并行启动未成功，则按CPU逐个序列化启动.`cpu_present_mask` 表示要启动的 CPU
 }
 
 #ifdef CONFIG_PM_SLEEP_SMP

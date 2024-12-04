@@ -47,16 +47,16 @@
 #include <uapi/linux/pidfd.h>
 
 struct pid init_struct_pid = {
-	.count		= REFCOUNT_INIT(1),
+	.count		= REFCOUNT_INIT(1),//初始化引用计数为 1，表示该 PID 至少被一个任务引用
 	.tasks		= {
-		{ .first = NULL },
-		{ .first = NULL },
-		{ .first = NULL },
+		{ .first = NULL },//初始化 PID 类型链表（如 PIDTYPE_PID）的第一个节点为空
+		{ .first = NULL },//初始化 PID 类型链表（如 PIDTYPE_TGID）的第一个节点为空
+		{ .first = NULL },//初始化 PID 类型链表（如 PIDTYPE_PGID）的第一个节点为空
 	},
-	.level		= 0,
+	.level		= 0,//设置 PID 的级别为 0，表示它是初始命名空间的 PID
 	.numbers	= { {
-		.nr		= 0,
-		.ns		= &init_pid_ns,
+		.nr		= 0,//设置 PID 的编号为 0，表示这是系统的第一个进程（即 init 进程）
+		.ns		= &init_pid_ns,//指向初始 PID 命名空间
 	}, }
 };
 
@@ -166,12 +166,12 @@ void free_pid(struct pid *pid)
 struct pid *alloc_pid(struct pid_namespace *ns, pid_t *set_tid,
 		      size_t set_tid_size)
 {
-	struct pid *pid;
-	enum pid_type type;
+	struct pid *pid;//指向要分配的 PID 结构体的指针
+	enum pid_type type;//枚举变量，用于遍历所有 PID 类型
 	int i, nr;
-	struct pid_namespace *tmp;
-	struct upid *upid;
-	int retval = -ENOMEM;
+	struct pid_namespace *tmp;//用于遍历 PID 命名空间
+	struct upid *upid;//指向与 PID 相关的 upid 结构体
+	int retval = -ENOMEM;//返回值变量，初始为内存不足的错误码
 
 	/*
 	 * set_tid_size contains the size of the set_tid array. Starting at
@@ -180,77 +180,85 @@ struct pid *alloc_pid(struct pid_namespace *ns, pid_t *set_tid,
 	 * up to set_tid_size PID namespaces. It does not have to set the PID
 	 * for a process in all nested PID namespaces but set_tid_size must
 	 * never be greater than the current ns->level + 1.
+	 * set_tid_size 包含 set_tid 数组的大小。从当前最内层的活动 PID 命名空间开始，
+	 * 它告诉 alloc_pid() 在最内层的 PID 命名空间中为进程设置哪个 PID，最多可设置
+	 * set_tid_size 个 PID 命名空间。它不必在所有嵌套的 PID 命名空间中设置 PID，
+	 * 但 set_tid_size 不能大于当前 ns->level + 1。
 	 */
-	if (set_tid_size > ns->level + 1)
-		return ERR_PTR(-EINVAL);
+	if (set_tid_size > ns->level + 1)//检查 set_tid_size 是否超过当前 PID 命名空间层级数
+		return ERR_PTR(-EINVAL);//返回错误指针，表示无效参数
 
-	pid = kmem_cache_alloc(ns->pid_cachep, GFP_KERNEL);
+	pid = kmem_cache_alloc(ns->pid_cachep, GFP_KERNEL);//从 PID 缓存中分配一个新的 PID 结构体
 	if (!pid)
-		return ERR_PTR(retval);
+		return ERR_PTR(retval);//返回错误指针，表示内存不足
 
-	tmp = ns;
-	pid->level = ns->level;
+	tmp = ns;//初始化临时命名空间指针为当前命名空间
+	pid->level = ns->level;//设置 PID 的层级为当前命名空间的层级
 
-	for (i = ns->level; i >= 0; i--) {
+	for (i = ns->level; i >= 0; i--) {//从当前命名空间向上遍历所有命名空间,检查是否合规
 		int tid = 0;
 
-		if (set_tid_size) {
-			tid = set_tid[ns->level - i];
+		if (set_tid_size) {//如果 set_tid_size 非零，表示需要设置特定的 PID
+			tid = set_tid[ns->level - i];// 获取需要设置的 PID
 
 			retval = -EINVAL;
-			if (tid < 1 || tid >= pid_max)
-				goto out_free;
+			if (tid < 1 || tid >= pid_max)//如果 PID 不在有效范围内
+				goto out_free;//跳转到错误处理部分，释放已分配的资源
 			/*
 			 * Also fail if a PID != 1 is requested and
 			 * no PID 1 exists.
+			 *  如果请求的 PID 不是 1 且没有 PID 1 存在，则失败。
 			 */
-			if (tid != 1 && !tmp->child_reaper)
+			if (tid != 1 && !tmp->child_reaper)//如果请求的 PID 不是 1 且没有子进程回收器
+				goto out_free;//跳转到错误处理部分
+			retval = -EPERM;// 设置返回值为权限不足错误
+			if (!checkpoint_restore_ns_capable(tmp->user_ns))//检查是否有权限设置 PID
 				goto out_free;
-			retval = -EPERM;
-			if (!checkpoint_restore_ns_capable(tmp->user_ns))
-				goto out_free;
-			set_tid_size--;
+			set_tid_size--;//减少 set_tid_size，表示已处理一个命名空间
 		}
 
-		idr_preload(GFP_KERNEL);
-		spin_lock_irq(&pidmap_lock);
+		idr_preload(GFP_KERNEL);//预加载 IDR（整数分配器）以提高分配效率
+		spin_lock_irq(&pidmap_lock);//获取 pidmap_lock 自旋锁，保护 PID 分配过程
 
-		if (tid) {
+		if (tid) {// 如果需要设置特定的 PID
 			nr = idr_alloc(&tmp->idr, NULL, tid,
-				       tid + 1, GFP_ATOMIC);
+				       tid + 1, GFP_ATOMIC);//在 IDR 中分配指定的 PID
 			/*
 			 * If ENOSPC is returned it means that the PID is
 			 * alreay in use. Return EEXIST in that case.
+			 * 如果返回 ENOSPC，则表示 PID 已被使用，返回 EEXIST 错误。
 			 */
-			if (nr == -ENOSPC)
-				nr = -EEXIST;
+			if (nr == -ENOSPC)//如果返回值为 ENOSPC，表示没有空间分配
+				nr = -EEXIST;//设置返回值为已存在错误
 		} else {
-			int pid_min = 1;
+			int pid_min = 1;//初始化最小 PID 为 1
 			/*
 			 * init really needs pid 1, but after reaching the
 			 * maximum wrap back to RESERVED_PIDS
+			 * init 进程需要 PID 1，但在达到最大值后，会回绕到 RESERVED_PIDS。
 			 */
-			if (idr_get_cursor(&tmp->idr) > RESERVED_PIDS)
-				pid_min = RESERVED_PIDS;
+			if (idr_get_cursor(&tmp->idr) > RESERVED_PIDS)//如果 IDR 游标超过保留的 PID
+				pid_min = RESERVED_PIDS;// 设置最小 PID 为保留的 PID
 
 			/*
 			 * Store a null pointer so find_pid_ns does not find
 			 * a partially initialized PID (see below).
+			 * 存储一个空指针，以防止 find_pid_ns 查找到部分初始化的 PID。
 			 */
 			nr = idr_alloc_cyclic(&tmp->idr, NULL, pid_min,
-					      pid_max, GFP_ATOMIC);
+					      pid_max, GFP_ATOMIC);//循环分配一个可用的 PID
 		}
-		spin_unlock_irq(&pidmap_lock);
-		idr_preload_end();
+		spin_unlock_irq(&pidmap_lock);//释放 pidmap_lock 自旋锁
+		idr_preload_end();//结束 IDR 预加载
 
-		if (nr < 0) {
-			retval = (nr == -ENOSPC) ? -EAGAIN : nr;
+		if (nr < 0) {// 如果分配失败
+			retval = (nr == -ENOSPC) ? -EAGAIN : nr;//设置返回值为适当的错误码
 			goto out_free;
 		}
 
-		pid->numbers[i].nr = nr;
-		pid->numbers[i].ns = tmp;
-		tmp = tmp->parent;
+		pid->numbers[i].nr = nr;//设置进程PID结构体中对应层级的PID编号
+		pid->numbers[i].ns = tmp;//设置 PID 结构体中对应层级的命名空间
+		tmp = tmp->parent;// 移动到父命名空间，继续处理
 	}
 
 	/*
@@ -261,51 +269,51 @@ struct pid *alloc_pid(struct pid_namespace *ns, pid_t *set_tid,
 	 * documented behavior for pid namespaces. So we can't easily
 	 * change it even if there were an error code better suited.
 	 */
-	retval = -ENOMEM;
+	retval = -ENOMEM;//设置返回值为内存不足错误
 
-	get_pid_ns(ns);
-	refcount_set(&pid->count, 1);
-	spin_lock_init(&pid->lock);
-	for (type = 0; type < PIDTYPE_MAX; ++type)
+	get_pid_ns(ns);//增加命名空间的引用计数
+	refcount_set(&pid->count, 1);//初始化 PID 的引用计数为 1
+	spin_lock_init(&pid->lock);//初始化 PID 的自旋锁
+	for (type = 0; type < PIDTYPE_MAX; ++type)//初始化 PID 的任务链表头
 		INIT_HLIST_HEAD(&pid->tasks[type]);
 
-	init_waitqueue_head(&pid->wait_pidfd);
-	INIT_HLIST_HEAD(&pid->inodes);
+	init_waitqueue_head(&pid->wait_pidfd);//初始化等待队列头
+	INIT_HLIST_HEAD(&pid->inodes);//初始化 PID 的 inode 链表头
 
-	upid = pid->numbers + ns->level;
-	spin_lock_irq(&pidmap_lock);
-	if (!(ns->pid_allocated & PIDNS_ADDING))
+	upid = pid->numbers + ns->level;//获取最高层级的 upid 指针
+	spin_lock_irq(&pidmap_lock);//获取 pidmap_lock 自旋锁
+	if (!(ns->pid_allocated & PIDNS_ADDING))//检查命名空间是否允许分配 PID
 		goto out_unlock;
 	pid->stashed = NULL;
-	pid->ino = ++pidfs_ino;
-	for ( ; upid >= pid->numbers; --upid) {
+	pid->ino = ++pidfs_ino;//为 PID 分配唯一的 inode 编号
+	for ( ; upid >= pid->numbers; --upid) {//遍历所有层级的 upid
 		/* Make the PID visible to find_pid_ns. */
-		idr_replace(&upid->ns->idr, pid, upid->nr);
-		upid->ns->pid_allocated++;
+		idr_replace(&upid->ns->idr, pid, upid->nr);//替换 IDR 中的条目，使 PID 可见
+		upid->ns->pid_allocated++;//增加命名空间中分配的 PID 数量
 	}
-	spin_unlock_irq(&pidmap_lock);
+	spin_unlock_irq(&pidmap_lock);//释放 pidmap_lock 自旋锁
 
-	return pid;
+	return pid;//返回分配的 PID 结构体
 
 out_unlock:
-	spin_unlock_irq(&pidmap_lock);
-	put_pid_ns(ns);
+	spin_unlock_irq(&pidmap_lock);//释放 pidmap_lock 自旋锁
+	put_pid_ns(ns);//释放命名空间的引用
 
 out_free:
-	spin_lock_irq(&pidmap_lock);
-	while (++i <= ns->level) {
-		upid = pid->numbers + i;
-		idr_remove(&upid->ns->idr, upid->nr);
+	spin_lock_irq(&pidmap_lock);//获取 pidmap_lock 自旋锁，保护资源释放过程
+	while (++i <= ns->level) {//遍历所有已分配的 PID，进行清理
+		upid = pid->numbers + i;//获取对应层级的 upid 指针
+		idr_remove(&upid->ns->idr, upid->nr);//从 IDR 中移除该 PID，以释放资源
 	}
 
-	/* On failure to allocate the first pid, reset the state */
-	if (ns->pid_allocated == PIDNS_ADDING)
-		idr_set_cursor(&ns->idr, 0);
+	/* 如果首次分配 PID 失败，重置状态 */
+	if (ns->pid_allocated == PIDNS_ADDING)//检查命名空间的 PID 分配状态是否为正在添加
+		idr_set_cursor(&ns->idr, 0);//重置 IDR 游标，以便下次重新分配
 
-	spin_unlock_irq(&pidmap_lock);
+	spin_unlock_irq(&pidmap_lock);//释放 pidmap_lock 自旋锁
 
-	kmem_cache_free(ns->pid_cachep, pid);
-	return ERR_PTR(retval);
+	kmem_cache_free(ns->pid_cachep, pid);//释放分配的 PID 结构体内存
+	return ERR_PTR(retval);//返回错误指针，指示分配失败的原因
 }
 
 void disable_pid_allocation(struct pid_namespace *ns)

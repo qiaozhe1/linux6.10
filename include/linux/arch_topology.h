@@ -71,14 +71,14 @@ void topology_update_hw_pressure(const struct cpumask *cpus,
 				      unsigned long capped_freq);
 
 struct cpu_topology {
-	int thread_id;
-	int core_id;
-	int cluster_id;
-	int package_id;
-	cpumask_t thread_sibling;
-	cpumask_t core_sibling;
-	cpumask_t cluster_sibling;
-	cpumask_t llc_sibling;
+	int thread_id;//线程 ID，用于标识 CPU 在超线程中的 ID
+	int core_id;//核心 ID，用于标识该 CPU 属于哪个物理核心
+	int cluster_id;//集群 ID，用于标识该 CPU 所属的集群
+	int package_id;//封装 ID，用于标识该 CPU 所属的物理处理器封装
+	cpumask_t thread_sibling;//线程兄弟掩码，表示共享同一物理核心的所有线程.当一个物理核心支持超线程时，thread_sibling 掩码可用于找出共享该物理核心的所有逻辑处理器。
+	cpumask_t core_sibling;//核心兄弟掩码，表示同一个物理包中的所有核心.用于找出同一个物理处理器封装内的所有核心，通常用于核心间的资源调度和管理。
+	cpumask_t cluster_sibling;//集群兄弟掩码，表示同一集群中的所有核心.帮助在集群内进行调度，以便于提高缓存的利用率和内存访问的效率。
+	cpumask_t llc_sibling;//共享 LLC（最后一级缓存，通常是 L3 缓存）的 CPU 掩码.
 };
 
 #ifdef CONFIG_GENERIC_ARCH_TOPOLOGY

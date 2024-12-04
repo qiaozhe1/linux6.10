@@ -7,31 +7,31 @@
 /*
  * cloning flags:
  */
-#define CSIGNAL		0x000000ff	/* signal mask to be sent at exit */
-#define CLONE_VM	0x00000100	/* set if VM shared between processes */
-#define CLONE_FS	0x00000200	/* set if fs info shared between processes */
-#define CLONE_FILES	0x00000400	/* set if open files shared between processes */
-#define CLONE_SIGHAND	0x00000800	/* set if signal handlers and blocked signals shared */
-#define CLONE_PIDFD	0x00001000	/* set if a pidfd should be placed in parent */
-#define CLONE_PTRACE	0x00002000	/* set if we want to let tracing continue on the child too */
-#define CLONE_VFORK	0x00004000	/* set if the parent wants the child to wake it up on mm_release */
-#define CLONE_PARENT	0x00008000	/* set if we want to have the same parent as the cloner */
-#define CLONE_THREAD	0x00010000	/* Same thread group? */
-#define CLONE_NEWNS	0x00020000	/* New mount namespace group */
-#define CLONE_SYSVSEM	0x00040000	/* share system V SEM_UNDO semantics */
-#define CLONE_SETTLS	0x00080000	/* create a new TLS for the child */
-#define CLONE_PARENT_SETTID	0x00100000	/* set the TID in the parent */
-#define CLONE_CHILD_CLEARTID	0x00200000	/* clear the TID in the child */
-#define CLONE_DETACHED		0x00400000	/* Unused, ignored */
-#define CLONE_UNTRACED		0x00800000	/* set if the tracing process can't force CLONE_PTRACE on this clone */
-#define CLONE_CHILD_SETTID	0x01000000	/* set the TID in the child */
-#define CLONE_NEWCGROUP		0x02000000	/* New cgroup namespace */
-#define CLONE_NEWUTS		0x04000000	/* New utsname namespace */
-#define CLONE_NEWIPC		0x08000000	/* New ipc namespace */
-#define CLONE_NEWUSER		0x10000000	/* New user namespace */
-#define CLONE_NEWPID		0x20000000	/* New pid namespace */
-#define CLONE_NEWNET		0x40000000	/* New network namespace */
-#define CLONE_IO		0x80000000	/* Clone io context */
+#define CSIGNAL		0x000000ff	/* signal mask to be sent at exit 信号掩码，用于在进程退出时发送指定信号 */
+#define CLONE_VM	0x00000100	/* set if VM shared between processes 如果设置，则新进程和父进程共享虚拟内存*/
+#define CLONE_FS	0x00000200	/* set if fs info shared between processes 如果设置，则新进程和父进程共享文件系统信息*/
+#define CLONE_FILES	0x00000400	/* set if open files shared between processes 如果设置，则新进程和父进程共享打开的文件描述符 */
+#define CLONE_SIGHAND	0x00000800	/* set if signal handlers and blocked signals shared 如果设置，则新进程和父进程共享信号处理程序和阻塞的信号*/
+#define CLONE_PIDFD	0x00001000	/* set if a pidfd should be placed in parent 如果设置，则在父进程中放置一个 pidfd*/
+#define CLONE_PTRACE	0x00002000	/* set if we want to let tracing continue on the child too 如果设置，则让追踪继续在子进程上运行*/
+#define CLONE_VFORK	0x00004000	/* set if the parent wants the child to wake it up on mm_release 如果设置，则在子进程释放 mm 之前唤醒父进程 */
+#define CLONE_PARENT	0x00008000	/* set if we want to have the same parent as the cloner 如果设置，则子进程与创建它的进程有相同的父进程*/
+#define CLONE_THREAD	0x00010000	/* Same thread group?  如果设置，则新进程属于与父进程相同的线程组*/
+#define CLONE_NEWNS	0x00020000	/* New mount namespace group 如果设置，则创建新的挂载命名空间组*/
+#define CLONE_SYSVSEM	0x00040000	/* share system V SEM_UNDO semantics 如果设置，则共享 System V SEM_UNDO 语义*/
+#define CLONE_SETTLS	0x00080000	/* create a new TLS for the child 如果设置，则为子进程创建新的 TLS */
+#define CLONE_PARENT_SETTID	0x00100000	/* set the TID in the parent 如果设置，则在父进程中设置子线程的 TID */
+#define CLONE_CHILD_CLEARTID	0x00200000	/* clear the TID in the child 如果设置，则在子进程中清除 TID*/
+#define CLONE_DETACHED		0x00400000	/* Unused, ignored 未使用，忽略*/
+#define CLONE_UNTRACED		0x00800000	/* set if the tracing process can't force CLONE_PTRACE on this clone 如果设置，则跟踪进程不能对这个克隆施加 CLONE_PTRACE*/
+#define CLONE_CHILD_SETTID	0x01000000	/* set the TID in the child 如果设置，则在子进程中设置 TID*/
+#define CLONE_NEWCGROUP		0x02000000	/* New cgroup namespace 如果设置，则创建新的 cgroup 命名空间*/
+#define CLONE_NEWUTS		0x04000000	/* New utsname namespace 如果设置，则创建新的 UTS 命名空间*/
+#define CLONE_NEWIPC		0x08000000	/* New ipc namespace 如果设置，则创建新的 IPC 命名空间*/
+#define CLONE_NEWUSER		0x10000000	/* New user namespace 如果设置，则创建新的用户命名空间 */
+#define CLONE_NEWPID		0x20000000	/* New pid namespace 如果设置，则创建新的 PID 命名空间*/
+#define CLONE_NEWNET		0x40000000	/* New network namespace 如果设置，则创建新的网络命名空间*/
+#define CLONE_IO		0x80000000	/* Clone io context 如果设置，则克隆 IO 上下文*/
 
 /* Flags for the clone3() syscall. */
 #define CLONE_CLEAR_SIGHAND 0x100000000ULL /* Clear any signal handler and reset to SIG_DFL. */

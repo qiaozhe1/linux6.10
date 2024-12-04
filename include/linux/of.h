@@ -25,19 +25,19 @@
 typedef u32 phandle;
 typedef u32 ihandle;
 
-struct property {
-	char	*name;
-	int	length;
-	void	*value;
-	struct property *next;
+struct property {//用于表示设备树节点中的属性
+	char	*name;//属性名称，表示设备树节点的属性名，例如 "compatible"。
+	int	length;//属性值的长度，以字节为单位。
+	void	*value;//指向属性值的指针，通常是原始数据类型，如字符串、整数或数组。
+	struct property *next;//指向下一个属性的指针，用于在设备树节点的属性列表中实现链表结构。
 #if defined(CONFIG_OF_DYNAMIC) || defined(CONFIG_SPARC)
-	unsigned long _flags;
+	unsigned long _flags;//动态属性标志位，或用于特定架构（如 SPARC）来存储额外的标志信息。
 #endif
 #if defined(CONFIG_OF_PROMTREE)
-	unsigned int unique_id;
+	unsigned int unique_id;//唯一标识符，用于 PROM 树节点的设备树属性，用于区分不同的属性。
 #endif
 #if defined(CONFIG_OF_KOBJ)
-	struct bin_attribute attr;
+	struct bin_attribute attr;//与 sysfs 文件系统中的设备节点属性关联，用于通过内核对象系统访问设备树中的属性。
 #endif
 };
 
@@ -1690,12 +1690,12 @@ static inline bool of_device_is_system_power_controller(const struct device_node
  * Return: True if a DTB has been populated by the bootloader and it isn't the
  * empty builtin one. False otherwise.
  */
-static inline bool of_have_populated_dt(void)
+static inline bool of_have_populated_dt(void)//用于判断设备树（Device Tree）是否已被正确填充
 {
-#ifdef CONFIG_OF
-	return of_property_present(of_root, "compatible");
+#ifdef CONFIG_OF//用于判断是否在编译内核时启用了设备树
+	return of_property_present(of_root, "compatible");//当启用了设备树支持时，该函数用于检查设备树根节点（of_root）中是否存在名为 "compatible" 的属性。 如果存在 "compatible" 属性，则说明设备树已被正确填充并且包含有效信息，
 #else
-	return false;
+	return false;//如果设备树支持未启用，即没有定义 CONFIG_OF，则函数直接返回 false，表示没有填充设备树。
 #endif
 }
 

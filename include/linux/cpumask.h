@@ -1127,21 +1127,21 @@ void init_cpu_possible(const struct cpumask *src);
 void init_cpu_online(const struct cpumask *src);
 
 static inline void
-set_cpu_possible(unsigned int cpu, bool possible)
+set_cpu_possible(unsigned int cpu, bool possible)//用于设置指定 CPU 是否可能被使用（即是否在可能的 CPU 集合中）
 {
-	if (possible)
-		cpumask_set_cpu(cpu, &__cpu_possible_mask);
-	else
-		cpumask_clear_cpu(cpu, &__cpu_possible_mask);
+	if (possible)// 如果 `possible` 参数为 true，表示该 CPU 可以使用
+		cpumask_set_cpu(cpu, &__cpu_possible_mask);//将指定的 CPU 设为 "可能" 状态，添加到 `__cpu_possible_mask` 掩码中
+	else// 如果 `possible` 参数为 false，表示该 CPU 不可能被使用
+		cpumask_clear_cpu(cpu, &__cpu_possible_mask);//将指定的 CPU 从 `__cpu_possible_mask` 掩码中移除
 }
 
 static inline void
-set_cpu_present(unsigned int cpu, bool present)
+set_cpu_present(unsigned int cpu, bool present)//用于设置指定 CPU 的存在状态。
 {
-	if (present)
-		cpumask_set_cpu(cpu, &__cpu_present_mask);
+	if (present)// 如果参数 present 为 true，表示将该 CPU 标记为存在状态
+		cpumask_set_cpu(cpu, &__cpu_present_mask);//将指定的 CPU 添加到 __cpu_present_mask 中，表示该 CPU 存在
 	else
-		cpumask_clear_cpu(cpu, &__cpu_present_mask);
+		cpumask_clear_cpu(cpu, &__cpu_present_mask);//如果参数 present为 false，表示将该CPU标记为不存在状态.从 __cpu_present_mask 中清除指定的 CPU，表示该 CPU 不存在
 }
 
 void set_cpu_online(unsigned int cpu, bool online);

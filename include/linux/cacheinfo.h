@@ -71,13 +71,13 @@ struct cacheinfo {
 	void *priv;
 };
 
-struct cpu_cacheinfo {
-	struct cacheinfo *info_list;
-	unsigned int per_cpu_data_slice_size;
-	unsigned int num_levels;
-	unsigned int num_leaves;
-	bool cpu_map_populated;
-	bool early_ci_levels;
+struct cpu_cacheinfo {//用于描述每个 CPU 的缓存信息
+	struct cacheinfo *info_list;//指向包含缓存信息的结构体数组的指针，每个数组元素代表一个缓存级别的信息
+	unsigned int per_cpu_data_slice_size;//每个 CPU 数据切片的大小，用于描述缓存中分配给每个 CPU 的数据量
+	unsigned int num_levels;//缓存的级别数量，例如 L1、L2 等缓存级别的数量
+	unsigned int num_leaves;//缓存的叶子节点数量，包括所有的统一缓存和分裂缓存
+	bool cpu_map_populated;//标记是否已经填充了 CPU 缓存映射的信息
+	bool early_ci_levels;//标记是否使用了早期的缓存级别信息来初始化 CPU 缓存
 };
 
 struct cpu_cacheinfo *get_cpu_cacheinfo(unsigned int cpu);

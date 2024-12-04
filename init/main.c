@@ -703,35 +703,39 @@ static void __init setup_command_line(char *command_line)
  */
 
 static __initdata DECLARE_COMPLETION(kthreadd_done);
-
+/*在内核启动过程中初始化和启动第一个用户模式进程（init）和内核线程管理进程（kthreadd），并确保系统进入正常的调度状态。*/
 static noinline void __ref __noreturn rest_init(void)
 {
-	struct task_struct *tsk;
+	struct task_struct *tsk;//定义指向任务结构体的指针tsk
 	int pid;
 
-	rcu_scheduler_starting();
+	rcu_scheduler_starting();// 通知 RCU（读取-复制更新）系统调度器即将启动
 	/*
 	 * We need to spawn init first so that it obtains pid 1, however
 	 * the init task will end up wanting to create kthreads, which, if
 	 * we schedule it before we create kthreadd, will OOPS.
+	 * 首先需要创建 init 进程以便它获得 pid 1，然而 init 进程会想要创建内核线程，
+	 * 如果在我们创建 kthreadd 之前调度它，会导致内核 OOPS（错误）
 	 */
-	pid = user_mode_thread(kernel_init, NULL, CLONE_FS);
+	pid = user_mode_thread(kernel_init, NULL, CLONE_FS);//创建用户模式线程来运行 kernel_init 函数，并为其分配 pid 1
 	/*
 	 * Pin init on the boot CPU. Task migration is not properly working
 	 * until sched_init_smp() has been run. It will set the allowed
 	 * CPUs for init to the non isolated CPUs.
+	 * 将 init 进程固定在启动 CPU 上。在 sched_init_smp() 运行之前，任务迁移并不能正常工作。
+	 * 该函数将设置 init 进程的允许 CPU 为非隔离的 CPU。
 	 */
-	rcu_read_lock();
-	tsk = find_task_by_pid_ns(pid, &init_pid_ns);
-	tsk->flags |= PF_NO_SETAFFINITY;
-	set_cpus_allowed_ptr(tsk, cpumask_of(smp_processor_id()));
-	rcu_read_unlock();
+	rcu_read_lock();//获取 RCU 读取锁，防止在读取任务时发生并发更改
+	tsk = find_task_by_pid_ns(pid, &init_pid_ns);//根据进程 ID 在初始命名空间中查找 init 任务
+	tsk->flags |= PF_NO_SETAFFINITY;//设置任务标志，禁止设置 CPU 亲和性
+	set_cpus_allowed_ptr(tsk, cpumask_of(smp_processor_id()));//将 init 进程限制在启动 CPU 上运行
+	rcu_read_unlock();//释放 RCU 读取锁
 
-	numa_default_policy();
-	pid = kernel_thread(kthreadd, NULL, NULL, CLONE_FS | CLONE_FILES);
-	rcu_read_lock();
-	kthreadd_task = find_task_by_pid_ns(pid, &init_pid_ns);
-	rcu_read_unlock();
+	numa_default_policy();//设置默认的 NUMA 策略
+	pid = kernel_thread(kthreadd, NULL, NULL, CLONE_FS | CLONE_FILES);//创建内核线程 kthreadd，负责管理内核线程
+	rcu_read_lock();//获取 RCU 读取锁，防止在读取任务时发生并发更改
+	kthreadd_task = find_task_by_pid_ns(pid, &init_pid_ns);//根据进程 ID 在初始命名空间中查找 kthreadd 任务
+	rcu_read_unlock();//释放 RCU 读取锁
 
 	/*
 	 * Enable might_sleep() and smp_processor_id() checks.
@@ -739,18 +743,22 @@ static noinline void __ref __noreturn rest_init(void)
 	 * kernel_thread() would trigger might_sleep() splats. With
 	 * CONFIG_PREEMPT_VOLUNTARY=y the init task might have scheduled
 	 * already, but it's stuck on the kthreadd_done completion.
+	 * 启用 might_sleep() 和 smp_processor_id() 检查。在此之前无法启用这些检查，因为如果配置了 CONFIG_PREEMPTION=y，
+	 * kernel_thread() 会触发 might_sleep() 警告。对于 CONFIG_PREEMPT_VOLUNTARY=y，init 任务可能已经调度，但它被卡在
+	 * kthreadd_done 完成等待上。
 	 */
-	system_state = SYSTEM_SCHEDULING;
+	system_state = SYSTEM_SCHEDULING;//更新系统状态为调度阶段
 
-	complete(&kthreadd_done);
+	complete(&kthreadd_done);//标记 kthreadd 的初始化已完成
 
 	/*
 	 * The boot idle thread must execute schedule()
 	 * at least once to get things moving:
+	 * 动空闲线程必须至少调用一次 schedule()，以使系统开始运转：
 	 */
-	schedule_preempt_disabled();
-	/* Call into cpu_idle with preempt disabled */
-	cpu_startup_entry(CPUHP_ONLINE);
+	schedule_preempt_disabled();//调用调度函数，以便空闲线程能够进行调度
+	/* 调用 cpu_idle，进入 CPU 空闲状态，禁用抢占 */
+	cpu_startup_entry(CPUHP_ONLINE);//启动 CPU 并进入空闲状态，表示 CPU 已上线
 }
 
 /* Check for early params. */
@@ -1474,7 +1482,9 @@ void __weak free_initmem(void)
 {
 	free_initmem_default(POISON_FREE_INITMEM);
 }
-
+/*由 `kthreadd` 调用的初始化函数,负责初始化内核以及启动用户态的 init 进程
+ *内核线程的主要目标是在内核启动并完成基本初始化后，将控制权交给用户态的初始化程序。
+ * */
 static int __ref kernel_init(void *unused)
 {
 	int ret;
@@ -1482,39 +1492,40 @@ static int __ref kernel_init(void *unused)
 	/*
 	 * Wait until kthreadd is all set-up.
 	 */
-	wait_for_completion(&kthreadd_done);
+	wait_for_completion(&kthreadd_done);// 等待 `kthreadd` 完成初始化，确保该线程已经完全准备就绪
 
-	kernel_init_freeable();
+	kernel_init_freeable();//进行内核剩余的可释放内存部分的初始化
 	/* need to finish all async __init code before freeing the memory */
-	async_synchronize_full();
+	async_synchronize_full();//用于确保所有异步的初始化代码执行完毕，以防止在内存释放时仍有代码在运行。
 
-	system_state = SYSTEM_FREEING_INITMEM;
-	kprobe_free_init_mem();
-	ftrace_free_init_mem();
-	kgdb_free_init_mem();
-	exit_boot_config();
-	free_initmem();
-	mark_readonly();
+	system_state = SYSTEM_FREEING_INITMEM;//设置系统状态为 `SYSTEM_FREEING_INITMEM`，表示系统正在释放 `init` 内存
+	kprobe_free_init_mem();// 释放 `kprobe` 相关的初始化内存
+	ftrace_free_init_mem();//释放 `ftrace` 相关的初始化内存
+	kgdb_free_init_mem();//释放 `kgdb`（内核调试器）相关的初始化内存
+	exit_boot_config();// 退出引导配置，释放相关的资源
+	free_initmem();//释放所有初始化代码段的内存，以便节省内存资源
+	mark_readonly();//将只读内存区域进行标记，以防止其被意外修改
 
 	/*
 	 * Kernel mappings are now finalized - update the userspace page-table
 	 * to finalize PTI.
+	 * 内核映射现在已经完成 - 更新用户空间页表以最终确定 PTI。
 	 */
-	pti_finalize();
+	pti_finalize();//最终确定页表隔离（PTI），确保用户空间和内核空间的安全隔离
 
-	system_state = SYSTEM_RUNNING;
-	numa_default_policy();
+	system_state = SYSTEM_RUNNING;//将系统状态设置为 `SYSTEM_RUNNING`，表示系统已经进入运行状态
+	numa_default_policy();//设置 NUMA（非统一内存访问）默认策略
 
-	rcu_end_inkernel_boot();
+	rcu_end_inkernel_boot();//结束 RCU 的内核启动阶段，标记 RCU 进入正常运行状态
 
-	do_sysctl_args();
+	do_sysctl_args();//执行系统控制命令行参数的处理
 
-	if (ramdisk_execute_command) {
-		ret = run_init_process(ramdisk_execute_command);
-		if (!ret)
+	if (ramdisk_execute_command) {//如果有 `ramdisk_execute_command`（ramdisk 的启动命令），则尝试运行它
+		ret = run_init_process(ramdisk_execute_command);//调用 `run_init_process()` 运行 ramdisk 中的初始化进程
+		if (!ret)//如果成功，则返回 0，表示内核启动成功
 			return 0;
 		pr_err("Failed to execute %s (error %d)\n",
-		       ramdisk_execute_command, ret);
+		       ramdisk_execute_command, ret);//如果失败，打印错误信息
 	}
 
 	/*
@@ -1523,31 +1534,31 @@ static int __ref kernel_init(void *unused)
 	 * The Bourne shell can be used instead of init if we are
 	 * trying to recover a really broken machine.
 	 */
-	if (execute_command) {
-		ret = run_init_process(execute_command);
+	if (execute_command) {//如果有 `execute_command`（启动命令），则尝试运行它
+		ret = run_init_process(execute_command);//调用 `run_init_process()` 运行指定的初始化进程
 		if (!ret)
-			return 0;
+			return 0;//如果成功，则返回 0
 		panic("Requested init %s failed (error %d).",
-		      execute_command, ret);
+		      execute_command, ret);//如果失败，触发 panic，打印错误信息并停止系统
 	}
 
-	if (CONFIG_DEFAULT_INIT[0] != '\0') {
-		ret = run_init_process(CONFIG_DEFAULT_INIT);
-		if (ret)
+	if (CONFIG_DEFAULT_INIT[0] != '\0') {//如果有默认的初始化命令，则尝试运行它
+		ret = run_init_process(CONFIG_DEFAULT_INIT);//调用 `run_init_process()` 运行默认的初始化进程
+		if (ret)//如果失败，打印错误信息
 			pr_err("Default init %s failed (error %d)\n",
 			       CONFIG_DEFAULT_INIT, ret);
 		else
-			return 0;
+			return 0;//如果成功，返回 0
 	}
 
-	if (!try_to_run_init_process("/sbin/init") ||
-	    !try_to_run_init_process("/etc/init") ||
-	    !try_to_run_init_process("/bin/init") ||
-	    !try_to_run_init_process("/bin/sh"))
-		return 0;
+	if (!try_to_run_init_process("/sbin/init") ||//尝试运行 `/sbin/init` 作为初始化进程
+	    !try_to_run_init_process("/etc/init") ||//或者 `/etc/init`
+	    !try_to_run_init_process("/bin/init") ||//或者 `/bin/init`
+	    !try_to_run_init_process("/bin/sh"))//或者 `/bin/sh`
+		return 0;//如果任何一个成功，返回 0
 
 	panic("No working init found.  Try passing init= option to kernel. "
-	      "See Linux Documentation/admin-guide/init.rst for guidance.");
+	      "See Linux Documentation/admin-guide/init.rst for guidance.");//如果没有找到可用的初始化进程，则触发 panic 并打印指导信息
 }
 
 /* Open /dev/console, for stdin/stdout/stderr, this should never fail */
@@ -1568,47 +1579,47 @@ void __init console_on_rootfs(void)
 static noinline void __init kernel_init_freeable(void)
 {
 	/* Now the scheduler is fully set up and can do blocking allocations */
-	gfp_allowed_mask = __GFP_BITS_MASK;
+	gfp_allowed_mask = __GFP_BITS_MASK;//设置内存分配标志位，允许在所有节点上进行内存分配
 
 	/*
 	 * init can allocate pages on any node
 	 */
-	set_mems_allowed(node_states[N_MEMORY]);
+	set_mems_allowed(node_states[N_MEMORY]);//允许初始化任务在系统内所有节点上分配内存
 
-	cad_pid = get_pid(task_pid(current));
+	cad_pid = get_pid(task_pid(current));//获取当前任务的 PID 并保存到全局变量 `cad_pid`，用于系统管理目的
 
-	smp_prepare_cpus(setup_max_cpus);
+	smp_prepare_cpus(setup_max_cpus);//准备多处理器系统，将所有可用 CPU 初始化并准备好
 
-	workqueue_init();
+	workqueue_init();//初始化工作队列，用于处理内核中的异步任务
 
-	init_mm_internals();
+	init_mm_internals();//初始化内存管理内部结构，确保内存管理模块能正常工作
 
-	rcu_init_tasks_generic();
-	do_pre_smp_initcalls();
-	lockup_detector_init();
+	rcu_init_tasks_generic();//初始化 RCU（Read-Copy Update）相关任务，用于保证并发访问的安全性
+	do_pre_smp_initcalls();//执行 SMP（对称多处理）初始化之前需要完成的函数调用
+	lockup_detector_init();// 初始化锁定检测器，用于检测系统的死锁情况
 
-	smp_init();
-	sched_init_smp();
+	smp_init();//初始化 SMP（对称多处理）环境，使多个 CPU 协同工作
+	sched_init_smp();//初始化 SMP 调度器，使内核调度器能够适应多处理器的环境
 
-	workqueue_init_topology();
-	async_init();
-	padata_init();
-	page_alloc_init_late();
+	workqueue_init_topology();//初始化工作队列拓扑，用于支持多处理器环境中的工作队列处理
+	async_init();//初始化异步子系统，支持内核中异步操作
+	padata_init();//初始化 padata 子系统，用于并行处理和数据分发
+	page_alloc_init_late();//初始化页面分配器，延迟执行，以适应内存管理的变化
 
-	do_basic_setup();
+	do_basic_setup();//完成基本的系统设置，初始化大多数核心子系统
 
-	kunit_run_all_tests();
+	kunit_run_all_tests();//运行所有 KUnit 单元测试，确保内核功能的正确性
 
-	wait_for_initramfs();
-	console_on_rootfs();
+	wait_for_initramfs();//等待 initramfs（初始内存文件系统）的加载完成，确保系统能够加载根文件系统
+	console_on_rootfs();//将控制台设置为根文件系统，确保后续输出可以正确显示
 
 	/*
 	 * check if there is an early userspace init.  If yes, let it do all
 	 * the work
 	 */
-	if (init_eaccess(ramdisk_execute_command) != 0) {
-		ramdisk_execute_command = NULL;
-		prepare_namespace();
+	if (init_eaccess(ramdisk_execute_command) != 0) {//如果存在有效的初始用户空间命令，执行它
+		ramdisk_execute_command = NULL;//否则将初始命令设置为空
+		prepare_namespace();//准备命名空间，挂载根文件系统
 	}
 
 	/*
@@ -1620,5 +1631,5 @@ static noinline void __init kernel_init_freeable(void)
 	 * and default modules
 	 */
 
-	integrity_load_keys();
+	integrity_load_keys();//加载完整性验证公钥，用于系统的安全性验证
 }

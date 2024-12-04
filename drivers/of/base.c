@@ -594,12 +594,12 @@ static struct device_node *__of_get_next_child(const struct device_node *node,
 {
 	struct device_node *next;
 
-	if (!node)
+	if (!node)//检查传入的父节点是否为 NULL，如果是 NULL，则无法获取子节点
 		return NULL;
 
-	next = prev ? prev->sibling : node->child;
-	of_node_get(next);
-	of_node_put(prev);
+	next = prev ? prev->sibling : node->child;//如果 prev 非空，则获取其(同级)兄弟节点；如果 prev 为空，则获取父节点的第一个子节点
+	of_node_get(next);//增加 next 节点的引用计数，确保该节点在使用期间不会被释放
+	of_node_put(prev);//释放 prev 节点的引用计数，因为不再需要访问它
 	return next;
 }
 #define __for_each_child_of_node(parent, child) \
@@ -758,51 +758,52 @@ EXPORT_SYMBOL(of_get_compatible_child);
  * Return: A node pointer if found, with refcount incremented, use
  * of_node_put() on it when done.
  * Returns NULL if node is not found.
+ * 查找给定设备树节点的子节点中名称与指定值匹配的节点，并返回该子节点的指针。
  */
 struct device_node *of_get_child_by_name(const struct device_node *node,
 				const char *name)
 {
 	struct device_node *child;
 
-	for_each_child_of_node(node, child)
-		if (of_node_name_eq(child, name))
-			break;
-	return child;
+	for_each_child_of_node(node, child)//遍历给定节点的所有子节点，将每个子节点赋值给 child
+		if (of_node_name_eq(child, name))// 如果子节点的名称与给定的名称匹配
+			break;//退出循环，因为找到了匹配的子节点
+	return child;//返回找到的子节点指针，如果没有找到则返回 NULL
 }
 EXPORT_SYMBOL(of_get_child_by_name);
-
+/*根据提供的路径在设备树中查找特定节点*/
 struct device_node *__of_find_node_by_path(struct device_node *parent,
 						const char *path)
 {
-	struct device_node *child;
+	struct device_node *child;//定义指向设备树子节点的指针，用于遍历当前父节点的所有子节点
 	int len;
 
-	len = strcspn(path, "/:");
+	len = strcspn(path, "/:");//计算路径字符串 path 中第一个出现的字符 '/' 或 ':' 的位置，并将其存储在 len 中
 	if (!len)
-		return NULL;
+		return NULL;// 如果 len 为 0，表示路径字符串以 '/' 或 ':' 开头,返回 NULL 表示无法找到对应的节点，路径无效
 
-	__for_each_child_of_node(parent, child) {
-		const char *name = kbasename(child->full_name);
-		if (strncmp(path, name, len) == 0 && (strlen(name) == len))
-			return child;
+	__for_each_child_of_node(parent, child) {//遍历给定父节点的所有子节点，循环中每次将一个子节点赋值给 child
+		const char *name = kbasename(child->full_name);//获取子节点的完整路径中的基本名称部分（最后一个 '/' 之后的部分）
+		if (strncmp(path, name, len) == 0 && (strlen(name) == len))//比较路径字符串 path 的前 len 个字符是否与子节点的名称相同，且确保名称长度相等
+			return child;//如果找到匹配的子节点，则返回该子节点的指针
 	}
-	return NULL;
+	return NULL;//如果遍历完所有子节点后没有找到匹配的节点，返回 NULL 表示未找到
 }
-
+/*根据提供的完整路径从给定节点开始查找目标设备节点*/
 struct device_node *__of_find_node_by_full_path(struct device_node *node,
 						const char *path)
 {
-	const char *separator = strchr(path, ':');
+	const char *separator = strchr(path, ':');//找到路径中的 ':' 分隔符，用于分离路径和选项部分
 
-	while (node && *path == '/') {
-		struct device_node *tmp = node;
+	while (node && *path == '/') {//当节点不为空且路径以 / 开头时，进入循环。
+		struct device_node *tmp = node;//临时保存当前节点
 
-		path++; /* Increment past '/' delimiter */
-		node = __of_find_node_by_path(node, path);
-		of_node_put(tmp);
-		path = strchrnul(path, '/');
-		if (separator && separator < path)
-			break;
+		path++;//跳过路径中的 '/' 分隔符
+		node = __of_find_node_by_path(node, path);//根据路径部分查找节点
+		of_node_put(tmp);//释放之前节点的引用
+		path = strchrnul(path, '/');//获取路径中的下一个 '/' 分隔符位置，如果找不到返回 NULL
+		if (separator && separator < path)//如果路径中存在选项部分并且 ':' 分隔符出现在下一个 '/' 之前
+			break;//跳出循环，停止进一步路径解析
 	}
 	return node;
 }
@@ -825,35 +826,35 @@ struct device_node *__of_find_node_by_full_path(struct device_node *node,
  * Return: A node pointer with refcount incremented, use
  * of_node_put() on it when done.
  */
-struct device_node *of_find_node_opts_by_path(const char *path, const char **opts)
+struct device_node *of_find_node_opts_by_path(const char *path, const char **opts)//根据路径查找设备树节点 (Device Tree Node) 并返回节点指针。
 {
 	struct device_node *np = NULL;
 	struct property *pp;
 	unsigned long flags;
-	const char *separator = strchr(path, ':');
+	const char *separator = strchr(path, ':');//查找路径中的分隔符 :，用于分割路径和选项。
 
-	if (opts)
+	if (opts)//如果存在选项指针，则设置其值为分隔符后的字符串或为 NULL
 		*opts = separator ? separator + 1 : NULL;
 
-	if (strcmp(path, "/") == 0)
+	if (strcmp(path, "/") == 0)//如果路径为根节点 "/"，直接返回设备树根节点的引用
 		return of_node_get(of_root);
 
-	/* The path could begin with an alias */
-	if (*path != '/') {
+	/* 路径可能以别名开头 */
+	if (*path != '/') {//检查路径是否以 / 开头，如果不是，则说明可能是别名。
 		int len;
-		const char *p = separator;
+		const char *p = separator;//设置指针 p 为分隔符的位置。
 
-		if (!p)
+		if (!p)//如果没有找到分隔符，查找路径中的第一个 '/' 的位置
 			p = strchrnul(path, '/');
-		len = p - path;
+		len = p - path;//计算别名长度
 
 		/* of_aliases must not be NULL */
-		if (!of_aliases)
+		if (!of_aliases)//检查 `of_aliases` 是否已被初始化
 			return NULL;
 
-		for_each_property_of_node(of_aliases, pp) {
+		for_each_property_of_node(of_aliases, pp) {//遍历 `of_aliases` 节点的所有属性，查找匹配的别名
 			if (strlen(pp->name) == len && !strncmp(pp->name, path, len)) {
-				np = of_find_node_by_path(pp->value);
+				np = of_find_node_by_path(pp->value);//如果找到匹配的别名，则通过 of_find_node_by_path 查找设备树节点。
 				break;
 			}
 		}
@@ -863,12 +864,12 @@ struct device_node *of_find_node_opts_by_path(const char *path, const char **opt
 	}
 
 	/* Step down the tree matching path components */
-	raw_spin_lock_irqsave(&devtree_lock, flags);
+	raw_spin_lock_irqsave(&devtree_lock, flags);//锁定设备树，保护对设备树的访问
 	if (!np)
-		np = of_node_get(of_root);
-	np = __of_find_node_by_full_path(np, path);
-	raw_spin_unlock_irqrestore(&devtree_lock, flags);
-	return np;
+		np = of_node_get(of_root);//如果 `np` 为空，获取根节点的引用
+	np = __of_find_node_by_full_path(np, path);//查找完整路径的设备树节点
+	raw_spin_unlock_irqrestore(&devtree_lock, flags);// 解锁设备树
+	return np;//返回查找到的设备树节点
 }
 EXPORT_SYMBOL(of_find_node_opts_by_path);
 
@@ -1919,24 +1920,26 @@ EXPORT_SYMBOL_GPL(of_console_check);
  * of_node_put() on it when done.  Caller should hold a reference
  * to np.
  */
-struct device_node *of_find_next_cache_node(const struct device_node *np)
+struct device_node *of_find_next_cache_node(const struct device_node *np)//用于查找与给定设备树节点相关联的下一个缓存节点
 {
 	struct device_node *child, *cache_node;
 
-	cache_node = of_parse_phandle(np, "l2-cache", 0);
+	cache_node = of_parse_phandle(np, "l2-cache", 0);// 尝试从当前节点解析 "l2-cache" 的 phandle 属性，获取 L2 缓存节点
 	if (!cache_node)
-		cache_node = of_parse_phandle(np, "next-level-cache", 0);
+		cache_node = of_parse_phandle(np, "next-level-cache", 0);//尝试解析 "next-level-cache" 属性，获取下一级缓存节点
 
-	if (cache_node)
+	if (cache_node)//如果找到了缓存节点,返回该缓存节点
 		return cache_node;
 
 	/* OF on pmac has nodes instead of properties named "l2-cache"
 	 * beneath CPU nodes.
+	 * 在 pmac 平台上，OF 设备树在 CPU 节点下有 "l2-cache" 类型的节点，而不是属性。
+	 * 因此需要特殊处理以找到这些节点。
 	 */
-	if (IS_ENABLED(CONFIG_PPC_PMAC) && of_node_is_type(np, "cpu"))
-		for_each_child_of_node(np, child)
-			if (of_node_is_type(child, "cache"))
-				return child;
+	if (IS_ENABLED(CONFIG_PPC_PMAC) && of_node_is_type(np, "cpu"))//如果启用了 CONFIG_PPC_PMAC 并且当前节点类型是 "cpu"
+		for_each_child_of_node(np, child)//遍历当前节点的所有子节点
+			if (of_node_is_type(child, "cache"))//如果子节点的类型是 "cache"
+				return child;// 返回该子节点，表示找到了缓存节点
 
 	return NULL;
 }

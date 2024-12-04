@@ -692,14 +692,14 @@ static struct genl_family family __ro_after_init = {
 };
 
 /* Needed early in initialization */
-void __init taskstats_init_early(void)
+void __init taskstats_init_early(void)//taskstats 子系统的早期初始化函数，用于初始化任务统计数据结构和每个 CPU 的监听器数组
 {
 	unsigned int i;
 
-	taskstats_cache = KMEM_CACHE(taskstats, SLAB_PANIC);
-	for_each_possible_cpu(i) {
-		INIT_LIST_HEAD(&(per_cpu(listener_array, i).list));
-		init_rwsem(&(per_cpu(listener_array, i).sem));
+	taskstats_cache = KMEM_CACHE(taskstats, SLAB_PANIC);//创建一个内存缓存（slab cache）用于存储 taskstats 结构，使用 SLAB_PANIC 标志确保内存分配失败时系统会崩溃
+	for_each_possible_cpu(i) {//遍历系统中每个可能的 CPU，执行初始化操作
+		INIT_LIST_HEAD(&(per_cpu(listener_array, i).list));//初始化 per_cpu（每个 CPU 特有的）监听器数组中的list链表头，确保在每个 CPU 上都有一个空的监听器列表
+		init_rwsem(&(per_cpu(listener_array, i).sem));//初始化 per_cpu 监听器数组中的读写信号量，用于保护对监听器列表的访问
 	}
 }
 

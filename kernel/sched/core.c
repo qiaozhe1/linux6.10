@@ -546,31 +546,32 @@ sched_core_dequeue(struct rq *rq, struct task_struct *p, int flags) { }
  *    o push_rt_task() / pull_rt_task()
  *    o push_dl_task() / pull_dl_task()
  *    o dl_task_offline_migration()
- *
+ *  用于获取指定就绪队列的嵌套自旋锁。该函数首先禁用抢占以确保锁操作的原子性。
+ *  如果核心调度功能被禁用，则直接获取就绪队列的锁并返回。
  */
 
 void raw_spin_rq_lock_nested(struct rq *rq, int subclass)
 {
-	raw_spinlock_t *lock;
+	raw_spinlock_t *lock;//定义自旋锁指针，用于保存就绪队列的锁
 
-	/* Matches synchronize_rcu() in __sched_core_enable() */
-	preempt_disable();
-	if (sched_core_disabled()) {
-		raw_spin_lock_nested(&rq->__lock, subclass);
-		/* preempt_count *MUST* be > 1 */
-		preempt_enable_no_resched();
-		return;
+	/* 匹配 __sched_core_enable() 中的 synchronize_rcu() */
+	preempt_disable();//禁用抢占，以确保锁操作的原子性
+	if (sched_core_disabled()) {//如果核心调度功能被禁用
+		raw_spin_lock_nested(&rq->__lock, subclass);//获取就绪队列的嵌套自旋锁
+		/* 抢占计数必须大于 1，确保此时不会被抢占 */
+		preempt_enable_no_resched();//重新启用抢占，但不进行重新调度
+		return;//锁已获取，直接返回
 	}
 
-	for (;;) {
-		lock = __rq_lockp(rq);
-		raw_spin_lock_nested(lock, subclass);
-		if (likely(lock == __rq_lockp(rq))) {
-			/* preempt_count *MUST* be > 1 */
-			preempt_enable_no_resched();
-			return;
+	for (;;) {//无限循环，直到成功获取锁
+		lock = __rq_lockp(rq);//获取就绪队列的锁指针
+		raw_spin_lock_nested(lock, subclass);//尝试获取该锁
+		if (likely(lock == __rq_lockp(rq))) {//如果锁没有被其他线程更改
+			/* 抢占计数必须大于1，确保此时不会被抢占 */
+			preempt_enable_no_resched();//重新启用抢占，但不进行重新调度
+			return;//锁已获取，直接返回
 		}
-		raw_spin_unlock(lock);
+		raw_spin_unlock(lock);//如果锁不一致，释放已获取的锁并重试
 	}
 }
 
@@ -9256,74 +9257,80 @@ void show_state_filter(unsigned int state_filter)
  * NOTE: this function does not set the idle thread's NEED_RESCHED
  * flag, to make booting more robust.
  */
-void __init init_idle(struct task_struct *idle, int cpu)
+void __init init_idle(struct task_struct *idle, int cpu)//用于初始化指定 CPU 的空闲任务
 {
 #ifdef CONFIG_SMP
-	struct affinity_context ac = (struct affinity_context) {
-		.new_mask  = cpumask_of(cpu),
-		.flags     = 0,
+	struct affinity_context ac = (struct affinity_context) {//定义并初始化CPU亲和性上下文结构体，用于设置空闲任务的 CPU 亲和性
+		.new_mask  = cpumask_of(cpu),//设置亲和性掩码为指定CPU
+		.flags     = 0,//初始化标志位为0
 	};
 #endif
-	struct rq *rq = cpu_rq(cpu);
-	unsigned long flags;
+	struct rq *rq = cpu_rq(cpu);//获取指定 CPU 的就绪队列指针
+	unsigned long flags;//定义变量 flags，用于保存中断标志
 
-	__sched_fork(0, idle);
+	__sched_fork(0, idle);//调用调度器函数初始化空闲任务的调度信息
 
-	raw_spin_lock_irqsave(&idle->pi_lock, flags);
-	raw_spin_rq_lock(rq);
+	raw_spin_lock_irqsave(&idle->pi_lock, flags);//获取空闲任务的优先级继承锁，并保存中断状态
+	raw_spin_rq_lock(rq);//获取就绪队列的自旋锁，防止并发修改
 
-	idle->__state = TASK_RUNNING;
-	idle->se.exec_start = sched_clock();
+	idle->__state = TASK_RUNNING;//将空闲任务的状态设置为TASK_RUNNING，表示该任务正在运行
+	idle->se.exec_start = sched_clock();//设置空闲任务的执行开始时间为当前调度时钟
 	/*
 	 * PF_KTHREAD should already be set at this point; regardless, make it
 	 * look like a proper per-CPU kthread.
+	 * PF_KTHREAD 应该已经在此时设置；无论如何，将其设置为看起来像一个正常的每 CPU 内核线程。
 	 */
-	idle->flags |= PF_KTHREAD | PF_NO_SETAFFINITY;
-	kthread_set_per_cpu(idle, cpu);
+	idle->flags |= PF_KTHREAD | PF_NO_SETAFFINITY;//设置任务标志，表示这是一个内核线程，且禁止设置CPU亲和性
+	kthread_set_per_cpu(idle, cpu);//将空闲任务标记为与指定CPU关联
 
 #ifdef CONFIG_SMP
 	/*
 	 * It's possible that init_idle() gets called multiple times on a task,
 	 * in that case do_set_cpus_allowed() will not do the right thing.
+	 *  可能 init_idle() 会在同一个任务上被多次调用，在这种情况下 do_set_cpus_allowed() 不会执行正确的操作。
 	 *
 	 * And since this is boot we can forgo the serialization.
+	 * 由于这是在引导阶段，我们可以省略序列化。
 	 */
-	set_cpus_allowed_common(idle, &ac);
+	set_cpus_allowed_common(idle, &ac);//设置空闲任务的 CPU 亲和性
 #endif
 	/*
 	 * We're having a chicken and egg problem, even though we are
 	 * holding rq->lock, the CPU isn't yet set to this CPU so the
 	 * lockdep check in task_group() will fail.
+	 * 我们遇到了一个鸡和蛋的问题，即使我们持有 rq->lock，CPU 还未设置为当前 CPU，因此 task_group() 中的锁依赖检查会失败。
 	 *
 	 * Similar case to sched_fork(). / Alternatively we could
 	 * use task_rq_lock() here and obtain the other rq->lock.
+	 * 与 sched_fork() 类似的情况。/ 或者我们可以在此使用 task_rq_lock() 并获取另一个 rq->lock。
 	 *
 	 * Silence PROVE_RCU
+	 * 消除 PROVE_RCU 警告
 	 */
-	rcu_read_lock();
-	__set_task_cpu(idle, cpu);
-	rcu_read_unlock();
+	rcu_read_lock();//获取 RCU 读取锁，防止并发修改
+	__set_task_cpu(idle, cpu);//设置空闲任务的 CPU，标记其所属的 CPU
+	rcu_read_unlock();// 释放 RCU 读取锁
 
-	rq->idle = idle;
-	rcu_assign_pointer(rq->curr, idle);
-	idle->on_rq = TASK_ON_RQ_QUEUED;
+	rq->idle = idle;//将空闲任务设置为指定就绪队列的空闲任务
+	rcu_assign_pointer(rq->curr, idle);//使用RCU分配指针，将当前运行任务设置为空闲任务
+	idle->on_rq = TASK_ON_RQ_QUEUED;//标记空闲任务已在就绪队列中
 #ifdef CONFIG_SMP
-	idle->on_cpu = 1;
+	idle->on_cpu = 1;// 标记空闲任务正在运行的CPU为当前CPU
 #endif
-	raw_spin_rq_unlock(rq);
-	raw_spin_unlock_irqrestore(&idle->pi_lock, flags);
+	raw_spin_rq_unlock(rq);// 释放就绪队列的自旋锁
+	raw_spin_unlock_irqrestore(&idle->pi_lock, flags);//释放空闲任务的优先级继承锁，并恢复中断状态
 
-	/* Set the preempt count _outside_ the spinlocks! */
-	init_idle_preempt_count(idle, cpu);
+	/* 在自旋锁外设置抢占计数 */
+	init_idle_preempt_count(idle, cpu);//初始化空闲任务的抢占计数
 
 	/*
 	 * The idle tasks have their own, simple scheduling class:
 	 */
-	idle->sched_class = &idle_sched_class;
-	ftrace_graph_init_idle_task(idle, cpu);
-	vtime_init_idle(idle, cpu);
+	idle->sched_class = &idle_sched_class;//设置空闲任务的调度类为空闲调度类
+	ftrace_graph_init_idle_task(idle, cpu);//初始化空闲任务的函数跟踪
+	vtime_init_idle(idle, cpu);//初始化空闲任务的虚拟时间
 #ifdef CONFIG_SMP
-	sprintf(idle->comm, "%s/%d", INIT_TASK_COMM, cpu);
+	sprintf(idle->comm, "%s/%d", INIT_TASK_COMM, cpu);//设置空闲任务的名称，包含 CPU 编号
 #endif
 }
 

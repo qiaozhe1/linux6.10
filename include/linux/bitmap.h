@@ -228,14 +228,14 @@ void bitmap_fold(unsigned long *dst, const unsigned long *orig,
 
 #define bitmap_size(nbits)	(ALIGN(nbits, BITS_PER_LONG) / BITS_PER_BYTE)
 
-static inline void bitmap_zero(unsigned long *dst, unsigned int nbits)
+static inline void bitmap_zero(unsigned long *dst, unsigned int nbits)//用于将位图指向的内存区域清零。
 {
-	unsigned int len = bitmap_size(nbits);
+	unsigned int len = bitmap_size(nbits);//计算存储 nbits 位所需的字节大小
 
-	if (small_const_nbits(nbits))
+	if (small_const_nbits(nbits))//如果 nbits 的值是小常量，则直接将指针 dst 指向的地址置 0
 		*dst = 0;
 	else
-		memset(dst, 0, len);
+		memset(dst, 0, len);// 否则，将 dst 指向的内存区域设置为 0，长度为 len 字节
 }
 
 static inline void bitmap_fill(unsigned long *dst, unsigned int nbits)

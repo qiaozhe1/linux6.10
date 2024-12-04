@@ -10,8 +10,8 @@
 #include <uapi/linux/taskstats.h>
 
 #ifdef CONFIG_TASK_DELAY_ACCT
-struct task_delay_info {
-	raw_spinlock_t	lock;
+struct task_delay_info {//任务延迟信息结构，用于跟踪与任务相关的各种延迟情况
+	raw_spinlock_t	lock;//保护延迟统计数据的自旋锁，确保在多核环境中对延迟信息的原子访问
 
 	/* For each stat XXX, add following, aligned appropriately
 	 *
@@ -28,33 +28,33 @@ struct task_delay_info {
 	 * associated with the operation is added to XXX_delay.
 	 * XXX_delay contains the accumulated delay time in nanoseconds.
 	 */
-	u64 blkio_start;
-	u64 blkio_delay;	/* wait for sync block io completion */
-	u64 swapin_start;
-	u64 swapin_delay;	/* wait for swapin */
-	u32 blkio_count;	/* total count of the number of sync block */
-				/* io operations performed */
-	u32 swapin_count;	/* total count of swapin */
+	u64 blkio_start;	//块设备 I/O 操作的开始时间，单位为纳秒
+	u64 blkio_delay;	//累计块设备 I/O 操作的延迟时间
+	u64 swapin_start;	//换入（swapin）操作的开始时间，单位为纳秒
+	u64 swapin_delay;	// 累计换入操作的延迟时间
+	u32 blkio_count;	//块设备 I/O 操作的总次数
+				//同步块设备 I/O 操作的次数统计
+	u32 swapin_count;	//换入操作的总次数
 
-	u64 freepages_start;
-	u64 freepages_delay;	/* wait for memory reclaim */
+	u64 freepages_start;	//内存回收操作的开始时间
+	u64 freepages_delay;	//累计内存回收操作的延迟时间
 
-	u64 thrashing_start;
-	u64 thrashing_delay;	/* wait for thrashing page */
+	u64 thrashing_start;	//处理页抖动（thrashing）操作的开始时间
+	u64 thrashing_delay;	//累计页抖动操作的延迟时间
 
-	u64 compact_start;
-	u64 compact_delay;	/* wait for memory compact */
+	u64 compact_start;	//内存压缩（compaction）操作的开始时间
+	u64 compact_delay;	//累计内存压缩操作的延迟时间
 
-	u64 wpcopy_start;
-	u64 wpcopy_delay;	/* wait for write-protect copy */
+	u64 wpcopy_start;	//写保护复制（write-protect copy）操作的开始时间
+	u64 wpcopy_delay;	//累计写保护复制操作的延迟时间
 
-	u64 irq_delay;	/* wait for IRQ/SOFTIRQ */
+	u64 irq_delay;		//中断（IRQ/SOFTIRQ）处理的延迟时间
 
-	u32 freepages_count;	/* total count of memory reclaim */
-	u32 thrashing_count;	/* total count of thrash waits */
-	u32 compact_count;	/* total count of memory compact */
-	u32 wpcopy_count;	/* total count of write-protect copy */
-	u32 irq_count;	/* total count of IRQ/SOFTIRQ */
+	u32 freepages_count;	//内存回收操作的总次数
+	u32 thrashing_count;	//页抖动等待操作的总次数
+	u32 compact_count;	//内存压缩操作的总次数
+	u32 wpcopy_count;	//写保护复制操作的总次数
+	u32 irq_count;		//中断（IRQ/SOFTIRQ）处理的总次数
 };
 #endif
 

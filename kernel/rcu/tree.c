@@ -5280,24 +5280,24 @@ early_initcall(rcu_spawn_gp_kthread);
  * A later core_initcall() rcu_set_runtime_mode() will switch to full
  * runtime RCU functionality.
  */
-void rcu_scheduler_starting(void)
+void rcu_scheduler_starting(void)//用于在系统启动时初始化 RCU 调度器的状态
 {
 	unsigned long flags;
-	struct rcu_node *rnp;
+	struct rcu_node *rnp;//定义指向 RCU 节点结构体的指针 rnp
 
-	WARN_ON(num_online_cpus() != 1);
-	WARN_ON(nr_context_switches() > 0);
-	rcu_test_sync_prims();
+	WARN_ON(num_online_cpus() != 1);//如果在线 CPU 的数量不是 1，表示 RCU 调度器在不正确的状态下启动
+	WARN_ON(nr_context_switches() > 0);//如果已有上下文切换发生，表示 RCU 调度器在不正确的状态下启动
+	rcu_test_sync_prims();//测试 RCU 的同步原语，确保 RCU 的基础功能正常
 
-	// Fix up the ->gp_seq counters.
-	local_irq_save(flags);
-	rcu_for_each_node_breadth_first(rnp)
-		rnp->gp_seq_needed = rnp->gp_seq = rcu_state.gp_seq;
-	local_irq_restore(flags);
+	// 修复所有 RCU 节点的 ->gp_seq 计数器
+	local_irq_save(flags);//保存中断状态并禁用中断
+	rcu_for_each_node_breadth_first(rnp)//使用广度优先遍历所有 RCU 节点
+		rnp->gp_seq_needed = rnp->gp_seq = rcu_state.gp_seq;//将每个节点的 gp_seq_needed 和 gp_seq 设置为全局的 gp_seq
+	local_irq_restore(flags);//恢复中断状态
 
-	// Switch out of early boot mode.
-	rcu_scheduler_active = RCU_SCHEDULER_INIT;
-	rcu_test_sync_prims();
+	// 切换出早期启动模式
+	rcu_scheduler_active = RCU_SCHEDULER_INIT;//更新 RCU 调度器的状态为初始化完成
+	rcu_test_sync_prims();//再次测试 RCU 的同步原语，确保 RCU 的正常工作
 }
 
 /*

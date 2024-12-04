@@ -16,10 +16,10 @@
 #include <linux/gfp.h>
 #include <linux/percpu.h>
 
-struct idr {
-	struct radix_tree_root	idr_rt;
-	unsigned int		idr_base;
-	unsigned int		idr_next;
+struct idr {//用于管理 ID 到对象的映射的数据结构，它基于基数树（radix_tree_root）实现
+	struct radix_tree_root	idr_rt;//基数树的根节点，基数树是一种高效的数据结构，支持快速的查找、插入和删除操作。在 idr 中，基数树用于存储从 ID 到对象的映射关系。
+	unsigned int		idr_base;//ID 的基值。它决定了ID分配的起始值，可以用于调整 ID 范围
+	unsigned int		idr_next;//保存下一个可以分配的ID值。它用于记录当前可用的最小 ID，以确保在分配 ID 时不会出现冲突，从而保证 ID 的唯一性。
 };
 
 /*

@@ -45,76 +45,76 @@ int riscv_of_processor_hartid(struct device_node *node, unsigned long *hart)
 
 	return 0;
 }
-
+/*RISC-V 架构的早期处理器 hart ID 初始化函数*/
 int __init riscv_early_of_processor_hartid(struct device_node *node, unsigned long *hart)
 {
-	const char *isa;
+	const char *isa;//指向指令集架构（ISA）字符串的指针
 
-	if (!of_device_is_compatible(node, "riscv")) {
-		pr_warn("Found incompatible CPU\n");
+	if (!of_device_is_compatible(node, "riscv")) {//检查设备节点是否与 "riscv" 兼容，判断处理器是否符合 RISC-V 规范
+		pr_warn("Found incompatible CPU\n");//如果设备节点不兼容 RISC-V，打印警告信息，表示找到不兼容的 CPU
+		return -ENODEV;// 返回 -ENODEV，表示设备不可用
+	}
+
+	*hart = (unsigned long)of_get_cpu_hwid(node, 0);// 从设备树节点中获取 CPU 的硬件 ID（hart ID），并将其存储到 hart 指针所指的地址中
+	if (*hart == ~0UL) {//检查获取的 hart ID 是否为无效值（~0UL 表示无效）
+		pr_warn("Found CPU without hart ID\n");// 如果 hart ID 无效，打印警告信息，表示找到一个没有 hart ID 的 CPU
+		return -ENODEV;//返回 -ENODEV，表示设备不可用
+	}
+
+	if (!of_device_is_available(node)) {//检查设备节点是否被标记为可用
+		pr_info("CPU with hartid=%lu is not available\n", *hart);//如果设备节点不可用，打印信息，包含该处理器的 hart ID
+		return -ENODEV;//返回 -ENODEV，表示设备不可用
+	}
+
+	if (of_property_read_string(node, "riscv,isa-base", &isa))//尝试从设备节点中读取 "riscv,isa-base" 属性，以获取处理器的指令集基本信息
+		goto old_interface;//如果无法读取到该属性，跳转到旧接口处理逻辑
+
+	if (IS_ENABLED(CONFIG_32BIT) && strncasecmp(isa, "rv32i", 5)) {//如果系统配置为 32 位（CONFIG_32BIT），但 ISA 不以 "rv32i" 开头
+		pr_warn("CPU with hartid=%lu does not support rv32i", *hart);// 打印警告信息，表示该处理器不支持 rv32i 指令集
 		return -ENODEV;
 	}
 
-	*hart = (unsigned long)of_get_cpu_hwid(node, 0);
-	if (*hart == ~0UL) {
-		pr_warn("Found CPU without hart ID\n");
-		return -ENODEV;
+	if (IS_ENABLED(CONFIG_64BIT) && strncasecmp(isa, "rv64i", 5)) {//如果系统配置为 64 位（CONFIG_64BIT），但 ISA 不以 "rv64i" 开头
+		pr_warn("CPU with hartid=%lu does not support rv64i", *hart);//打印警告信息，表示该处理器不支持 rv64i 指令集
+		return -ENODEV;//返回 -ENODEV，表示设备不可用
 	}
 
-	if (!of_device_is_available(node)) {
-		pr_info("CPU with hartid=%lu is not available\n", *hart);
-		return -ENODEV;
+	if (!of_property_present(node, "riscv,isa-extensions"))//检查设备节点中是否存在 "riscv,isa-extensions" 属性，表示该处理器的扩展指令集
+		return -ENODEV;// 如果属性不存在，返回 -ENODEV，表示设备不可用
+
+	if (of_property_match_string(node, "riscv,isa-extensions", "i") < 0 ||//检查设备节点的 "riscv,isa-extensions" 属性中是否包含 "i" 扩展指令集
+	    of_property_match_string(node, "riscv,isa-extensions", "m") < 0 ||//检查设备节点的 "riscv,isa-extensions" 属性中是否包含 "m" 扩展指令集
+	    of_property_match_string(node, "riscv,isa-extensions", "a") < 0) {//检查设备节点的 "riscv,isa-extensions" 属性中是否包含 "a" 扩展指令集
+		pr_warn("CPU with hartid=%lu does not support ima", *hart);//如果 "i", "m", "a" 其中之一缺失，打印警告信息，表示处理器不支持完整的 "ima" 指令集扩展
+		return -ENODEV;//返回 -ENODEV，表示设备不可用
 	}
 
-	if (of_property_read_string(node, "riscv,isa-base", &isa))
-		goto old_interface;
+	return 0;//所有检查通过，返回 0，表示处理器初始化成功
 
-	if (IS_ENABLED(CONFIG_32BIT) && strncasecmp(isa, "rv32i", 5)) {
-		pr_warn("CPU with hartid=%lu does not support rv32i", *hart);
-		return -ENODEV;
-	}
-
-	if (IS_ENABLED(CONFIG_64BIT) && strncasecmp(isa, "rv64i", 5)) {
-		pr_warn("CPU with hartid=%lu does not support rv64i", *hart);
-		return -ENODEV;
-	}
-
-	if (!of_property_present(node, "riscv,isa-extensions"))
-		return -ENODEV;
-
-	if (of_property_match_string(node, "riscv,isa-extensions", "i") < 0 ||
-	    of_property_match_string(node, "riscv,isa-extensions", "m") < 0 ||
-	    of_property_match_string(node, "riscv,isa-extensions", "a") < 0) {
-		pr_warn("CPU with hartid=%lu does not support ima", *hart);
-		return -ENODEV;
-	}
-
-	return 0;
-
-old_interface:
-	if (!riscv_isa_fallback) {
+old_interface://旧接口处理逻辑标签
+	if (!riscv_isa_fallback) {//如果没有启用旧接口解析功能（riscv_isa_fallback 为 false）
 		pr_warn("CPU with hartid=%lu is invalid: this kernel does not parse \"riscv,isa\"",
-			*hart);
-		return -ENODEV;
+			*hart);//打印警告信息，表示该处理器无效，因为内核不支持解析旧的 "riscv,isa" 属性
+		return -ENODEV;//返回 -ENODEV，表示设备不可用
 	}
 
-	if (of_property_read_string(node, "riscv,isa", &isa)) {
+	if (of_property_read_string(node, "riscv,isa", &isa)) {//尝试读取设备节点中的 "riscv,isa" 属性
 		pr_warn("CPU with hartid=%lu has no \"riscv,isa-base\" or \"riscv,isa\" property\n",
-			*hart);
+			*hart);//如果未找到属性，打印警告信息，表示处理器没有 "riscv,isa-base" 或 "riscv,isa" 属性
 		return -ENODEV;
 	}
 
-	if (IS_ENABLED(CONFIG_32BIT) && strncasecmp(isa, "rv32ima", 7)) {
-		pr_warn("CPU with hartid=%lu does not support rv32ima", *hart);
+	if (IS_ENABLED(CONFIG_32BIT) && strncasecmp(isa, "rv32ima", 7)) {//如果系统配置为 32 位，但 ISA 不以 "rv32ima" 开头，则不支持 RV32IMA 指令集
+		pr_warn("CPU with hartid=%lu does not support rv32ima", *hart);//打印警告信息，表示处理器不支持 rv32ima 指令集
+		return -ENODEV;// 返回 -ENODEV，表示设备不可用
+	}
+
+	if (IS_ENABLED(CONFIG_64BIT) && strncasecmp(isa, "rv64ima", 7)) {//如果系统配置为 64 位，但 ISA 不以 "rv64ima" 开头，则不支持 RV64IMA 指令集
+		pr_warn("CPU with hartid=%lu does not support rv64ima", *hart);//打印警告信息，表示处理器不支持 rv64ima 指令集
 		return -ENODEV;
 	}
 
-	if (IS_ENABLED(CONFIG_64BIT) && strncasecmp(isa, "rv64ima", 7)) {
-		pr_warn("CPU with hartid=%lu does not support rv64ima", *hart);
-		return -ENODEV;
-	}
-
-	return 0;
+	return 0;//所有检查通过，返回 0，表示处理器初始化成功
 }
 
 /*
