@@ -2596,20 +2596,20 @@ int __init sched_init_domains(const struct cpumask *cpu_map)
 {
 	int err;
 
-	zalloc_cpumask_var(&sched_domains_tmpmask, GFP_KERNEL);
-	zalloc_cpumask_var(&sched_domains_tmpmask2, GFP_KERNEL);
-	zalloc_cpumask_var(&fallback_doms, GFP_KERNEL);
+	zalloc_cpumask_var(&sched_domains_tmpmask, GFP_KERNEL);//分配调度域临时掩码
+	zalloc_cpumask_var(&sched_domains_tmpmask2, GFP_KERNEL);//分配第二个调度域临时掩码
+	zalloc_cpumask_var(&fallback_doms, GFP_KERNEL);//分配备用调度域掩码
 
-	arch_update_cpu_topology();
-	asym_cpu_capacity_scan();
-	ndoms_cur = 1;
-	doms_cur = alloc_sched_domains(ndoms_cur);
+	arch_update_cpu_topology();//更新CPU拓扑结构（架构相关）
+	asym_cpu_capacity_scan();//扫描异构CPU的计算能力（如大核小核的能力差异）
+	ndoms_cur = 1;//设置当前调度域数量为1
+	doms_cur = alloc_sched_domains(ndoms_cur);//分配调度域数组，包含1个调度域
 	if (!doms_cur)
-		doms_cur = &fallback_doms;
-	cpumask_and(doms_cur[0], cpu_map, housekeeping_cpumask(HK_TYPE_DOMAIN));
-	err = build_sched_domains(doms_cur[0], NULL);
+		doms_cur = &fallback_doms;//分配失败，使用备用调度域掩码
+	cpumask_and(doms_cur[0], cpu_map, housekeeping_cpumask(HK_TYPE_DOMAIN));//将 `cpu_map` 和 housekeeping 掩码求交集，设置为第一个调度域
+	err = build_sched_domains(doms_cur[0], NULL);//构建调度域，返回构建结果
 
-	return err;
+	return err;//返回错误码，0表示成功
 }
 
 /*

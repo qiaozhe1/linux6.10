@@ -2122,31 +2122,31 @@ void __init init_mm_internals(void)
 {
 	int ret __maybe_unused;
 
-	mm_percpu_wq = alloc_workqueue("mm_percpu_wq", WQ_MEM_RECLAIM, 0);
+	mm_percpu_wq = alloc_workqueue("mm_percpu_wq", WQ_MEM_RECLAIM, 0);//分配一个用于内存管理的 per-CPU 工作队列
 
 #ifdef CONFIG_SMP
 	ret = cpuhp_setup_state_nocalls(CPUHP_MM_VMSTAT_DEAD, "mm/vmstat:dead",
-					NULL, vmstat_cpu_dead);
+					NULL, vmstat_cpu_dead);//注册 CPU 热插拔 "dead" 状态的回调函数
 	if (ret < 0)
-		pr_err("vmstat: failed to register 'dead' hotplug state\n");
+		pr_err("vmstat: failed to register 'dead' hotplug state\n");//注册失败，输出错误信息
 
 	ret = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN, "mm/vmstat:online",
 					vmstat_cpu_online,
-					vmstat_cpu_down_prep);
+					vmstat_cpu_down_prep);//注册 CPU 热插拔 "online" 状态的回调函数
 	if (ret < 0)
-		pr_err("vmstat: failed to register 'online' hotplug state\n");
+		pr_err("vmstat: failed to register 'online' hotplug state\n");//注册失败，输出错误信息
 
-	cpus_read_lock();
-	init_cpu_node_state();
-	cpus_read_unlock();
+	cpus_read_lock();//锁定 CPU 数据结构以防止并发修改
+	init_cpu_node_state();//初始化每个 CPU 的节点状态
+	cpus_read_unlock();//解锁 CPU 数据结构
 
-	start_shepherd_timer();
+	start_shepherd_timer();//启动管理定时器
 #endif
 #ifdef CONFIG_PROC_FS
-	proc_create_seq("buddyinfo", 0444, NULL, &fragmentation_op);
-	proc_create_seq("pagetypeinfo", 0400, NULL, &pagetypeinfo_op);
-	proc_create_seq("vmstat", 0444, NULL, &vmstat_op);
-	proc_create_seq("zoneinfo", 0444, NULL, &zoneinfo_op);
+	proc_create_seq("buddyinfo", 0444, NULL, &fragmentation_op);//创建 /proc/buddyinfo 文件，权限为只读
+	proc_create_seq("pagetypeinfo", 0400, NULL, &pagetypeinfo_op);//创建 /proc/pagetypeinfo 文件，权限为只读
+	proc_create_seq("vmstat", 0444, NULL, &vmstat_op);//创建 /proc/vmstat 文件，权限为只读
+	proc_create_seq("zoneinfo", 0444, NULL, &zoneinfo_op);//创建 /proc/zoneinfo 文件，权限为只读
 #endif
 }
 

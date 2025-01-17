@@ -6891,9 +6891,9 @@ asmlinkage __visible void __sched schedule_user(void)
  */
 void __sched schedule_preempt_disabled(void)
 {
-	sched_preempt_enable_no_resched();
-	schedule();
-	preempt_disable();
+	sched_preempt_enable_no_resched();//允许抢占，但不会触发立即重新调度
+	schedule();//调用调度函数，切换当前任务
+	preempt_disable();//禁用抢占，防止抢占再次发生
 }
 
 #ifdef CONFIG_PREEMPT_RT
@@ -9866,29 +9866,31 @@ int sched_cpu_dying(unsigned int cpu)
 }
 #endif
 
-void __init sched_init_smp(void)
+void __init sched_init_smp(void)//初始化 SMP（对称多处理器）调度系统
 {
-	sched_init_numa(NUMA_NO_NODE);
+	sched_init_numa(NUMA_NO_NODE);//初始化 NUMA（非一致性内存访问）调度节点，默认节点为 NUMA_NO_NODE
 
 	/*
 	 * There's no userspace yet to cause hotplug operations; hence all the
 	 * CPU masks are stable and all blatant races in the below code cannot
 	 * happen.
+	 * 由于此时还没有用户空间进程运行，因此不会发生 CPU 热插拔操作；这意味着所
+	 * 有CPU掩码是稳定的，下面的代码不会发生并发问题。
 	 */
-	mutex_lock(&sched_domains_mutex);
-	sched_init_domains(cpu_active_mask);
-	mutex_unlock(&sched_domains_mutex);
+	mutex_lock(&sched_domains_mutex);//获取调度域的互斥锁，确保调度域初始化的原子性
+	sched_init_domains(cpu_active_mask);//初始化调度域，传入参数为当前活跃 CPU 掩码
+	mutex_unlock(&sched_domains_mutex);//释放调度域互斥锁
 
-	/* Move init over to a non-isolated CPU */
-	if (set_cpus_allowed_ptr(current, housekeeping_cpumask(HK_TYPE_DOMAIN)) < 0)
-		BUG();
-	current->flags &= ~PF_NO_SETAFFINITY;
-	sched_init_granularity();
+	/* 将 init 进程绑定到非隔离的 CPU 上 */
+	if (set_cpus_allowed_ptr(current, housekeeping_cpumask(HK_TYPE_DOMAIN)) < 0)//设置当前进程允许运行的 CPU 掩码
+		BUG();//如果设置失败，触发内核 BUG
+	current->flags &= ~PF_NO_SETAFFINITY;//取消禁止设置CPU亲和性标志位
+	sched_init_granularity();//初始化调度粒度相关参数
 
-	init_sched_rt_class();
-	init_sched_dl_class();
+	init_sched_rt_class();//初始化实时调度类
+	init_sched_dl_class();//初始化deadline调度类
 
-	sched_smp_initialized = true;
+	sched_smp_initialized = true;//设置调度系统的SMP初始化标志为true
 }
 
 static int __init migration_init(void)

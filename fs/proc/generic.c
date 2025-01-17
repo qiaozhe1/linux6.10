@@ -616,15 +616,15 @@ struct proc_dir_entry *proc_create_seq_private(const char *name, umode_t mode,
 		struct proc_dir_entry *parent, const struct seq_operations *ops,
 		unsigned int state_size, void *data)
 {
-	struct proc_dir_entry *p;
+	struct proc_dir_entry *p;//定义一个 proc 目录项指针
 
-	p = proc_create_reg(name, mode, &parent, data);
+	p = proc_create_reg(name, mode, &parent, data);//创建一个常规的 proc 文件
 	if (!p)
 		return NULL;
-	p->proc_ops = &proc_seq_ops;
-	p->seq_ops = ops;
-	p->state_size = state_size;
-	return proc_register(parent, p);
+	p->proc_ops = &proc_seq_ops;//设置 proc 文件的操作函数为 proc_seq_ops
+	p->seq_ops = ops;//设置序列操作的结构体，指向传入的 ops
+	p->state_size = state_size;//设置状态大小，用于序列操作的数据管理
+	return proc_register(parent, p);//注册 proc 文件并返回注册后的指针
 }
 EXPORT_SYMBOL(proc_create_seq_private);
 

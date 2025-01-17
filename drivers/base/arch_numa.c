@@ -63,15 +63,15 @@ EXPORT_SYMBOL(cpumask_of_node);
 
 static void numa_update_cpu(unsigned int cpu, bool remove)
 {
-	int nid = cpu_to_node(cpu);
+	int nid = cpu_to_node(cpu);//获取与指定 CPU 关联的 NUMA 节点 ID
 
-	if (nid == NUMA_NO_NODE)
-		return;
+	if (nid == NUMA_NO_NODE)//如果 CPU 未关联任何 NUMA 节点
+		return;//直接返回
 
-	if (remove)
-		cpumask_clear_cpu(cpu, node_to_cpumask_map[nid]);
+	if (remove)//如果需要从 NUMA 节点中移除该 CPU
+		cpumask_clear_cpu(cpu, node_to_cpumask_map[nid]);//从 NUMA 节点的 CPU 掩码中清除该 CPU
 	else
-		cpumask_set_cpu(cpu, node_to_cpumask_map[nid]);
+		cpumask_set_cpu(cpu, node_to_cpumask_map[nid]);//将 CPU 添加到 NUMA 节点的 CPU 掩码中
 }
 
 void numa_add_cpu(unsigned int cpu)

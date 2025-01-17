@@ -2465,13 +2465,13 @@ static void switched_from_rt(struct rq *rq, struct task_struct *p)
 	rt_queue_pull_task(rq);
 }
 
-void __init init_sched_rt_class(void)
+void __init init_sched_rt_class(void)//初始化实时调度类
 {
 	unsigned int i;
 
-	for_each_possible_cpu(i) {
+	for_each_possible_cpu(i) {//遍历每一个可能的 CPU
 		zalloc_cpumask_var_node(&per_cpu(local_cpu_mask, i),
-					GFP_KERNEL, cpu_to_node(i));
+					GFP_KERNEL, cpu_to_node(i));//为每个 CPU 分配 `cpumask` 变量内存空间
 	}
 }
 #endif /* CONFIG_SMP */

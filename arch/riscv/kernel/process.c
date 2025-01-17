@@ -192,41 +192,42 @@ int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src)
 	return 0;
 }
 
+/* 用于创建新线程的上下文，并为新线程初始化相关的寄存器状态。*/
 int copy_thread(struct task_struct *p, const struct kernel_clone_args *args)
 {
-	unsigned long clone_flags = args->flags;
-	unsigned long usp = args->stack;
-	unsigned long tls = args->tls;
-	struct pt_regs *childregs = task_pt_regs(p);
+	unsigned long clone_flags = args->flags;//克隆标志，决定新线程的属性
+	unsigned long usp = args->stack;//用户栈指针地址
+	unsigned long tls = args->tls;// 线程本地存储的地址
+	struct pt_regs *childregs = task_pt_regs(p);//获取新线程的 pt_regs 结构体指针
 
-	memset(&p->thread.s, 0, sizeof(p->thread.s));
+	memset(&p->thread.s, 0, sizeof(p->thread.s)); //清零线程上下文结构体的寄存器状态部分
 
-	/* p->thread holds context to be restored by __switch_to() */
-	if (unlikely(args->fn)) {
-		/* Kernel thread */
-		memset(childregs, 0, sizeof(struct pt_regs));
-		/* Supervisor/Machine, irqs on: */
+	/* p->thread 保存上下文信息，将由 __switch_to() 恢复 */
+	if (unlikely(args->fn)) { //如果传入了函数指针，则为内核线程
+		/* 内核线程 */
+		memset(childregs, 0, sizeof(struct pt_regs));//清空寄存器内容
+		/* 设置状态寄存器，启动时开启中断 */
 		childregs->status = SR_PP | SR_PIE;
 
-		p->thread.s[0] = (unsigned long)args->fn;
-		p->thread.s[1] = (unsigned long)args->fn_arg;
+		p->thread.s[0] = (unsigned long)args->fn;//内核线程的入口函数
+		p->thread.s[1] = (unsigned long)args->fn_arg;//传递给函数的参数
 	} else {
-		*childregs = *(current_pt_regs());
-		/* Turn off status.VS */
+		*childregs = *(current_pt_regs());//复制父进程的寄存器状态
+		/* 关闭状态寄存器中的矢量扩展标志 */
 		riscv_v_vstate_off(childregs);
-		if (usp) /* User fork */
-			childregs->sp = usp;
-		if (clone_flags & CLONE_SETTLS)
-			childregs->tp = tls;
-		childregs->a0 = 0; /* Return value of fork() */
-		p->thread.s[0] = 0;
+		if (usp) /* 如果用户指定了新栈指针 */
+			childregs->sp = usp;//设置用户栈指针
+		if (clone_flags & CLONE_SETTLS)//如果设置了TLS标志
+			childregs->tp = tls;//设置线程本地存储寄存器
+		childregs->a0 = 0; //fork() 调用返回值，新线程返回 0
+		p->thread.s[0] = 0;//清空线程上下文的第一个寄存器
 	}
-	p->thread.riscv_v_flags = 0;
-	if (has_vector())
-		riscv_v_thread_alloc(p);
-	p->thread.ra = (unsigned long)ret_from_fork;
-	p->thread.sp = (unsigned long)childregs; /* kernel sp */
-	return 0;
+	p->thread.riscv_v_flags = 0;//重置 RISC-V 矢量扩展相关标志
+	if (has_vector())//如果支持矢量扩展
+		riscv_v_thread_alloc(p);//为新线程分配矢量寄存器上下文
+	p->thread.ra = (unsigned long)ret_from_fork;//设置返回地址为 ret_from_fork
+	p->thread.sp = (unsigned long)childregs; // 设置内核栈指针为 childregs 的地址
+	return 0;//返回 0 表示线程复制成功
 }
 
 void __init arch_task_cache_init(void)

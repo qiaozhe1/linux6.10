@@ -423,11 +423,11 @@ EXPORT_SYMBOL_GPL(play_idle_precise);
 
 void cpu_startup_entry(enum cpuhp_state state)
 {
-	current->flags |= PF_IDLE;
-	arch_cpu_idle_prepare();
-	cpuhp_online_idle(state);
+	current->flags |= PF_IDLE;//将当前任务标记为“空闲”任务
+	arch_cpu_idle_prepare();//调用架构相关的 CPU 空闲准备函数
+	cpuhp_online_idle(state);//通知 CPU 热插拔子系统该 CPU 已上线并处于空闲状态
 	while (1)
-		do_idle();
+		do_idle();//执行 CPU 空闲操作
 }
 
 /*

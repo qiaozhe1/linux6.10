@@ -347,7 +347,7 @@ bool current_is_async(void)
 }
 EXPORT_SYMBOL_GPL(current_is_async);
 
-void __init async_init(void)
+void __init async_init(void)// 异步工作队列初始化函数
 {
 	/*
 	 * Async can schedule a number of interdependent work items. However,
@@ -355,8 +355,12 @@ void __init async_init(void)
 	 * work items. The default min_active of 8 isn't sufficient for async
 	 * and can lead to stalls. Let's use a dedicated workqueue with raised
 	 * min_active.
+	 * 异步工作队列可以调度多个相互依赖的工作项。然而，无边界（unbound）工作
+	 * 队列只能同时处理最多min_active个相互依赖的工作项。默认的min_active值为
+	 * 8，这对于异步任务来说不够，可能导致任务停滞。因此，这里创建一个专用的
+	 * 工作队列，并提升 `min_active` 的值。
 	 */
-	async_wq = alloc_workqueue("async", WQ_UNBOUND, 0);
+	async_wq = alloc_workqueue("async", WQ_UNBOUND, 0);//分配无边界的异步工作队列
 	BUG_ON(!async_wq);
-	workqueue_set_min_active(async_wq, WQ_DFL_ACTIVE);
+	workqueue_set_min_active(async_wq, WQ_DFL_ACTIVE);//设置该工作队列的最小活动worker 数量
 }

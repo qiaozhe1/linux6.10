@@ -38,16 +38,16 @@ struct task_struct *kthreadd_task;
 struct kthread_create_info
 {
 	/* Information passed to kthread() from kthreadd. */
-	char *full_name;
-	int (*threadfn)(void *data);
-	void *data;
-	int node;
+	char *full_name;//线程的完整名称，使用格式化字符串生成
+	int (*threadfn)(void *data);//线程的主函数
+	void *data;//传递给线程函数的参数
+	int node;//NUMA 节点编号，-1 表示未指定节点
 
 	/* Result passed back to kthread_create() from kthreadd. */
-	struct task_struct *result;
-	struct completion *done;
+	struct task_struct *result;//创建的线程任务结构指针
+	struct completion *done;//同步机制，用于通知线程创建完成
 
-	struct list_head list;
+	struct list_head list;//链表节点，用于将创建请求加入全局队列
 };
 
 struct kthread {
@@ -403,25 +403,25 @@ int tsk_fork_get_node(struct task_struct *tsk)
 
 static void create_kthread(struct kthread_create_info *create)
 {
-	int pid;
+	int pid;//用于存储新创建线程的 PID
 
 #ifdef CONFIG_NUMA
-	current->pref_node_fork = create->node;
+	current->pref_node_fork = create->node;//设置 NUMA 节点偏好，确保新线程在特定节点上创建
 #endif
-	/* We want our own signal handler (we take no signals by default). */
+	/* 设置信号处理上下文，使新线程使用自己的信号处理程序（默认不接收信号） */
 	pid = kernel_thread(kthread, create, create->full_name,
-			    CLONE_FS | CLONE_FILES | SIGCHLD);
-	if (pid < 0) {
-		/* Release the structure when caller killed by a fatal signal. */
-		struct completion *done = xchg(&create->done, NULL);
+			    CLONE_FS | CLONE_FILES | SIGCHLD);//创建新内核线程，并设置CLONE标志
+	if (pid < 0) {//检查线程创建是否失败
+		/* 如果线程创建请求因致命信号中断，释放相关资源 */
+		struct completion *done = xchg(&create->done, NULL);//交换 `done` 指针，防止重复访问
 
-		kfree(create->full_name);
-		if (!done) {
+		kfree(create->full_name);//释放线程名称的内存
+		if (!done) {//如果 `done` 为空，释放 `create` 结构体本身
 			kfree(create);
-			return;
+			return;//直接返回，退出函数
 		}
-		create->result = ERR_PTR(pid);
-		complete(done);
+		create->result = ERR_PTR(pid);//将错误指针存入 `result` 字段，供调用者检查
+		complete(done);//通知调用者创建已完成（即使失败）
 	}
 }
 
@@ -431,51 +431,54 @@ struct task_struct *__kthread_create_on_node(int (*threadfn)(void *data),
 						    const char namefmt[],
 						    va_list args)
 {
-	DECLARE_COMPLETION_ONSTACK(done);
-	struct task_struct *task;
+	DECLARE_COMPLETION_ONSTACK(done);//在栈上声明一个完成变量，用于同步
+	struct task_struct *task;//内核线程的任务结构指针
 	struct kthread_create_info *create = kmalloc(sizeof(*create),
-						     GFP_KERNEL);
+						     GFP_KERNEL);//为线程创建信息分配内存
 
 	if (!create)
-		return ERR_PTR(-ENOMEM);
-	create->threadfn = threadfn;
-	create->data = data;
-	create->node = node;
-	create->done = &done;
-	create->full_name = kvasprintf(GFP_KERNEL, namefmt, args);
+		return ERR_PTR(-ENOMEM);//如果失败，返回内存不足错误指针
+	create->threadfn = threadfn;//设置线程函数
+	create->data = data;//设置传递给线程函数的数据
+	create->node = node;// 设置NUMA节点
+	create->done = &done;//关联完成变量
+	create->full_name = kvasprintf(GFP_KERNEL, namefmt, args);//格式化线程名称并分配内存
 	if (!create->full_name) {
-		task = ERR_PTR(-ENOMEM);
+		task = ERR_PTR(-ENOMEM);//如果失败，返回内存不足错误指针
 		goto free_create;
 	}
 
-	spin_lock(&kthread_create_lock);
-	list_add_tail(&create->list, &kthread_create_list);
-	spin_unlock(&kthread_create_lock);
+	spin_lock(&kthread_create_lock);//获取线程创建的全局自旋锁
+	list_add_tail(&create->list, &kthread_create_list);//将创建信息添加到全局创建列表
+	spin_unlock(&kthread_create_lock);//释放全局自旋锁
 
-	wake_up_process(kthreadd_task);
+	wake_up_process(kthreadd_task);//唤醒 kthreadd 线程以处理创建请求
 	/*
 	 * Wait for completion in killable state, for I might be chosen by
 	 * the OOM killer while kthreadd is trying to allocate memory for
 	 * new kernel thread.
+	 * 在 killable 状态下等待完成，以防 OOM killer 在 kthreadd为新线程分配内存时选择当前线程。
 	 */
-	if (unlikely(wait_for_completion_killable(&done))) {
+	if (unlikely(wait_for_completion_killable(&done))) {//等待完成，如果被信号中断
 		/*
 		 * If I was killed by a fatal signal before kthreadd (or new
 		 * kernel thread) calls complete(), leave the cleanup of this
 		 * structure to that thread.
+		 * 如果在kthreadd或新线程调用complete()之前被杀死，将清理工作交给kthreadd或新线程。
 		 */
-		if (xchg(&create->done, NULL))
-			return ERR_PTR(-EINTR);
+		if (xchg(&create->done, NULL))//清除完成变量，避免多次完成
+			return ERR_PTR(-EINTR);//返回被信号中断的错误指针
 		/*
 		 * kthreadd (or new kernel thread) will call complete()
 		 * shortly.
+		 * kthreadd 或新线程将很快调用 complete()。
 		 */
-		wait_for_completion(&done);
+		wait_for_completion(&done);//再次等待完成
 	}
-	task = create->result;
+	task = create->result;//获取创建的线程任务结构
 free_create:
-	kfree(create);
-	return task;
+	kfree(create);//释放创建信息的内存
+	return task;//返回创建的线程任务结构
 }
 
 /**
@@ -734,39 +737,39 @@ int kthread_stop_put(struct task_struct *k)
 }
 EXPORT_SYMBOL(kthread_stop_put);
 
-int kthreadd(void *unused)
+int kthreadd(void *unused)//内核线程管理器线程主函数,用于监听线程创建请求并生成其他内核线程
 {
-	struct task_struct *tsk = current;
+	struct task_struct *tsk = current;//获取当前线程的 task_struct
 
-	/* Setup a clean context for our children to inherit. */
-	set_task_comm(tsk, "kthreadd");
-	ignore_signals(tsk);
-	set_cpus_allowed_ptr(tsk, housekeeping_cpumask(HK_TYPE_KTHREAD));
-	set_mems_allowed(node_states[N_MEMORY]);
+	/* 设置线程的上下文环境，供其创建的子线程继承 */
+	set_task_comm(tsk, "kthreadd");//设置线程名称为 kthreadd
+	ignore_signals(tsk);//忽略所有信号，防止被意外终止
+	set_cpus_allowed_ptr(tsk, housekeeping_cpumask(HK_TYPE_KTHREAD));//将线程绑定到 housekeeping CPU，以保证在特定 CPU 上运行
+	set_mems_allowed(node_states[N_MEMORY]);//设置线程允许访问的内存节点范围，确保线程能访问内存资源
 
-	current->flags |= PF_NOFREEZE;
-	cgroup_init_kthreadd();
+	current->flags |= PF_NOFREEZE;//设置不可冻结标志，确保该线程在系统冻结时仍然运行
+	cgroup_init_kthreadd();//初始化 cgroup，将 kthreadd 线程加入到适当的控制组中
 
-	for (;;) {
-		set_current_state(TASK_INTERRUPTIBLE);
-		if (list_empty(&kthread_create_list))
-			schedule();
-		__set_current_state(TASK_RUNNING);
+	for (;;) {//无限循环，负责监听创建请求并生成新线程
+		set_current_state(TASK_INTERRUPTIBLE);//将线程设置为可中断睡眠状态，等待新的任务请求
+		if (list_empty(&kthread_create_list))//检查线程创建请求列表是否为空
+			schedule();//让出 CPU 资源，使线程进入睡眠状态，等待唤醒
+		__set_current_state(TASK_RUNNING);//线程被唤醒后，设置为运行状态
 
-		spin_lock(&kthread_create_lock);
-		while (!list_empty(&kthread_create_list)) {
-			struct kthread_create_info *create;
+		spin_lock(&kthread_create_lock);//获取自旋锁，保护创建请求列表的访问
+		while (!list_empty(&kthread_create_list)) {//遍历创建请求列表，处理每个请求
+			struct kthread_create_info *create;//用于存储当前请求的信息结构体
 
 			create = list_entry(kthread_create_list.next,
-					    struct kthread_create_info, list);
-			list_del_init(&create->list);
-			spin_unlock(&kthread_create_lock);
+					    struct kthread_create_info, list);//获取列表中的第一个创建请求
+			list_del_init(&create->list);//将请求节点从列表中删除，并重新初始化节点
+			spin_unlock(&kthread_create_lock);//释放自旋锁，允许其他线程访问创建列表
 
-			create_kthread(create);
+			create_kthread(create);//调用函数处理当前请求，创建对应的内核线程
 
-			spin_lock(&kthread_create_lock);
+			spin_lock(&kthread_create_lock);//释放自旋锁，完成本轮请求处理
 		}
-		spin_unlock(&kthread_create_lock);
+		spin_unlock(&kthread_create_lock);//永远不会到达此处，因为 for 循环不会退出
 	}
 
 	return 0;
@@ -776,11 +779,11 @@ void __kthread_init_worker(struct kthread_worker *worker,
 				const char *name,
 				struct lock_class_key *key)
 {
-	memset(worker, 0, sizeof(struct kthread_worker));
-	raw_spin_lock_init(&worker->lock);
-	lockdep_set_class_and_name(&worker->lock, key, name);
-	INIT_LIST_HEAD(&worker->work_list);
-	INIT_LIST_HEAD(&worker->delayed_work_list);
+	memset(worker, 0, sizeof(struct kthread_worker));//清零工作者结构体以初始化所有字段
+	raw_spin_lock_init(&worker->lock);//初始化原始自旋锁，用于同步工作队列的操作
+	lockdep_set_class_and_name(&worker->lock, key, name);//为锁分配类和名称，用于锁依赖关系检测
+	INIT_LIST_HEAD(&worker->work_list);//初始化工作队列的链表头
+	INIT_LIST_HEAD(&worker->delayed_work_list);//初始化延迟工作队列的链表头
 }
 EXPORT_SYMBOL_GPL(__kthread_init_worker);
 
@@ -799,58 +802,58 @@ EXPORT_SYMBOL_GPL(__kthread_init_worker);
  * Also the works must not be handled by more than one worker at the same time,
  * see also kthread_queue_work().
  */
-int kthread_worker_fn(void *worker_ptr)
+int kthread_worker_fn(void *worker_ptr)//内核线程工作者的主函数,负责从工作列表中提取工作并调用相应的处理函数
 {
-	struct kthread_worker *worker = worker_ptr;
-	struct kthread_work *work;
+	struct kthread_worker *worker = worker_ptr;//获取传递的工作者结构体指针
+	struct kthread_work *work;//指向当前要处理的工作
 
 	/*
 	 * FIXME: Update the check and remove the assignment when all kthread
 	 * worker users are created using kthread_create_worker*() functions.
 	 */
-	WARN_ON(worker->task && worker->task != current);
-	worker->task = current;
+	WARN_ON(worker->task && worker->task != current);//检查当前线程是否已正确关联到工作者
+	worker->task = current;//将当前线程与工作者结构体关联
 
-	if (worker->flags & KTW_FREEZABLE)
-		set_freezable();
+	if (worker->flags & KTW_FREEZABLE)//如果工作者允许冻结
+		set_freezable();//设置当前线程为可冻结状态
 
 repeat:
-	set_current_state(TASK_INTERRUPTIBLE);	/* mb paired w/ kthread_stop */
+	set_current_state(TASK_INTERRUPTIBLE);//将线程设置为可中断睡眠状态
 
-	if (kthread_should_stop()) {
-		__set_current_state(TASK_RUNNING);
-		raw_spin_lock_irq(&worker->lock);
-		worker->task = NULL;
-		raw_spin_unlock_irq(&worker->lock);
-		return 0;
+	if (kthread_should_stop()) {//检查线程是否应该停止
+		__set_current_state(TASK_RUNNING);//将线程状态设置为运行状态
+		raw_spin_lock_irq(&worker->lock);//获取工作者的自旋锁
+		worker->task = NULL;//将工作者的任务指针清空
+		raw_spin_unlock_irq(&worker->lock);//释放自旋锁
+		return 0;//返回，结束线程执行
 	}
 
-	work = NULL;
-	raw_spin_lock_irq(&worker->lock);
-	if (!list_empty(&worker->work_list)) {
+	work = NULL;//初始化工作指针为空
+	raw_spin_lock_irq(&worker->lock);// 获取工作者的自旋锁
+	if (!list_empty(&worker->work_list)) {//如果工作列表非空
 		work = list_first_entry(&worker->work_list,
-					struct kthread_work, node);
-		list_del_init(&work->node);
+					struct kthread_work, node);//获取第一个工作
+		list_del_init(&work->node);//从列表中移除该工作，并重新初始化节点
 	}
-	worker->current_work = work;
-	raw_spin_unlock_irq(&worker->lock);
+	worker->current_work = work;//设置当前处理的工作
+	raw_spin_unlock_irq(&worker->lock);//释放自旋锁
 
-	if (work) {
-		kthread_work_func_t func = work->func;
-		__set_current_state(TASK_RUNNING);
-		trace_sched_kthread_work_execute_start(work);
-		work->func(work);
+	if (work) {//如果有工作需要处理
+		kthread_work_func_t func = work->func;//获取工作的处理函数
+		__set_current_state(TASK_RUNNING);//将线程状态设置为运行
+		trace_sched_kthread_work_execute_start(work);//记录工作开始执行的跟踪信息
+		work->func(work);//调用工作函数处理工作
 		/*
 		 * Avoid dereferencing work after this point.  The trace
 		 * event only cares about the address.
 		 */
-		trace_sched_kthread_work_execute_end(work, func);
-	} else if (!freezing(current))
-		schedule();
+		trace_sched_kthread_work_execute_end(work, func);// 记录工作执行结束的跟踪信息
+	} else if (!freezing(current))//如果没有工作且线程未被冻结
+		schedule();//调度线程，释放 CPU
 
-	try_to_freeze();
-	cond_resched();
-	goto repeat;
+	try_to_freeze();//检查并冻结线程（如果需要）
+	cond_resched();//检查是否需要主动调度
+	goto repeat;//继续循环，处理下一个工作
 }
 EXPORT_SYMBOL_GPL(kthread_worker_fn);
 
@@ -858,35 +861,35 @@ static __printf(3, 0) struct kthread_worker *
 __kthread_create_worker(int cpu, unsigned int flags,
 			const char namefmt[], va_list args)
 {
-	struct kthread_worker *worker;
-	struct task_struct *task;
-	int node = NUMA_NO_NODE;
+	struct kthread_worker *worker;//用于存储创建的工作者对象
+	struct task_struct *task;//用于存储关联的内核线程任务
+	int node = NUMA_NO_NODE;//默认未指定的 NUMA 节点
 
-	worker = kzalloc(sizeof(*worker), GFP_KERNEL);
+	worker = kzalloc(sizeof(*worker), GFP_KERNEL);//分配并清零工作者对象内存
 	if (!worker)
 		return ERR_PTR(-ENOMEM);
 
-	kthread_init_worker(worker);
+	kthread_init_worker(worker);//初始化工作者对象
 
 	if (cpu >= 0)
-		node = cpu_to_node(cpu);
+		node = cpu_to_node(cpu);//如果指定CPU,获取该 CPU 所属的 NUMA 节点
 
 	task = __kthread_create_on_node(kthread_worker_fn, worker,
-						node, namefmt, args);
+						node, namefmt, args);//创建并绑定到指定节点的内核工作者线程
 	if (IS_ERR(task))
-		goto fail_task;
+		goto fail_task;//如果失败，跳转到错误处理逻辑
 
 	if (cpu >= 0)
-		kthread_bind(task, cpu);
+		kthread_bind(task, cpu);//如果指定CPU,将线程绑定到指定的 CPU
 
-	worker->flags = flags;
-	worker->task = task;
-	wake_up_process(task);
-	return worker;
+	worker->flags = flags;//设置工作者的标志位
+	worker->task = task;//关联创建的内核线程任务
+	wake_up_process(task);//唤醒线程开始运行
+	return worker;//返回创建的工作者对象
 
 fail_task:
-	kfree(worker);
-	return ERR_CAST(task);
+	kfree(worker);//释放已分配的工作者对象内存
+	return ERR_CAST(task);//返回与错误任务指针关联的错误码
 }
 
 /**
@@ -901,12 +904,12 @@ fail_task:
 struct kthread_worker *
 kthread_create_worker(unsigned int flags, const char namefmt[], ...)
 {
-	struct kthread_worker *worker;
-	va_list args;
+	struct kthread_worker *worker;//用于存储创建的内核线程工作者指针
+	va_list args;//变参列表，用于格式化线程名称
 
-	va_start(args, namefmt);
-	worker = __kthread_create_worker(-1, flags, namefmt, args);
-	va_end(args);
+	va_start(args, namefmt);//初始化变参列表，开始处理可变参数
+	worker = __kthread_create_worker(-1, flags, namefmt, args);//调用底层函数创建工作者线程
+	va_end(args);// 结束变参处理
 
 	return worker;
 }

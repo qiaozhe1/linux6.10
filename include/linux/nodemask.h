@@ -396,18 +396,18 @@ static inline void __nodes_fold(nodemask_t *dstp, const nodemask_t *origp,
  * Bitmasks that are kept for all the nodes.
  */
 enum node_states {
-	N_POSSIBLE,		/* The node could become online at some point */
-	N_ONLINE,		/* The node is online */
-	N_NORMAL_MEMORY,	/* The node has regular memory */
+	N_POSSIBLE,		/* 节点可能上线，表示理论上存在的节点 */
+	N_ONLINE,		/* 当前处于在线状态的节点，表示可以被系统使用的节点 */
+	N_NORMAL_MEMORY,	/* 节点具有普通内存 */
 #ifdef CONFIG_HIGHMEM
-	N_HIGH_MEMORY,		/* The node has regular or high memory */
+	N_HIGH_MEMORY,		/* 节点具有普通或高端内存，仅在启用高内存时有效，否则等同于普通内存 */
 #else
-	N_HIGH_MEMORY = N_NORMAL_MEMORY,
+	N_HIGH_MEMORY = N_NORMAL_MEMORY,/*如果未启用高内存配置，将其视为普通内存*/
 #endif
-	N_MEMORY,		/* The node has memory(regular, high, movable) */
-	N_CPU,		/* The node has one or more cpus */
-	N_GENERIC_INITIATOR,	/* The node has one or more Generic Initiators */
-	NR_NODE_STATES
+	N_MEMORY,		/* 节点具有任何类型的内存，包括普通、高端或可移动内存 */
+	N_CPU,		/* 节点上配备了一个或多个 CPU */
+	N_GENERIC_INITIATOR,	/* 节点上有一个或多个通用启动器 */
+	NR_NODE_STATES		/* 表示节点状态的总数，用于数组大小或遍历上限 */
 };
 
 /*

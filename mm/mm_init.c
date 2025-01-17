@@ -1987,50 +1987,51 @@ static inline bool __init deferred_pfn_valid(unsigned long pfn)
 static void __init deferred_free_pages(unsigned long pfn,
 				       unsigned long end_pfn)
 {
-	unsigned long nr_free = 0;
+	unsigned long nr_free = 0;//记录连续可释放页的数量。
 
-	for (; pfn < end_pfn; pfn++) {
-		if (!deferred_pfn_valid(pfn)) {
-			deferred_free_range(pfn - nr_free, nr_free);
+	for (; pfn < end_pfn; pfn++) {//遍历从 pfn 到 end_pfn 的页帧。
+		if (!deferred_pfn_valid(pfn)) {//如果当前页帧号无效
+			deferred_free_range(pfn - nr_free, nr_free);//释放从当前页帧号减去累计数量开始的页
 			nr_free = 0;
-		} else if (IS_MAX_ORDER_ALIGNED(pfn)) {
-			deferred_free_range(pfn - nr_free, nr_free);
-			nr_free = 1;
+		} else if (IS_MAX_ORDER_ALIGNED(pfn)) {//如果当前页帧号按最大页块边界对齐：
+			deferred_free_range(pfn - nr_free, nr_free);//释放从当前页帧号减去累计数量开始的页。
+			nr_free = 1;//重置计数器，当前页可释放。
 		} else {
-			nr_free++;
+			nr_free++;//增加连续可释放页的数量。
 		}
 	}
 	/* Free the last block of pages to allocator */
-	deferred_free_range(pfn - nr_free, nr_free);
+	deferred_free_range(pfn - nr_free, nr_free);//释放最后一批累计的页。
 }
 
 /*
  * Initialize struct pages.  We minimize pfn page lookups and scheduler checks
  * by performing it only once every MAX_ORDER_NR_PAGES.
  * Return number of pages initialized.
+ * 初始化一段物理内存页帧的元数据 (struct page)
  */
 static unsigned long  __init deferred_init_pages(struct zone *zone,
 						 unsigned long pfn,
 						 unsigned long end_pfn)
 {
-	int nid = zone_to_nid(zone);
-	unsigned long nr_pages = 0;
-	int zid = zone_idx(zone);
+	int nid = zone_to_nid(zone);//获取当前 zone 所属的节点 ID (NUMA 节点)
+	unsigned long nr_pages = 0;//统计初始化的页数。
+	int zid = zone_idx(zone);//获取当前 zone 的索引。
 	struct page *page = NULL;
 
-	for (; pfn < end_pfn; pfn++) {
-		if (!deferred_pfn_valid(pfn)) {
-			page = NULL;
+	for (; pfn < end_pfn; pfn++) {//遍历指定范围内的页帧号。
+		if (!deferred_pfn_valid(pfn)) {//如果当前页帧号无效，则跳过处理。
+			page = NULL;//清空当前 page 指针。
 			continue;
-		} else if (!page || IS_MAX_ORDER_ALIGNED(pfn)) {
-			page = pfn_to_page(pfn);
+		} else if (!page || IS_MAX_ORDER_ALIGNED(pfn)) {//如果 page 指针为空或页帧号对齐到最大页块边界，则重新获取 page。
+			page = pfn_to_page(pfn);//将页帧号转换为 page 指针。
 		} else {
-			page++;
+			page++;//否则，移动到下一个 page。
 		}
-		__init_single_page(page, pfn, zid, nid);
+		__init_single_page(page, pfn, zid, nid);//初始化单个页。
 		nr_pages++;
 	}
-	return nr_pages;
+	return nr_pages;//返回初始化的页数。
 }
 
 /*
@@ -2077,63 +2078,64 @@ static unsigned long __init
 deferred_init_maxorder(u64 *i, struct zone *zone, unsigned long *start_pfn,
 		       unsigned long *end_pfn)
 {
-	unsigned long mo_pfn = ALIGN(*start_pfn + 1, MAX_ORDER_NR_PAGES);
-	unsigned long spfn = *start_pfn, epfn = *end_pfn;
-	unsigned long nr_pages = 0;
-	u64 j = *i;
+	unsigned long mo_pfn = ALIGN(*start_pfn + 1, MAX_ORDER_NR_PAGES);//计算最大页块 (MAX_ORDER) 的对齐地址，mo_pfn 是对齐后的页帧号。
+	unsigned long spfn = *start_pfn, epfn = *end_pfn;//备份起始页帧号 (spfn) 和结束页帧号 (epfn)。
+	unsigned long nr_pages = 0;//初始化计数器，用于记录初始化的页数量。
+	u64 j = *i;//备份迭代器，用于遍历 zone 的内存范围。
 
-	/* First we loop through and initialize the page values */
-	for_each_free_mem_pfn_range_in_zone_from(j, zone, start_pfn, end_pfn) {
+	/* 第一轮：初始化页的内容 */
+	for_each_free_mem_pfn_range_in_zone_from(j, zone, start_pfn, end_pfn) {//遍历 zone 中从 `start_pfn` 开始的空闲内存范围。
 		unsigned long t;
 
-		if (mo_pfn <= *start_pfn)
+		if (mo_pfn <= *start_pfn)//如果 mo_pfn 小于等于 start_pfn，说明对齐范围已经处理完毕，退出循环。
 			break;
 
-		t = min(mo_pfn, *end_pfn);
-		nr_pages += deferred_init_pages(zone, *start_pfn, t);
+		t = min(mo_pfn, *end_pfn);//t 为当前范围的结束页帧号，取 mo_pfn 和 end_pfn 的较小值。
+		nr_pages += deferred_init_pages(zone, *start_pfn, t);//初始化从 start_pfn 到 t 范围内的页，并累加初始化的页数。
 
-		if (mo_pfn < *end_pfn) {
-			*start_pfn = mo_pfn;
+		if (mo_pfn < *end_pfn) {//如果 mo_pfn 小于 end_pfn，说明还有未对齐的页需要处理。
+			*start_pfn = mo_pfn;//更新 start_pfn 为对齐后的页帧号。
 			break;
 		}
 	}
 
-	/* Reset values and now loop through freeing pages as needed */
-	swap(j, *i);
+	/* 第二轮：释放页以供伙伴分配器使用 */
+	swap(j, *i);//交换迭代器，准备重新遍历。
 
-	for_each_free_mem_pfn_range_in_zone_from(j, zone, &spfn, &epfn) {
+	for_each_free_mem_pfn_range_in_zone_from(j, zone, &spfn, &epfn) {//遍历 zone 中从 spfn 开始的空闲内存范围。
 		unsigned long t;
 
-		if (mo_pfn <= spfn)
+		if (mo_pfn <= spfn)//如果 mo_pfn 小于等于 spfn，说明对齐范围已经处理完毕，退出循环。
 			break;
 
-		t = min(mo_pfn, epfn);
-		deferred_free_pages(spfn, t);
+		t = min(mo_pfn, epfn);//t 为当前范围的结束页帧号，取 mo_pfn 和 epfn 的较小值。
+		deferred_free_pages(spfn, t);//释放 spfn 到 t 范围内的页，供伙伴分配器使用。
 
-		if (mo_pfn <= epfn)
+		if (mo_pfn <= epfn)//如果 mo_pfn 小于等于 epfn，说明当前范围已处理完毕，退出循环。
 			break;
 	}
 
-	return nr_pages;
+	return nr_pages;//返回已初始化的页数量。
 }
 
 static void __init
 deferred_init_memmap_chunk(unsigned long start_pfn, unsigned long end_pfn,
 			   void *arg)
 {
-	unsigned long spfn, epfn;
-	struct zone *zone = arg;
-	u64 i;
+	unsigned long spfn, epfn;//当前处理的页帧范围：起始页帧号 (spfn) 和结束页帧号 (epfn)
+	struct zone *zone = arg;//指向当前处理的内存区域 (zone) 的指针
+	u64 i;//用于存储页帧范围初始化状态
 
-	deferred_init_mem_pfn_range_in_zone(&i, zone, &spfn, &epfn, start_pfn);
+	deferred_init_mem_pfn_range_in_zone(&i, zone, &spfn, &epfn, start_pfn);//调用函数获取 zone 内从 start_pfn 开始的有效页帧范围，并更新 spfn 和 epfn 的值。
 
 	/*
 	 * Initialize and free pages in MAX_PAGE_ORDER sized increments so that
 	 * we can avoid introducing any issues with the buddy allocator.
+	 * 按 MAX_PAGE_ORDER 的大小增量初始化和释放页面，以避免对伙伴分配器引入问题。
 	 */
 	while (spfn < end_pfn) {
-		deferred_init_maxorder(&i, zone, &spfn, &epfn);
-		cond_resched();
+		deferred_init_maxorder(&i, zone, &spfn, &epfn);//按最大页块大小 (MAX_PAGE_ORDER) 初始化页帧，并释放到伙伴分配器中。
+		cond_resched();//主动检查是否需要让出 CPU，避免阻塞调度器。
 	}
 }
 
@@ -2147,78 +2149,80 @@ deferred_page_init_max_threads(const struct cpumask *node_cpumask)
 /* Initialise remaining memory on a node */
 static int __init deferred_init_memmap(void *data)
 {
-	pg_data_t *pgdat = data;
-	const struct cpumask *cpumask = cpumask_of_node(pgdat->node_id);
-	unsigned long spfn = 0, epfn = 0;
+	pg_data_t *pgdat = data;//获取与节点关联的内存描述符
+	const struct cpumask *cpumask = cpumask_of_node(pgdat->node_id);//获取对应节点的 CPU 掩码
+	unsigned long spfn = 0, epfn = 0;//起始页帧号和结束页帧号
 	unsigned long first_init_pfn, flags;
-	unsigned long start = jiffies;
-	struct zone *zone;
+	unsigned long start = jiffies;//记录开始时间
+	struct zone *zone;//内存区域指针
 	int zid, max_threads;
 	u64 i;
 
-	/* Bind memory initialisation thread to a local node if possible */
+	/* 将内存初始化线程绑定到本地节点的 CPU，以提高效率 */
 	if (!cpumask_empty(cpumask))
 		set_cpus_allowed_ptr(current, cpumask);
 
-	pgdat_resize_lock(pgdat, &flags);
-	first_init_pfn = pgdat->first_deferred_pfn;
-	if (first_init_pfn == ULONG_MAX) {
-		pgdat_resize_unlock(pgdat, &flags);
-		pgdat_init_report_one_done();
+	pgdat_resize_lock(pgdat, &flags);//加锁，防止内存区域大小被修改
+	first_init_pfn = pgdat->first_deferred_pfn;//获取起始页帧号
+	if (first_init_pfn == ULONG_MAX) {//如果没有需要初始化的页
+		pgdat_resize_unlock(pgdat, &flags);//释放锁
+		pgdat_init_report_one_done();//报告节点初始化已完成
 		return 0;
 	}
 
 	/* Sanity check boundaries */
-	BUG_ON(pgdat->first_deferred_pfn < pgdat->node_start_pfn);
-	BUG_ON(pgdat->first_deferred_pfn > pgdat_end_pfn(pgdat));
-	pgdat->first_deferred_pfn = ULONG_MAX;
+	BUG_ON(pgdat->first_deferred_pfn < pgdat->node_start_pfn);//起始页帧号不能小于节点起始页帧号
+	BUG_ON(pgdat->first_deferred_pfn > pgdat_end_pfn(pgdat));//起始页帧号不能超出节点范围
+	pgdat->first_deferred_pfn = ULONG_MAX;//重置起始页帧号
 
 	/*
 	 * Once we unlock here, the zone cannot be grown anymore, thus if an
 	 * interrupt thread must allocate this early in boot, zone must be
 	 * pre-grown prior to start of deferred page initialization.
+	 * 在这里解锁后，zone 的大小将不再被修改。如果在启动阶段有中断线程
+	 * 需要分配内存，zone 必须提前扩展。
 	 */
-	pgdat_resize_unlock(pgdat, &flags);
+	pgdat_resize_unlock(pgdat, &flags);//释放内存区域大小锁
 
-	/* Only the highest zone is deferred so find it */
-	for (zid = 0; zid < MAX_NR_ZONES; zid++) {
-		zone = pgdat->node_zones + zid;
-		if (first_init_pfn < zone_end_pfn(zone))
+	/* 只对最高级别的 zone 进行延迟初始化 */
+	for (zid = 0; zid < MAX_NR_ZONES; zid++) {//遍历当前节点的所有内存区域
+		zone = pgdat->node_zones + zid;//获取当前节点的内存区域
+		if (first_init_pfn < zone_end_pfn(zone))// 判断页帧号是否在该 zone 内
 			break;
 	}
 
-	/* If the zone is empty somebody else may have cleared out the zone */
+	/* 如果 zone 为空，说明内存初始化已经完成 */
 	if (!deferred_init_mem_pfn_range_in_zone(&i, zone, &spfn, &epfn,
-						 first_init_pfn))
+						 first_init_pfn))//以zone为单位更新页帧范围
 		goto zone_empty;
 
-	max_threads = deferred_page_init_max_threads(cpumask);
+	max_threads = deferred_page_init_max_threads(cpumask);//计算最大线程数,当前为1
 
 	while (spfn < epfn) {
-		unsigned long epfn_align = ALIGN(epfn, PAGES_PER_SECTION);
-		struct padata_mt_job job = {
-			.thread_fn   = deferred_init_memmap_chunk,
-			.fn_arg      = zone,
-			.start       = spfn,
-			.size        = epfn_align - spfn,
-			.align       = PAGES_PER_SECTION,
-			.min_chunk   = PAGES_PER_SECTION,
-			.max_threads = max_threads,
-			.numa_aware  = false,
+		unsigned long epfn_align = ALIGN(epfn, PAGES_PER_SECTION);//将结束页帧号对齐到节边界
+		struct padata_mt_job job = {//配置多线程初始化任务(以zone为单位进行)
+			.thread_fn   = deferred_init_memmap_chunk,//初始化函数
+			.fn_arg      = zone,//传递 zone 结构体
+			.start       = spfn,//起始页帧号
+			.size        = epfn_align - spfn,//初始化的页帧数
+			.align       = PAGES_PER_SECTION,//每个线程的最小对齐大小
+			.min_chunk   = PAGES_PER_SECTION,//每次最小初始化页数
+			.max_threads = max_threads,//最大线程数
+			.numa_aware  = false,//关闭 NUMA 感知模式
 		};
 
-		padata_do_multithreaded(&job);
+		padata_do_multithreaded(&job);//启动多线程初始化
 		deferred_init_mem_pfn_range_in_zone(&i, zone, &spfn, &epfn,
-						    epfn_align);
+						    epfn_align);// 更新页帧范围
 	}
 zone_empty:
 	/* Sanity check that the next zone really is unpopulated */
-	WARN_ON(++zid < MAX_NR_ZONES && populated_zone(++zone));
+	WARN_ON(++zid < MAX_NR_ZONES && populated_zone(++zone));//检查下一个 zone 是否为空
 
 	pr_info("node %d deferred pages initialised in %ums\n",
-		pgdat->node_id, jiffies_to_msecs(jiffies - start));
+		pgdat->node_id, jiffies_to_msecs(jiffies - start));//打印初始化完成信息
 
-	pgdat_init_report_one_done();
+	pgdat_init_report_one_done();//报告节点的延迟初始化已完成
 	return 0;
 }
 
@@ -2337,48 +2341,47 @@ void set_zone_contiguous(struct zone *zone)
 	zone->contiguous = true;
 }
 
-void __init page_alloc_init_late(void)
+void __init page_alloc_init_late(void)//系统启动后期内存页面分配初始化函数
 {
 	struct zone *zone;
 	int nid;
 
 #ifdef CONFIG_DEFERRED_STRUCT_PAGE_INIT
 
-	/* There will be num_node_state(N_MEMORY) threads */
+	/* 将未完成的节点数量设置为具有内存的节点数量 */
 	atomic_set(&pgdat_init_n_undone, num_node_state(N_MEMORY));
-	for_each_node_state(nid, N_MEMORY) {
-		kthread_run(deferred_init_memmap, NODE_DATA(nid), "pgdatinit%d", nid);
+	for_each_node_state(nid, N_MEMORY) {//遍历所有有内存的节点
+		kthread_run(deferred_init_memmap, NODE_DATA(nid), "pgdatinit%d", nid);//为每个内存节点启动内核线程，异步初始化内存页结构
 	}
 
-	/* Block until all are initialised */
+	/* 等待所有线程完成初始化  */
 	wait_for_completion(&pgdat_init_all_done_comp);
 
 	/*
-	 * We initialized the rest of the deferred pages.  Permanently disable
-	 * on-demand struct page initialization.
+	 * 完成延迟初始化的页面后，永久禁用按需的 struct page 初始化
 	 */
 	static_branch_disable(&deferred_pages);
 
 	/* Reinit limits that are based on free pages after the kernel is up */
-	files_maxfiles_init();
+	files_maxfiles_init();//根据新的页面状态更新文件描述符上限
 #endif
 
-	buffer_init();
+	buffer_init();//初始化内核缓冲区
 
 	/* Discard memblock private memory */
-	memblock_discard();
+	memblock_discard();//丢弃 memblock 分配的私有内存，以释放保留的内存
 
 	for_each_node_state(nid, N_MEMORY)
-		shuffle_free_memory(NODE_DATA(nid));
+		shuffle_free_memory(NODE_DATA(nid));//随机化空闲内存页，提高内存安全性
 
 	for_each_populated_zone(zone)
-		set_zone_contiguous(zone);
+		set_zone_contiguous(zone);//设置每个内存区域的连续标志
 
-	/* Initialize page ext after all struct pages are initialized. */
+	/* 在所有 struct pages 初始化完成后，初始化 page_ext 结构 */
 	if (deferred_struct_pages)
-		page_ext_init();
+		page_ext_init();//如果存在延迟 struct page 初始化，则初始化 page_ext 数据
 
-	page_alloc_sysctl_init();
+	page_alloc_sysctl_init();//注册 sysctl 接口以管理页面分配的系统参数
 }
 
 /*

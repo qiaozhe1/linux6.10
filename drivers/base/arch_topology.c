@@ -283,25 +283,25 @@ static int free_raw_capacity(void)
 
 void topology_normalize_cpu_scale(void)
 {
-	u64 capacity;
-	u64 capacity_scale;
-	int cpu;
+	u64 capacity;//当前 CPU 的容量值
+	u64 capacity_scale;//用于存储所有 CPU 的最大容量值
+	int cpu;//CPU 索引
 
-	if (!raw_capacity)
+	if (!raw_capacity)//如果未定义 `raw_capacity`，直接返回
 		return;
 
-	capacity_scale = 1;
+	capacity_scale = 1;//初始化容量比例为 1
 	for_each_possible_cpu(cpu) {
-		capacity = raw_capacity[cpu] * per_cpu(capacity_freq_ref, cpu);
-		capacity_scale = max(capacity, capacity_scale);
+		capacity = raw_capacity[cpu] * per_cpu(capacity_freq_ref, cpu);//计算当前 CPU 的原始容量值
+		capacity_scale = max(capacity, capacity_scale);//更新最大容量值
 	}
 
 	pr_debug("cpu_capacity: capacity_scale=%llu\n", capacity_scale);
-	for_each_possible_cpu(cpu) {
-		capacity = raw_capacity[cpu] * per_cpu(capacity_freq_ref, cpu);
+	for_each_possible_cpu(cpu) {//再次遍历每个可能的 CPU
+		capacity = raw_capacity[cpu] * per_cpu(capacity_freq_ref, cpu);//重新计算当前 CPU 的容量值
 		capacity = div64_u64(capacity << SCHED_CAPACITY_SHIFT,
-			capacity_scale);
-		topology_set_cpu_scale(cpu, capacity);
+			capacity_scale);//根据最大容量值进行归一化
+		topology_set_cpu_scale(cpu, capacity);//将归一化容量值设置到拓扑结构中
 		pr_debug("cpu_capacity: CPU%d cpu_capacity=%lu\n",
 			cpu, topology_get_cpu_scale(cpu));
 	}
@@ -541,40 +541,40 @@ static int __init parse_core(struct device_node *core, int package_id,
 	struct device_node *t;
 
 	do {
-		snprintf(name, sizeof(name), "thread%d", i);
-		t = of_get_child_by_name(core, name);
+		snprintf(name, sizeof(name), "thread%d", i);//生成 thread 名称
+		t = of_get_child_by_name(core, name);//获取名称为 `name` 的 thread 子节点
 		if (t) {
-			leaf = false;
-			cpu = get_cpu_for_node(t);
+			leaf = false;//如果找到子线程，设置为非叶子核心
+			cpu = get_cpu_for_node(t);//获取与线程关联的 CPU ID
 			if (cpu >= 0) {
-				cpu_topology[cpu].package_id = package_id;
-				cpu_topology[cpu].cluster_id = cluster_id;
-				cpu_topology[cpu].core_id = core_id;
-				cpu_topology[cpu].thread_id = i;
+				cpu_topology[cpu].package_id = package_id;//设置 CPU 的 package ID
+				cpu_topology[cpu].cluster_id = cluster_id;//设置 CPU 的 cluster ID
+				cpu_topology[cpu].core_id = core_id;//设置 CPU 的核心 ID
+				cpu_topology[cpu].thread_id = i;//设置 CPU 的线程 ID
 			} else if (cpu != -ENODEV) {
-				pr_err("%pOF: Can't get CPU for thread\n", t);
-				of_node_put(t);
-				return -EINVAL;
+				pr_err("%pOF: Can't get CPU for thread\n", t);//输出错误信息，无法为线程获取 CPU
+				of_node_put(t);//释放设备节点引用
+				return -EINVAL;//返回无效参数错误
 			}
 			of_node_put(t);
 		}
-		i++;
+		i++;//检查下一个线程
 	} while (t);
 
-	cpu = get_cpu_for_node(core);
+	cpu = get_cpu_for_node(core);//获取与核心关联的 CPU ID
 	if (cpu >= 0) {
 		if (!leaf) {
 			pr_err("%pOF: Core has both threads and CPU\n",
-			       core);
-			return -EINVAL;
+			       core);//不是叶子节点，输出错误信息，核心同时包含线程和 CPU
+			return -EINVAL;//返回无效参数错误
 		}
 
-		cpu_topology[cpu].package_id = package_id;
-		cpu_topology[cpu].cluster_id = cluster_id;
-		cpu_topology[cpu].core_id = core_id;
+		cpu_topology[cpu].package_id = package_id;//设置 CPU 的 package ID
+		cpu_topology[cpu].cluster_id = cluster_id;//设置 CPU 的 cluster ID
+		cpu_topology[cpu].core_id = core_id;//设置 CPU 的核心 ID
 	} else if (leaf && cpu != -ENODEV) {
-		pr_err("%pOF: Can't get CPU for leaf core\n", core);
-		return -EINVAL;
+		pr_err("%pOF: Can't get CPU for leaf core\n", core);//输出错误信息，无法为叶子核心获取 CPU
+		return -EINVAL;//返回无效参数错误
 	}
 
 	return 0;
@@ -594,60 +594,62 @@ static int __init parse_cluster(struct device_node *cluster, int package_id,
 	 * First check for child clusters; we currently ignore any
 	 * information about the nesting of clusters and present the
 	 * scheduler with a flat list of them.
+	 * 首先检查子 cluster；当前实现忽略 cluster 的嵌套结构，
+	 * 并向调度器提供一个平面列表.
 	 */
 	i = 0;
 	do {
-		snprintf(name, sizeof(name), "cluster%d", i);
-		c = of_get_child_by_name(cluster, name);
+		snprintf(name, sizeof(name), "cluster%d", i);//生成 cluster 名称
+		c = of_get_child_by_name(cluster, name);//获取名称为 `name` 的cluster
 		if (c) {
-			leaf = false;
-			ret = parse_cluster(c, package_id, i, depth + 1);
+			leaf = false;//如果找到cluster，设置为非叶子节点
+			ret = parse_cluster(c, package_id, i, depth + 1);// 递归解析cluster
 			if (depth > 0)
-				pr_warn("Topology for clusters of clusters not yet supported\n");
-			of_node_put(c);
+				pr_warn("Topology for clusters of clusters not yet supported\n");//发出警告，嵌套 cluster 不受支持
+			of_node_put(c);//释放设备节点引用
 			if (ret != 0)
 				return ret;
 		}
 		i++;
 	} while (c);
 
-	/* Now check for cores */
+	/* 现在检查核心 */
 	i = 0;
 	do {
-		snprintf(name, sizeof(name), "core%d", i);
-		c = of_get_child_by_name(cluster, name);
+		snprintf(name, sizeof(name), "core%d", i);//生成核心名称
+		c = of_get_child_by_name(cluster, name);//获取名称为 `name` 的核心节点
 		if (c) {
-			has_cores = true;
+			has_cores = true;//如果找到核心节点，设置标志位
 
 			if (depth == 0) {
 				pr_err("%pOF: cpu-map children should be clusters\n",
-				       c);
-				of_node_put(c);
-				return -EINVAL;
+				       c);// 输出错误信息，cpu-map 的子节点应为 cluster
+				of_node_put(c);//释放设备节点引用
+				return -EINVAL;//返回无效参数错误
 			}
 
 			if (leaf) {
 				ret = parse_core(c, package_id, cluster_id,
-						 core_id++);
+						 core_id++);//解析核心节点信息
 			} else {
 				pr_err("%pOF: Non-leaf cluster with core %s\n",
-				       cluster, name);
-				ret = -EINVAL;
+				       cluster, name);//输出错误信息，非叶子 cluster 不应包含核心
+				ret = -EINVAL;//返回无效参数错误
 			}
 
-			of_node_put(c);
+			of_node_put(c);// 释放设备节点引用
 			if (ret != 0)
-				return ret;
+				return ret;//解析失败,返回错误代码
 		}
-		i++;
+		i++;//检查下一个核心节点
 	} while (c);
 
-	if (leaf && !has_cores)
-		pr_warn("%pOF: empty cluster\n", cluster);
+	if (leaf && !has_cores)//如果是叶子 cluster 且没有核心
+		pr_warn("%pOF: empty cluster\n", cluster);// 发出警告，表示 cluster 为空
 
 	return 0;
 }
-
+/*用于解析与指定设备节点（socket）相关的 cluster 信息。*/
 static int __init parse_socket(struct device_node *socket)
 {
 	char name[20];
@@ -656,20 +658,20 @@ static int __init parse_socket(struct device_node *socket)
 	int package_id = 0, ret;
 
 	do {
-		snprintf(name, sizeof(name), "socket%d", package_id);
-		c = of_get_child_by_name(socket, name);
+		snprintf(name, sizeof(name), "socket%d", package_id);//生成当前 socket 的名称
+		c = of_get_child_by_name(socket, name);//获取名称为 `name` 的子节点
 		if (c) {
-			has_socket = true;
-			ret = parse_cluster(c, package_id, -1, 0);
-			of_node_put(c);
-			if (ret != 0)
-				return ret;
+			has_socket = true;//如果找到了 socket 子节点，设置标志位
+			ret = parse_cluster(c, package_id, -1, 0);//解析该 socket 的 cluster 信息
+			of_node_put(c);//释放设备节点引用
+			if (ret != 0)//如果解析失败
+				return ret;//返回错误代码
 		}
-		package_id++;
-	} while (c);
+		package_id++;//增加包 ID，检查下一个可能的 socket
+	} while (c);// 如果没有找到子节点，退出循环
 
-	if (!has_socket)
-		ret = parse_cluster(socket, 0, -1, 0);
+	if (!has_socket)//如果未找到任何 socket 子节点
+		ret = parse_cluster(socket, 0, -1, 0);//将当前节点作为默认 socket 进行解析
 
 	return ret;
 }
@@ -699,7 +701,7 @@ static int __init parse_dt_topology(void)
 	if (ret != 0)
 		goto out_map;//若解析失败，跳转到 out_map 标签释放资源
 
-	topology_normalize_cpu_scale();//归一化 CPU 拓扑结构中的比例因子
+	topology_normalize_cpu_scale();//归一化 CPU 拓扑结构中的每个CPU的性能值
 
 	/*
 	 * Check that all cores are in the topology; the SMP code will
@@ -707,7 +709,7 @@ static int __init parse_dt_topology(void)
 	 * 检查所有核心是否都在拓扑结构中；SMP 代码仅会标记设备树中描述的核心为可能存在。
 	 */
 	for_each_possible_cpu(cpu)
-		if (cpu_topology[cpu].package_id < 0) {//如果某个 CPU 的 package ID 为 -1，说明没有被正确初始化
+		if (cpu_topology[cpu].package_id < 0) {//如果某个CPU的package ID为 -1，说明没有被正确初始化
 			ret = -EINVAL;//返回无效参数错误
 			break;
 		}
@@ -765,44 +767,44 @@ const struct cpumask *cpu_clustergroup_mask(int cpu)
 
 	return &cpu_topology[cpu].cluster_sibling;
 }
-
+/* 用于更新指定 CPU 的兄弟关系掩码 */
 void update_siblings_masks(unsigned int cpuid)
 {
-	struct cpu_topology *cpu_topo, *cpuid_topo = &cpu_topology[cpuid];
+	struct cpu_topology *cpu_topo, *cpuid_topo = &cpu_topology[cpuid];//`cpuid_topo` 表示目标 CPU 的拓扑信息，`cpu_topo` 用于迭代其他 CPU
 	int cpu, ret;
 
-	ret = detect_cache_attributes(cpuid);
+	ret = detect_cache_attributes(cpuid);//检测目标 CPU 的缓存属性
 	if (ret && ret != -ENOENT)
 		pr_info("Early cacheinfo allocation failed, ret = %d\n", ret);
 
 	/* update core and thread sibling masks */
-	for_each_online_cpu(cpu) {
-		cpu_topo = &cpu_topology[cpu];
+	for_each_online_cpu(cpu) {//遍历所有在线 CPU
+		cpu_topo = &cpu_topology[cpu];//获取当前 CPU 的拓扑信息
 
-		if (last_level_cache_is_shared(cpu, cpuid)) {
-			cpumask_set_cpu(cpu, &cpuid_topo->llc_sibling);
-			cpumask_set_cpu(cpuid, &cpu_topo->llc_sibling);
+		if (last_level_cache_is_shared(cpu, cpuid)) {//检查目标 CPU 和当前 CPU 是否共享最后一级缓存
+			cpumask_set_cpu(cpu, &cpuid_topo->llc_sibling);//将当前 CPU 添加到目标 CPU 的 LLC 兄弟掩码中
+			cpumask_set_cpu(cpuid, &cpu_topo->llc_sibling);// 将目标 CPU 添加到当前 CPU 的 LLC 兄弟掩码中
 		}
 
-		if (cpuid_topo->package_id != cpu_topo->package_id)
+		if (cpuid_topo->package_id != cpu_topo->package_id)//如果目标 CPU 和当前 CPU 不在同一个物理包中
 			continue;
 
-		cpumask_set_cpu(cpuid, &cpu_topo->core_sibling);
-		cpumask_set_cpu(cpu, &cpuid_topo->core_sibling);
+		cpumask_set_cpu(cpuid, &cpu_topo->core_sibling);//将目标 CPU 添加到当前 CPU 的核心兄弟掩码中
+		cpumask_set_cpu(cpu, &cpuid_topo->core_sibling);//将当前 CPU 添加到目标 CPU 的核心兄弟掩码中
 
-		if (cpuid_topo->cluster_id != cpu_topo->cluster_id)
+		if (cpuid_topo->cluster_id != cpu_topo->cluster_id)//如果目标 CPU 和当前 CPU 不在同一个簇中
 			continue;
 
-		if (cpuid_topo->cluster_id >= 0) {
-			cpumask_set_cpu(cpu, &cpuid_topo->cluster_sibling);
-			cpumask_set_cpu(cpuid, &cpu_topo->cluster_sibling);
+		if (cpuid_topo->cluster_id >= 0) {//如果目标 CPU 的簇 ID 有效
+			cpumask_set_cpu(cpu, &cpuid_topo->cluster_sibling);//将当前 CPU 添加到目标 CPU 的簇兄弟掩码中
+			cpumask_set_cpu(cpuid, &cpu_topo->cluster_sibling);//将目标 CPU 添加到当前 CPU 的簇兄弟掩码中
 		}
 
-		if (cpuid_topo->core_id != cpu_topo->core_id)
+		if (cpuid_topo->core_id != cpu_topo->core_id)//如果目标 CPU 和当前 CPU 不在同一个核心中
 			continue;
 
-		cpumask_set_cpu(cpuid, &cpu_topo->thread_sibling);
-		cpumask_set_cpu(cpu, &cpuid_topo->thread_sibling);
+		cpumask_set_cpu(cpuid, &cpu_topo->thread_sibling);//将目标 CPU 添加到当前 CPU 的线程兄弟掩码中
+		cpumask_set_cpu(cpu, &cpuid_topo->thread_sibling);//将当前 CPU 添加到目标 CPU 的线程兄弟掩码中
 	}
 }
 

@@ -73,13 +73,13 @@ static struct padata_work *padata_work_alloc(void)
 {
 	struct padata_work *pw;
 
-	lockdep_assert_held(&padata_works_lock);
+	lockdep_assert_held(&padata_works_lock);//检查 `padata_works_lock` 是否被持有，确保调用该函数时已加锁
 
-	if (list_empty(&padata_free_works))
-		return NULL;	/* No more work items allowed to be queued. */
+	if (list_empty(&padata_free_works))//检查 `padata_free_works` 列表是否为空
+		return NULL;	//如果列表为空，返回 `NULL`，表示没有可用的 `padata_work`
 
-	pw = list_first_entry(&padata_free_works, struct padata_work, pw_list);
-	list_del(&pw->pw_list);
+	pw = list_first_entry(&padata_free_works, struct padata_work, pw_list);//获取 `padata_free_works` 列表的第一个 `padata_work` 条目
+	list_del(&pw->pw_list);//从 `padata_free_works` 列表中删除该条目
 	return pw;
 }
 
@@ -101,22 +101,23 @@ static void __ref padata_work_init(struct padata_work *pw, work_func_t work_fn,
 	pw->pw_data = data;
 }
 
+/*多线程任务分配函数*/
 static int __init padata_work_alloc_mt(int nworks, void *data,
 				       struct list_head *head)
 {
 	int i;
 
-	spin_lock_bh(&padata_works_lock);
+	spin_lock_bh(&padata_works_lock);//关闭软中断，并获取锁，保护 `padata_works` 列表的并发访问
 	/* Start at 1 because the current task participates in the job. */
-	for (i = 1; i < nworks; ++i) {
-		struct padata_work *pw = padata_work_alloc();
+	for (i = 1; i < nworks; ++i) {//遍历需要分配的工作结构体数量
+		struct padata_work *pw = padata_work_alloc();//分配新的 `padata_work` 结构体
 
 		if (!pw)
 			break;
-		padata_work_init(pw, padata_mt_helper, data, 0);
-		list_add(&pw->pw_list, head);
+		padata_work_init(pw, padata_mt_helper, data, 0);//初始化 `padata_work`，绑定处理函数和数据
+		list_add(&pw->pw_list, head);//将工作项添加到任务列表 `head`
 	}
-	spin_unlock_bh(&padata_works_lock);
+	spin_unlock_bh(&padata_works_lock);//释放锁，恢复软中断状态
 
 	return i;
 }
@@ -438,38 +439,40 @@ static int padata_setup_cpumasks(struct padata_instance *pinst)
 	return err;
 }
 
-static void __init padata_mt_helper(struct work_struct *w)
+static void __init padata_mt_helper(struct work_struct *w)//多线程辅助任务执行函数
 {
-	struct padata_work *pw = container_of(w, struct padata_work, pw_work);
-	struct padata_mt_job_state *ps = pw->pw_data;
-	struct padata_mt_job *job = ps->job;
-	bool done;
+	struct padata_work *pw = container_of(w, struct padata_work, pw_work);//从 `work_struct` 获取 `padata_work` 结构体
+	struct padata_mt_job_state *ps = pw->pw_data;//获取当前任务的状态结构
+	struct padata_mt_job *job = ps->job;//获取多线程任务结构体
+	bool done;//标志任务是否已全部完成
 
 	spin_lock(&ps->lock);
 
-	while (job->size > 0) {
-		unsigned long start, size, end;
+	while (job->size > 0) {//如果还有未完成的任务块
+		unsigned long start, size, end;//定义任务块的起始地址、大小和结束地址
 
-		start = job->start;
-		/* So end is chunk size aligned if enough work remains. */
-		size = roundup(start + 1, ps->chunk_size) - start;
-		size = min(size, job->size);
-		end = start + size;
+		start = job->start;//记录任务块的起始地址
+		/* 计算任务块的大小，使 `end` 位置对齐到 `chunk_size` 边界，
+		 * 如果剩余任务不足一个块大小，则 `size` 为剩余任务量。 
+		 */
+		size = roundup(start + 1, ps->chunk_size) - start;//计算对齐后的块大小
+		size = min(size, job->size);//确保任务块大小不超过剩余任务量
+		end = start + size;//计算任务块的结束地址
 
-		job->start = end;
-		job->size -= size;
+		job->start = end;//更新任务的起始位置
+		job->size -= size;//更新剩余任务的大小
 
-		spin_unlock(&ps->lock);
-		job->thread_fn(start, end, job->fn_arg);
-		spin_lock(&ps->lock);
+		spin_unlock(&ps->lock);//解锁以允许其他线程访问共享数据
+		job->thread_fn(start, end, job->fn_arg);//执行任务函数，处理 `start` 到 `end` 之间的数据
+		spin_lock(&ps->lock);//重新加锁准备处理下一任务块
 	}
 
-	++ps->nworks_fini;
-	done = (ps->nworks_fini == ps->nworks);
-	spin_unlock(&ps->lock);
+	++ps->nworks_fini;//增加已完成的工作线程计数
+	done = (ps->nworks_fini == ps->nworks);//检查是否所有任务线程都完成任务
+	spin_unlock(&ps->lock);//
 
-	if (done)
-		complete(&ps->completion);
+	if (done)//如果所有任务线程已完成任务
+		complete(&ps->completion);//// 触发 `completion` 信号，通知主线程任务结束
 }
 
 /**
@@ -504,7 +507,7 @@ void __init padata_do_multithreaded(struct padata_mt_job *job)//执行多线程�
 	spin_lock_init(&ps.lock);//初始化自旋锁，用于线程同步
 	init_completion(&ps.completion);//初始化完成量，用于等待所有线程完成
 	ps.job	       = job;//设置多线程任务状态的job指针
-	ps.nworks      = padata_work_alloc_mt(nworks, &ps, &works);//分配工作单元
+	ps.nworks      = padata_work_alloc_mt(nworks, &ps, &works);//根据线程个数分配工作单元
 	ps.nworks_fini = 0;//初始化已完成的工作单元计数
 
 
@@ -1129,41 +1132,41 @@ void padata_free_shell(struct padata_shell *ps)
 }
 EXPORT_SYMBOL(padata_free_shell);
 
-void __init padata_init(void)
+void __init padata_init(void)//并行加速框架初始化函数
 {
-	unsigned int i, possible_cpus;
+	unsigned int i, possible_cpus;//`i` 用于循环，`possible_cpus` 记录系统中可能的 CPU 数量
 #ifdef CONFIG_HOTPLUG_CPU
 	int ret;
 
 	ret = cpuhp_setup_state_multi(CPUHP_AP_ONLINE_DYN, "padata:online",
-				      padata_cpu_online, NULL);
+				      padata_cpu_online, NULL);//注册 CPU 上线时的回调函数
 	if (ret < 0)
-		goto err;
-	hp_online = ret;
+		goto err;//注册失败，跳转到错误处理部分
+	hp_online = ret;//记录成功注册的状态 ID
 
 	ret = cpuhp_setup_state_multi(CPUHP_PADATA_DEAD, "padata:dead",
-				      NULL, padata_cpu_dead);
+				      NULL, padata_cpu_dead);//注册 CPU 离线时的回调函数
 	if (ret < 0)
-		goto remove_online_state;
+		goto remove_online_state;//注册失败，撤销之前注册的 "online" 状态
 #endif
 
-	possible_cpus = num_possible_cpus();
+	possible_cpus = num_possible_cpus();//获取系统中可能的 CPU 数量
 	padata_works = kmalloc_array(possible_cpus, sizeof(struct padata_work),
-				     GFP_KERNEL);
+				     GFP_KERNEL);//分配 `padata_work` 数组，用于保存每个 CPU 的任务结构
 	if (!padata_works)
-		goto remove_dead_state;
+		goto remove_dead_state;//分配失败，释放 "dead" 状态，退出初始化
 
-	for (i = 0; i < possible_cpus; ++i)
+	for (i = 0; i < possible_cpus; ++i)//将 `padata_work` 结构添加到 `padata_free_works` 链表中
 		list_add(&padata_works[i].pw_list, &padata_free_works);
 
-	return;
+	return;//成功返回
 
 remove_dead_state:
 #ifdef CONFIG_HOTPLUG_CPU
-	cpuhp_remove_multi_state(CPUHP_PADATA_DEAD);
+	cpuhp_remove_multi_state(CPUHP_PADATA_DEAD);//撤销 "dead" 状态的注册
 remove_online_state:
-	cpuhp_remove_multi_state(hp_online);
+	cpuhp_remove_multi_state(hp_online);//撤销 "online" 状态的注册
 err:
 #endif
-	pr_warn("padata: initialization failed\n");
+	pr_warn("padata: initialization failed\n");//打印警告信息，提示初始化失败
 }

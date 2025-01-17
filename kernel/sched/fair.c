@@ -211,11 +211,11 @@ static unsigned int get_update_sysctl_factor(void)
 
 static void update_sysctl(void)
 {
-	unsigned int factor = get_update_sysctl_factor();
+	unsigned int factor = get_update_sysctl_factor();//获取更新因子
 
 #define SET_SYSCTL(name) \
-	(sysctl_##name = (factor) * normalized_sysctl_##name)
-	SET_SYSCTL(sched_base_slice);
+	(sysctl_##name = (factor) * normalized_sysctl_##name)//设置 sysctl 参数值
+	SET_SYSCTL(sched_base_slice);//设置 `sysctl_sched_base_slice`，用于调度器的时间片基准
 #undef SET_SYSCTL
 }
 

@@ -48,24 +48,24 @@
 #define RESERVED_PIDS 300
 
 struct upid {
-	int nr;
-	struct pid_namespace *ns;
+	int nr;//PID 在其命名空间中的编号
+	struct pid_namespace *ns;// 指向 PID 所属的命名空间的指针
 };
 
 struct pid
 {
-	refcount_t count;
-	unsigned int level;
+	refcount_t count;//记录该 PID 的引用计数
+	unsigned int level;//标识 PID 的命名空间层级
 	spinlock_t lock;
-	struct dentry *stashed;
-	u64 ino;
+	struct dentry *stashed;//缓存的目录项
+	u64 ino;//该 PID 的 inode 编号
 	/* lists of tasks that use this pid */
-	struct hlist_head tasks[PIDTYPE_MAX];
-	struct hlist_head inodes;
+	struct hlist_head tasks[PIDTYPE_MAX];//每种任务类型（如进程、线程组）对应的任务列表
+	struct hlist_head inodes;//与该 PID 相关的 inode 链表
 	/* wait queue for pidfd notifications */
-	wait_queue_head_t wait_pidfd;
-	struct rcu_head rcu;
-	struct upid numbers[];
+	wait_queue_head_t wait_pidfd;//用于 PID 文件描述符通知的等待队列。
+	struct rcu_head rcu;//RCU 回调结构，支持延迟安全释放
+	struct upid numbers[];//PID 的编号数组数组，存储 PID 在不同命名空间中的编号
 };
 
 extern struct pid init_struct_pid;

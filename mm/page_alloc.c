@@ -192,15 +192,15 @@ EXPORT_SYMBOL(latent_entropy);
  * Array of node states.
  */
 nodemask_t node_states[NR_NODE_STATES] __read_mostly = {
-	[N_POSSIBLE] = NODE_MASK_ALL,
-	[N_ONLINE] = { { [0] = 1UL } },
+	[N_POSSIBLE] = NODE_MASK_ALL,		//可能存在的所有节点
+	[N_ONLINE] = { { [0] = 1UL } },		//表示当前在线的节点集合
 #ifndef CONFIG_NUMA
-	[N_NORMAL_MEMORY] = { { [0] = 1UL } },
+	[N_NORMAL_MEMORY] = { { [0] = 1UL } },	//表示包含普通内存的节点，仅在非 NUMA 配置中有效。
 #ifdef CONFIG_HIGHMEM
-	[N_HIGH_MEMORY] = { { [0] = 1UL } },
+	[N_HIGH_MEMORY] = { { [0] = 1UL } },	//表示包含高端内存的节点，仅在启用了高内存配置时有效
 #endif
-	[N_MEMORY] = { { [0] = 1UL } },
-	[N_CPU] = { { [0] = 1UL } },
+	[N_MEMORY] = { { [0] = 1UL } },		//表示所有具有内存的节点集合
+	[N_CPU] = { { [0] = 1UL } },		//表示所有具有 CPU 的节点集合
 #endif	/* NUMA */
 };
 EXPORT_SYMBOL(node_states);

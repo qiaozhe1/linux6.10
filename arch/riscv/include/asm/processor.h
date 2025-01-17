@@ -111,23 +111,23 @@ struct pt_regs;
 #define RISCV_PREEMPT_V_NEED_RESTORE	0x40000000
 
 /* CPU-specific state of a task */
-struct thread_struct {
+struct thread_struct {//保存线程切换时需要保存和恢复的寄存器状态
 	/* Callee-saved registers */
-	unsigned long ra;
-	unsigned long sp;	/* Kernel mode stack */
-	unsigned long s[12];	/* s[0]: frame pointer */
-	struct __riscv_d_ext_state fstate;
-	unsigned long bad_cause;
-	u32 riscv_v_flags;
-	u32 vstate_ctrl;
-	struct __riscv_v_ext_state vstate;
-	unsigned long align_ctl;
-	struct __riscv_v_ext_state kernel_vstate;
+	unsigned long ra;	//返回地址寄存器，保存函数返回地址
+	unsigned long sp;	//栈指针，内核模式下使用的栈地址
+	unsigned long s[12];	//s[0] 到 s[11] 寄存器，包括帧指针 (frame pointer)
+	struct __riscv_d_ext_state fstate;//浮点寄存器扩展状态
+	unsigned long bad_cause;//存储异常原因码
+	u32 riscv_v_flags;//RISC-V 矢量扩展标志，用于指示当前线程的矢量状态
+	u32 vstate_ctrl;//矢量状态控制寄存器
+	struct __riscv_v_ext_state vstate;//矢量寄存器扩展状态
+	unsigned long align_ctl;//用于保存内存对齐控制信息
+	struct __riscv_v_ext_state kernel_vstate;//内核模式下的矢量寄存器状态
 #ifdef CONFIG_SMP
-	/* Flush the icache on migration */
-	bool force_icache_flush;
-	/* A forced icache flush is not needed if migrating to the previous cpu. */
-	unsigned int prev_cpu;
+	/* 当线程迁移时是否需要刷新 ICache */
+	bool force_icache_flush;//指示是否需要在迁移时刷新指令缓存
+	/* 如果迁移到之前运行的 CPU，则不需要强制刷新 ICache */
+	unsigned int prev_cpu;//保存线程之前运行的 CPU ID
 #endif
 };
 

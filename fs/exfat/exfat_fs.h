@@ -242,40 +242,40 @@ struct exfat_mount_options {
  * EXFAT file system superblock in-memory data
  */
 struct exfat_sb_info {
-	unsigned long long num_sectors; /* num of sectors in volume */
-	unsigned int num_clusters; /* num of clusters in volume */
-	unsigned int cluster_size; /* cluster size in bytes */
-	unsigned int cluster_size_bits;
-	unsigned int sect_per_clus; /* cluster size in sectors */
-	unsigned int sect_per_clus_bits;
-	unsigned long long FAT1_start_sector; /* FAT1 start sector */
-	unsigned long long FAT2_start_sector; /* FAT2 start sector */
-	unsigned long long data_start_sector; /* data area start sector */
-	unsigned int num_FAT_sectors; /* num of FAT sectors */
-	unsigned int root_dir; /* root dir cluster */
-	unsigned int dentries_per_clu; /* num of dentries per cluster */
-	unsigned int vol_flags; /* volume flags */
-	unsigned int vol_flags_persistent; /* volume flags to retain */
-	struct buffer_head *boot_bh; /* buffer_head of BOOT sector */
+	unsigned long long num_sectors;//卷中的扇区数
+	unsigned int num_clusters; //卷中的簇数
+	unsigned int cluster_size; //簇的大小（字节）
+	unsigned int cluster_size_bits;//簇大小的位数
+	unsigned int sect_per_clus; //每簇的扇区数
+	unsigned int sect_per_clus_bits;//每簇扇区数的位数
+	unsigned long long FAT1_start_sector; //FAT1 的起始扇区
+	unsigned long long FAT2_start_sector; //FAT2 的起始扇区
+	unsigned long long data_start_sector; //数据区域的起始扇区
+	unsigned int num_FAT_sectors; //FAT 扇区的数量
+	unsigned int root_dir; //根目录簇号
+	unsigned int dentries_per_clu//每簇的目录项数量
+	unsigned int vol_flags; //卷标志
+	unsigned int vol_flags_persistent; //持久化的卷标志
+	struct buffer_head *boot_bh; //引导扇区的缓冲头指针
 
-	unsigned int map_clu; /* allocation bitmap start cluster */
-	unsigned int map_sectors; /* num of allocation bitmap sectors */
-	struct buffer_head **vol_amap; /* allocation bitmap */
+	unsigned int map_clu; //分配位图的起始簇号
+	unsigned int map_sectors; //分配位图的扇区数
+	struct buffer_head **vol_amap; //分配位图的缓冲头数组
 
-	unsigned short *vol_utbl; /* upcase table */
+	unsigned short *vol_utbl; //大写转换表
 
-	unsigned int clu_srch_ptr; /* cluster search pointer */
-	unsigned int used_clusters; /* number of used clusters */
+	unsigned int clu_srch_ptr; //簇搜索指针
+	unsigned int used_clusters; //已使用的簇数量
 
-	struct mutex s_lock; /* superblock lock */
-	struct mutex bitmap_lock; /* bitmap lock */
-	struct exfat_mount_options options;
-	struct nls_table *nls_io; /* Charset used for input and display */
-	struct ratelimit_state ratelimit;
+	struct mutex s_lock; //超级块锁
+	struct mutex bitmap_lock; //位图锁
+	struct exfat_mount_options options;//挂载选项
+	struct nls_table *nls_io; //输入和显示使用的字符集
+	struct ratelimit_state ratelimit;//限速状态
 
-	spinlock_t inode_hash_lock;
-	struct hlist_head inode_hashtable[EXFAT_HASH_SIZE];
-	struct rcu_head rcu;
+	spinlock_t inode_hash_lock;//inode 哈希锁
+	struct hlist_head inode_hashtable[EXFAT_HASH_SIZE];//inode 哈希表
+	struct rcu_head rcu;//用于 RCU（读取-复制更新）的头部结构
 };
 
 #define EXFAT_CACHE_VALID	0

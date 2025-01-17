@@ -757,8 +757,8 @@ static noinline void __ref __noreturn rest_init(void)
 	 * 动空闲线程必须至少调用一次 schedule()，以使系统开始运转：
 	 */
 	schedule_preempt_disabled();//调用调度函数，以便空闲线程能够进行调度
-	/* 调用 cpu_idle，进入 CPU 空闲状态，禁用抢占 */
-	cpu_startup_entry(CPUHP_ONLINE);//启动 CPU 并进入空闲状态，表示 CPU 已上线
+	/* 调用cpu_idle，进入CPU空闲状态，禁用抢占 */
+	cpu_startup_entry(CPUHP_ONLINE);//启动CPU并进入空闲状态，表示CPU已上线
 }
 
 /* Check for early params. */
@@ -1385,11 +1385,11 @@ static void __init do_initcalls(void)
  */
 static void __init do_basic_setup(void)
 {
-	cpuset_init_smp();
-	driver_init();
-	init_irq_proc();
-	do_ctors();
-	do_initcalls();
+	cpuset_init_smp();//初始化 CPU 集合系统（cpuset），设置多核 CPU 相关的配置
+	driver_init();//初始化内核驱动子系统，加载注册各类设备驱动程序
+	init_irq_proc();//初始化 `/proc/irq` 文件系统，提供 IRQ 信息的接口
+	do_ctors();//执行 `.ctors` 段中的构造函数，用于初始化静态全局对象
+	do_initcalls();//执行内核的初始化回调函数，调用各子系统注册的初始化函数
 }
 
 static void __init do_pre_smp_initcalls(void)
@@ -1494,7 +1494,7 @@ static int __ref kernel_init(void *unused)
 	 */
 	wait_for_completion(&kthreadd_done);// 等待 `kthreadd` 完成初始化，确保该线程已经完全准备就绪
 
-	kernel_init_freeable();//进行内核剩余的可释放内存部分的初始化
+	kernel_init_freeable();//进行内核剩余的初始化
 	/* need to finish all async __init code before freeing the memory */
 	async_synchronize_full();//用于确保所有异步的初始化代码执行完毕，以防止在内存释放时仍有代码在运行。
 

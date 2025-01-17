@@ -182,14 +182,14 @@ enum wq_internal_consts {
 /* struct worker is defined in workqueue_internal.h */
 
 struct worker_pool {
-	raw_spinlock_t		lock;		/* the pool lock */
-	int			cpu;		/* I: the associated cpu */
-	int			node;		/* I: the associated node ID */
-	int			id;		/* I: pool ID */
-	unsigned int		flags;		/* L: flags */
+	raw_spinlock_t		lock;		/* 用于保护工作池操作的自旋锁。 */
+	int			cpu;		/* 与此工作池关联的 CPU 编号。 */
+	int			node;		/* 与此工作池关联的 NUMA 节点编号。*/
+	int			id;		/* 工作池的唯一标识符。*/
+	unsigned int		flags;		/* 工作池的标志位，表示该工作池的状态或特殊属性。 */
 
-	unsigned long		watchdog_ts;	/* L: watchdog timestamp */
-	bool			cpu_stall;	/* WD: stalled cpu bound pool */
+	unsigned long		watchdog_ts;	/* 工作池的 watchdog 时间戳，用于监控工作池的健康状态。 */
+	bool			cpu_stall;	/* 如果工作池关联的 CPU 停滞，表示该工作池的 CPU 是否被卡住。*/
 
 	/*
 	 * The counter is incremented in a process context on the associated CPU
@@ -197,39 +197,39 @@ struct worker_pool {
 	 * but w/ pool->lock held. The readers grab pool->lock and are
 	 * guaranteed to see if the counter reached zero.
 	 */
-	int			nr_running;
+	int			nr_running;	/* 当前工作池中正在运行的worker数量。*/
 
-	struct list_head	worklist;	/* L: list of pending works */
+	struct list_head	worklist;	/* 等待执行的工作任务的链表。*/
 
-	int			nr_workers;	/* L: total number of workers */
-	int			nr_idle;	/* L: currently idle workers */
+	int			nr_workers;	/* 工作池中的总 worker 数量。*/
+	int			nr_idle;	/* 当前空闲的 worker 数量。 */
 
-	struct list_head	idle_list;	/* L: list of idle workers */
-	struct timer_list	idle_timer;	/* L: worker idle timeout */
-	struct work_struct      idle_cull_work; /* L: worker idle cleanup */
+	struct list_head	idle_list;	/* 空闲 workers 的链表。 */
+	struct timer_list	idle_timer;	/* 用于检测空闲 workers 超时的定时器。*/
+	struct work_struct      idle_cull_work; /* 清理空闲 worker 的工作项。*/
 
-	struct timer_list	mayday_timer;	  /* L: SOS timer for workers */
+	struct timer_list	mayday_timer;	  /* 用于监控工作池紧急情况的定时器（例如 worker 阻塞、卡死等）。*/
 
 	/* a workers is either on busy_hash or idle_list, or the manager */
-	DECLARE_HASHTABLE(busy_hash, BUSY_WORKER_HASH_ORDER);
+	DECLARE_HASHTABLE(busy_hash, BUSY_WORKER_HASH_ORDER);//存储正在忙碌中的 worker 的哈希表。
 						/* L: hash of busy workers */
 
-	struct worker		*manager;	/* L: purely informational */
-	struct list_head	workers;	/* A: attached workers */
-	struct list_head        dying_workers;  /* A: workers about to die */
-	struct completion	*detach_completion; /* all workers detached */
+	struct worker		*manager;	/* 工作池的管理者 worker（纯粹用于信息记录，可能不是实际执行任务的 worker）。 */
+	struct list_head	workers;	/* 工作池中的 worker 链表，包含当前池中所有 worker。 */
+	struct list_head        dying_workers;  /* 即将退出的 worker 链表。 */
+	struct completion	*detach_completion; /* 完成所有 worker 分离操作的同步机制。 */
 
-	struct ida		worker_ida;	/* worker IDs for task name */
+	struct ida		worker_ida;	/* 为工作池中的 worker 分配 ID 的 ID 分配器。 */
 
-	struct workqueue_attrs	*attrs;		/* I: worker attributes */
-	struct hlist_node	hash_node;	/* PL: unbound_pool_hash node */
-	int			refcnt;		/* PL: refcnt for unbound pools */
+	struct workqueue_attrs	*attrs;		/* 工作池的属性，例如任务类型、调度策略等。 */
+	struct hlist_node	hash_node;	/* 用于存储未绑定工作池的哈希链表节点。 */
+	int			refcnt;		/* 未绑定工作池的引用计数。 */
 
 	/*
 	 * Destruction of pool is RCU protected to allow dereferences
 	 * from get_work_pool().
 	 */
-	struct rcu_head		rcu;
+	struct rcu_head		rcu;		/* 用于RCU保护工作池销毁操作，允许在池销毁时仍然能够读取。 */
 };
 
 /*
@@ -1140,15 +1140,15 @@ static struct worker *find_worker_executing_work(struct worker_pool *pool,
 static void move_linked_works(struct work_struct *work, struct list_head *head,
 			      struct work_struct **nextp)
 {
-	struct work_struct *n;
+	struct work_struct *n;//用于存储下一个工作结构
 
 	/*
 	 * Linked worklist will always end before the end of the list,
 	 * use NULL for list head.
 	 */
-	list_for_each_entry_safe_from(work, n, NULL, entry) {
-		list_move_tail(&work->entry, head);
-		if (!(*work_data_bits(work) & WORK_STRUCT_LINKED))
+	list_for_each_entry_safe_from(work, n, NULL, entry) {//从当前工作开始遍历，安全地遍历工作链表
+		list_move_tail(&work->entry, head);//将当前工作移动到指定的队列末尾
+		if (!(*work_data_bits(work) & WORK_STRUCT_LINKED))//如果工作不再链接，则跳出循环
 			break;
 	}
 
@@ -1157,7 +1157,7 @@ static void move_linked_works(struct work_struct *work, struct list_head *head,
 	 * multiple works to the scheduled queue, the next position
 	 * needs to be updated.
 	 */
-	if (nextp)
+	if (nextp)//如果传入了 nextp 指针，则更新下一个工作的位置
 		*nextp = n;
 }
 
@@ -1178,12 +1178,12 @@ static void move_linked_works(struct work_struct *work, struct list_head *head,
  * was punted to another worker already executing it.
  */
 static bool assign_work(struct work_struct *work, struct worker *worker,
-			struct work_struct **nextp)
+			struct work_struct **nextp)//将一个工作分配给一个指定的 worker
 {
-	struct worker_pool *pool = worker->pool;
-	struct worker *collision;
+	struct worker_pool *pool = worker->pool;//获取与 worker 相关的工作池
+	struct worker *collision;//用于存储正在执行此工作的 worker
 
-	lockdep_assert_held(&pool->lock);
+	lockdep_assert_held(&pool->lock);//确保在执行此函数时已持有工作池的锁
 
 	/*
 	 * A single work shouldn't be executed concurrently by multiple workers.
@@ -1193,14 +1193,14 @@ static bool assign_work(struct work_struct *work, struct worker *worker,
 	 * pool. Check whether anyone is already processing the work. If so,
 	 * defer the work to the currently executing one.
 	 */
-	collision = find_worker_executing_work(pool, work);
-	if (unlikely(collision)) {
-		move_linked_works(work, &collision->scheduled, nextp);
-		return false;
+	collision = find_worker_executing_work(pool, work);//查找是否有 worker 正在执行该工作
+	if (unlikely(collision)) {//如果找到了正在执行此工作的 worker
+		move_linked_works(work, &collision->scheduled, nextp);//将工作移动到正在执行该任务的 worker 的计划工作队列中
+		return false;//返回 false，表示当前 worker 没有分配到工作
 	}
 
-	move_linked_works(work, &worker->scheduled, nextp);
-	return true;
+	move_linked_works(work, &worker->scheduled, nextp);//将工作分配给当前 worker
+	return true;//表示工作成功分配
 }
 
 static struct irq_work *bh_pool_irq_work(struct worker_pool *pool)
@@ -2696,18 +2696,18 @@ static void worker_attach_to_pool(struct worker *worker,
 	 * across this function. See the comments above the flag definition for
 	 * details. BH workers are, while per-CPU, always DISASSOCIATED.
 	 */
-	if (pool->flags & POOL_DISASSOCIATED) {
-		worker->flags |= WORKER_UNBOUND;
-	} else {
-		WARN_ON_ONCE(pool->flags & POOL_BH);
-		kthread_set_per_cpu(worker->task, pool->cpu);
+	if (pool->flags & POOL_DISASSOCIATED) {//如果工作池是未绑定（unbound）类型
+		worker->flags |= WORKER_UNBOUND;//将工作者标记为未绑定类型
+	} else {//如果工作池是绑定（bound）类型
+		WARN_ON_ONCE(pool->flags & POOL_BH);//如果工作池是 BH 类型，发出警告
+		kthread_set_per_cpu(worker->task, pool->cpu);//将线程绑定到指定的CPU
 	}
 
-	if (worker->rescue_wq)
-		set_cpus_allowed_ptr(worker->task, pool_allowed_cpus(pool));
+	if (worker->rescue_wq)//如果工作者是一个救援工作队列
+		set_cpus_allowed_ptr(worker->task, pool_allowed_cpus(pool));//设置允许的 CPU 掩码
 
-	list_add_tail(&worker->node, &pool->workers);
-	worker->pool = pool;
+	list_add_tail(&worker->node, &pool->workers);//将工作者添加到工作池的工作者列表中
+	worker->pool = pool;//设置工作者的工作池指针
 
 	mutex_unlock(&wq_pool_attach_mutex);
 }
@@ -2720,29 +2720,29 @@ static void worker_attach_to_pool(struct worker *worker,
  * caller worker shouldn't access to the pool after detached except it has
  * other reference to the pool.
  */
-static void worker_detach_from_pool(struct worker *worker)
+static void worker_detach_from_pool(struct worker *worker)//从工作池中分离 worker
 {
-	struct worker_pool *pool = worker->pool;
-	struct completion *detach_completion = NULL;
+	struct worker_pool *pool = worker->pool;//获取 worker 所在的工作池
+	struct completion *detach_completion = NULL;//用于在分离完成后通知的结构体指针，初始为空
 
 	/* there is one permanent BH worker per CPU which should never detach */
-	WARN_ON_ONCE(pool->flags & POOL_BH);
+	WARN_ON_ONCE(pool->flags & POOL_BH);//如果工作池标志包含 POOL_BH，发出警告（即每个 CPU 应该只有一个永久的 BH worker，不能分离
 
-	mutex_lock(&wq_pool_attach_mutex);
+	mutex_lock(&wq_pool_attach_mutex);//获取工作队列池的互斥锁，防止并发修改工作池状态
 
-	kthread_set_per_cpu(worker->task, -1);
-	list_del(&worker->node);
-	worker->pool = NULL;
+	kthread_set_per_cpu(worker->task, -1);//设置 worker 的任务不再绑定到特定 CPU
+	list_del(&worker->node);//将 worker 从工作池的链表中移除
+	worker->pool = NULL;//清除 worker 所属的工作池指针
 
-	if (list_empty(&pool->workers) && list_empty(&pool->dying_workers))
-		detach_completion = pool->detach_completion;
-	mutex_unlock(&wq_pool_attach_mutex);
+	if (list_empty(&pool->workers) && list_empty(&pool->dying_workers))//如果工作池中的工作者和正在死亡的工作者链表都为空
+		detach_completion = pool->detach_completion;//获取工作池的分离完成通知结构体
+	mutex_unlock(&wq_pool_attach_mutex);//释放工作队列池的互斥锁
 
 	/* clear leftover flags without pool->lock after it is detached */
-	worker->flags &= ~(WORKER_UNBOUND | WORKER_REBOUND);
+	worker->flags &= ~(WORKER_UNBOUND | WORKER_REBOUND);//清除工作池解除绑定后的标志位
 
-	if (detach_completion)
-		complete(detach_completion);
+	if (detach_completion)//如果分离完成通知结构体非空
+		complete(detach_completion);//完成分离操作，通知等待的任务
 }
 
 static int format_worker_id(char *buf, size_t size, struct worker *worker,
@@ -2779,71 +2779,71 @@ static int format_worker_id(char *buf, size_t size, struct worker *worker,
  */
 static struct worker *create_worker(struct worker_pool *pool)
 {
-	struct worker *worker;
-	int id;
+	struct worker *worker;//用于存储新创建的工作者结构体指针
+	int id;//工作者的唯一标识符
 
 	/* ID is needed to determine kthread name */
-	id = ida_alloc(&pool->worker_ida, GFP_KERNEL);
+	id = ida_alloc(&pool->worker_ida, GFP_KERNEL);//分配工作者 ID
 	if (id < 0) {
 		pr_err_once("workqueue: Failed to allocate a worker ID: %pe\n",
-			    ERR_PTR(id));
+			    ERR_PTR(id));//ID分配错误，打印信息
 		return NULL;
 	}
 
-	worker = alloc_worker(pool->node);
+	worker = alloc_worker(pool->node);//分配工作者结构体内存并初始化
 	if (!worker) {
 		pr_err_once("workqueue: Failed to allocate a worker\n");
-		goto fail;
+		goto fail;//分配失败跳转到错误处理逻辑
 	}
 
-	worker->id = id;
+	worker->id = id;//将分配的 ID 赋值给工作者
 
-	if (!(pool->flags & POOL_BH)) {
-		char id_buf[WORKER_ID_LEN];
+	if (!(pool->flags & POOL_BH)) {//如果工作池不是后台（BH）类型
+		char id_buf[WORKER_ID_LEN];//用于存储格式化后的工作者 ID 名称
 
-		format_worker_id(id_buf, sizeof(id_buf), worker, pool);
+		format_worker_id(id_buf, sizeof(id_buf), worker, pool);//格式化工作者ID
 		worker->task = kthread_create_on_node(worker_thread, worker,
-						      pool->node, "%s", id_buf);
+						      pool->node, "%s", id_buf);//创建并绑定到对应NUMA节点的内核工作者线程
 		if (IS_ERR(worker->task)) {
-			if (PTR_ERR(worker->task) == -EINTR) {
+			if (PTR_ERR(worker->task) == -EINTR) {//如果因信号中断创建失败
 				pr_err("workqueue: Interrupted when creating a worker thread \"%s\"\n",
 				       id_buf);
 			} else {
 				pr_err_once("workqueue: Failed to create a worker thread: %pe",
 					    worker->task);
 			}
-			goto fail;
+			goto fail;//跳转到错误处理逻辑
 		}
 
-		set_user_nice(worker->task, pool->attrs->nice);
-		kthread_bind_mask(worker->task, pool_allowed_cpus(pool));
+		set_user_nice(worker->task, pool->attrs->nice);//设置线程的优先级
+		kthread_bind_mask(worker->task, pool_allowed_cpus(pool));//将线程绑定到允许的 CPU 掩码
 	}
 
 	/* successful, attach the worker to the pool */
-	worker_attach_to_pool(worker, pool);
+	worker_attach_to_pool(worker, pool);//将工作者附加到工作池
 
 	/* start the newly created worker */
-	raw_spin_lock_irq(&pool->lock);
+	raw_spin_lock_irq(&pool->lock);//获取工作池的自旋锁
 
-	worker->pool->nr_workers++;
-	worker_enter_idle(worker);
+	worker->pool->nr_workers++;//增加工作池中的工作者计数
+	worker_enter_idle(worker);//将工作者标记为空闲状态
 
 	/*
 	 * @worker is waiting on a completion in kthread() and will trigger hung
 	 * check if not woken up soon. As kick_pool() is noop if @pool is empty,
 	 * wake it up explicitly.
 	 */
-	if (worker->task)
-		wake_up_process(worker->task);
+	if (worker->task)//如果工作者的线程存在
+		wake_up_process(worker->task);//唤醒线程以开始运行
 
-	raw_spin_unlock_irq(&pool->lock);
+	raw_spin_unlock_irq(&pool->lock);//释放工作池的自旋锁
 
-	return worker;
+	return worker;//返回成功创建的工作者指针
 
 fail:
-	ida_free(&pool->worker_ida, id);
-	kfree(worker);
-	return NULL;
+	ida_free(&pool->worker_ida, id);//释放分配的工作者 ID
+	kfree(worker);//释放工作者结构体的内存
+	return NULL;//返回 NULL 表示失败
 }
 
 static void unbind_worker(struct worker *worker)
@@ -3317,18 +3317,18 @@ __acquires(&pool->lock)
  * raw_spin_lock_irq(pool->lock) which may be released and regrabbed
  * multiple times.
  */
-static void process_scheduled_works(struct worker *worker)
+static void process_scheduled_works(struct worker *worker)//处理一个工作者（worker）队列中所有已调度的工作任务
 {
 	struct work_struct *work;
 	bool first = true;
 
 	while ((work = list_first_entry_or_null(&worker->scheduled,
-						struct work_struct, entry))) {
-		if (first) {
-			worker->pool->watchdog_ts = jiffies;
-			first = false;
+						struct work_struct, entry))) {//从 worker 的调度队列中获取第一个工作
+		if (first) {//如果是第一次执行工作
+			worker->pool->watchdog_ts = jiffies;//设置当前时间戳为看门狗时间戳，防止死锁
+			first = false;//标记为不是第一次执行
 		}
-		process_one_work(worker, work);
+		process_one_work(worker, work);//处理当前的工作
 	}
 }
 
@@ -3354,44 +3354,46 @@ static void set_pf_worker(bool val)
  *
  * Return: 0
  */
-static int worker_thread(void *__worker)
+static int worker_thread(void *__worker)//工作队列的核心线程函数，用于处理工作池中的工作任务
 {
-	struct worker *worker = __worker;
-	struct worker_pool *pool = worker->pool;
+	struct worker *worker = __worker;//获取传递给函数的 worker 结构体指针
+	struct worker_pool *pool = worker->pool;//获取与 worker 相关的 worker_pool 结构体
 
-	/* tell the scheduler that this is a workqueue worker */
+	/* 告知调度器当前线程是一个工作队列线程 */
 	set_pf_worker(true);
-woke_up:
-	raw_spin_lock_irq(&pool->lock);
+woke_up://唤醒后的处理逻辑
+	raw_spin_lock_irq(&pool->lock);//获取 worker_pool 的锁，保护对工作队列的操作
 
 	/* am I supposed to die? */
-	if (unlikely(worker->flags & WORKER_DIE)) {
-		raw_spin_unlock_irq(&pool->lock);
-		set_pf_worker(false);
+	if (unlikely(worker->flags & WORKER_DIE)) {//如果 worker 的标志中包含 WORKER_DIE，则终止线程
+		raw_spin_unlock_irq(&pool->lock);//解锁 worker_pool
+		set_pf_worker(false);//清除当前线程的工作队列标志
 
-		ida_free(&pool->worker_ida, worker->id);
-		worker_detach_from_pool(worker);
-		WARN_ON_ONCE(!list_empty(&worker->entry));
-		kfree(worker);
-		return 0;
+		ida_free(&pool->worker_ida, worker->id);//释放 worker 的 ID
+		worker_detach_from_pool(worker);//将 worker 从工作池中分离
+		WARN_ON_ONCE(!list_empty(&worker->entry));//如果 worker 的 entry 列表不为空，则发出警告
+		kfree(worker);//释放 worker 内存
+		return 0;//线程结束
 	}
 
-	worker_leave_idle(worker);
-recheck:
+	worker_leave_idle(worker);//将 worker 标记为不再处于空闲状态
+recheck://重新检查工作池
 	/* no more worker necessary? */
-	if (!need_more_worker(pool))
+	if (!need_more_worker(pool))//如果不再需要更多的 worker，进入睡眠状态
 		goto sleep;
 
 	/* do we need to manage? */
-	if (unlikely(!may_start_working(pool)) && manage_workers(worker))
+	if (unlikely(!may_start_working(pool)) && manage_workers(worker))//如果无法开始工作且需要管理，重新检查
 		goto recheck;
 
 	/*
 	 * ->scheduled list can only be filled while a worker is
 	 * preparing to process a work or actually processing it.
 	 * Make sure nobody diddled with it while I was sleeping.
+	 * ->scheduled list 只能在 worker 准备处理工作或正在处理工作时填充。
+	 *  确保在睡眠的时候没有人篡改它。
 	 */
-	WARN_ON_ONCE(!list_empty(&worker->scheduled));
+	WARN_ON_ONCE(!list_empty(&worker->scheduled));//确保 scheduled 列表为空
 
 	/*
 	 * Finish PREP stage.  We're guaranteed to have at least one idle
@@ -3399,32 +3401,36 @@ recheck:
 	 * role.  This is where @worker starts participating in concurrency
 	 * management if applicable and concurrency management is restored
 	 * after being rebound.  See rebind_workers() for details.
+	 * 完成准备阶段。我们保证至少有一个空闲的 worker，或者已经有其他线程接管了管理者角色。
+	 * 在这里，worker 开始参与并发管理（如果适用），如果被重新绑定，管理将恢复。参见 rebind_workers()
 	 */
-	worker_clr_flags(worker, WORKER_PREP | WORKER_REBOUND);
+	worker_clr_flags(worker, WORKER_PREP | WORKER_REBOUND);//清除 worker 的标志，表示 worker 已准备好处理任务
 
 	do {
 		struct work_struct *work =
 			list_first_entry(&pool->worklist,
-					 struct work_struct, entry);
+					 struct work_struct, entry);//从工作队列中获取第一个工作项
 
-		if (assign_work(work, worker, NULL))
-			process_scheduled_works(worker);
-	} while (keep_working(pool));
+		if (assign_work(work, worker, NULL))//分配工作任务给当前 worker
+			process_scheduled_works(worker);//处理工作任务
+	} while (keep_working(pool));//如果仍然有工作任务，继续处理
 
-	worker_set_flags(worker, WORKER_PREP);
-sleep:
+	worker_set_flags(worker, WORKER_PREP);//设置 worker 标志，表示正在准备工作
+sleep://如果没有工作处理，进入睡眠状态
 	/*
 	 * pool->lock is held and there's no work to process and no need to
 	 * manage, sleep.  Workers are woken up only while holding
 	 * pool->lock or from local cpu, so setting the current state
 	 * before releasing pool->lock is enough to prevent losing any
 	 * event.
+	 * pool->lock 被锁定，且没有工作可处理，也不需要管理，就进入睡眠。只有在持有 pool->lock 或从本地 CPU 唤醒时，
+	 * 才能唤醒 worker，因此在释放 pool->lock 前设置当前状态足以防止丢失任何事件。
 	 */
-	worker_enter_idle(worker);
-	__set_current_state(TASK_IDLE);
-	raw_spin_unlock_irq(&pool->lock);
-	schedule();
-	goto woke_up;
+	worker_enter_idle(worker);//标记 worker 为空闲状态
+	__set_current_state(TASK_IDLE);//设置线程状态为空闲
+	raw_spin_unlock_irq(&pool->lock);//解锁 worker_pool
+	schedule();// 让调度器调度其他线程
+	goto woke_up;//唤醒后重新检查工作队列
 }
 
 /**
@@ -5544,6 +5550,7 @@ enomem://内存不足处理
 	}
 	return -ENOMEM;// 返回内存不足错误
 }
+
 /*用于限制工作队列的最大活动数量*/
 static int wq_clamp_max_active(int max_active, unsigned int flags,
 			       const char *name)
@@ -7795,41 +7802,34 @@ void __init workqueue_init_early(void)
 
 static void __init wq_cpu_intensive_thresh_init(void)
 {
-	unsigned long thresh;
-	unsigned long bogo;
+	unsigned long thresh;//用于存储计算得出的阈值，以微秒为单位
+	unsigned long bogo;//用于存储计算得出的 BogoMIPS 值
 
-	pwq_release_worker = kthread_create_worker(0, "pool_workqueue_release");
-	BUG_ON(IS_ERR(pwq_release_worker));
+	pwq_release_worker = kthread_create_worker(0, "pool_workqueue_release");//创建一个内核线程工作者，用于释放工作池资源
+	BUG_ON(IS_ERR(pwq_release_worker));//如果创建线程失败，则触发内核 BUG
 
-	/* if the user set it to a specific value, keep it */
+	/* 如果用户已经手动设置了阈值，则直接返回 */
 	if (wq_cpu_intensive_thresh_us != ULONG_MAX)
 		return;
 
 	/*
-	 * The default of 10ms is derived from the fact that most modern (as of
-	 * 2023) processors can do a lot in 10ms and that it's just below what
-	 * most consider human-perceivable. However, the kernel also runs on a
-	 * lot slower CPUs including microcontrollers where the threshold is way
-	 * too low.
-	 *
-	 * Let's scale up the threshold upto 1 second if BogoMips is below 4000.
-	 * This is by no means accurate but it doesn't have to be. The mechanism
-	 * is still useful even when the threshold is fully scaled up. Also, as
-	 * the reports would usually be applicable to everyone, some machines
-	 * operating on longer thresholds won't significantly diminish their
-	 * usefulness.
+	 * 默认值为 10 毫秒，这个值基于以下假设：大多数现代处理器在 10 毫秒内可以
+	 * 完成大量工作。10 毫秒的时间小于人类可感知的延迟阈值。但对于运行速度较慢
+	 * 的处理器（如微控制器），10 毫秒可能过低。
+	 * 如果 BogoMIPS 小于 4000，则按比例将阈值扩展到最多 1 秒。这个机制虽然不
+	 * 精确，但仍然有助于提高慢速 CPU 的可用性， 而且对全局报告的影响很小。
 	 */
-	thresh = 10 * USEC_PER_MSEC;
+	thresh = 10 * USEC_PER_MSEC;//默认阈值为 10 毫秒
 
 	/* see init/calibrate.c for lpj -> BogoMIPS calculation */
-	bogo = max_t(unsigned long, loops_per_jiffy / 500000 * HZ, 1);
-	if (bogo < 4000)
-		thresh = min_t(unsigned long, thresh * 4000 / bogo, USEC_PER_SEC);
+	bogo = max_t(unsigned long, loops_per_jiffy / 500000 * HZ, 1);//计算当前系统的 BogoMIPS 值
+	if (bogo < 4000)//如果 BogoMIPS 小于 4000
+		thresh = min_t(unsigned long, thresh * 4000 / bogo, USEC_PER_SEC);//按比例调整阈值，但不超过 1 秒
 
 	pr_debug("wq_cpu_intensive_thresh: lpj=%lu BogoMIPS=%lu thresh_us=%lu\n",
 		 loops_per_jiffy, bogo, thresh);
 
-	wq_cpu_intensive_thresh_us = thresh;
+	wq_cpu_intensive_thresh_us = thresh;//将计算得出的阈值设置为全局值
 }
 
 /**
@@ -7841,31 +7841,33 @@ static void __init wq_cpu_intensive_thresh_init(void)
  * executing the work items yet. Populate the worker pools with the initial
  * workers and enable future kworker creations.
  */
-void __init workqueue_init(void)
+void __init workqueue_init(void)//初始化内核的工作队列子系统
 {
-	struct workqueue_struct *wq;
-	struct worker_pool *pool;
+	struct workqueue_struct *wq;//指向工作队列结构体的指针，用于管理系统中所有工作队列
+	struct worker_pool *pool;//指向工作线程池的指针，用于分配和管理线程资源
 	int cpu, bkt;
 
-	wq_cpu_intensive_thresh_init();
+	wq_cpu_intensive_thresh_init();//初始化 CPU 密集型工作队列的负载阈值，确保调度器能够平衡负载
 
 	mutex_lock(&wq_pool_mutex);
 
 	/*
 	 * Per-cpu pools created earlier could be missing node hint. Fix them
-	 * up. Also, create a rescuer for workqueues that requested it.
+	 * up. Also, create a rescuer for workqueues that requested it.a
+	 * 修复每个 CPU 提前创建的工作池可能缺失的节点信息。
+	 * 同时为需要 rescuer（救援线程）的工作队列创建相关线程。
 	 */
-	for_each_possible_cpu(cpu) {
-		for_each_bh_worker_pool(pool, cpu)
-			pool->node = cpu_to_node(cpu);
-		for_each_cpu_worker_pool(pool, cpu)
-			pool->node = cpu_to_node(cpu);
+	for_each_possible_cpu(cpu) {//遍历系统支持的所有可能 CPU
+		for_each_bh_worker_pool(pool, cpu)//遍历每个 CPU 的后台处理工作池
+			pool->node = cpu_to_node(cpu);// 设置工作池的节点信息，确保内存和 CPU 的正确映射
+		for_each_cpu_worker_pool(pool, cpu)//遍历每个 CPU 的普通工作池
+			pool->node = cpu_to_node(cpu);//更新节点信息
 	}
 
-	list_for_each_entry(wq, &workqueues, list) {
+	list_for_each_entry(wq, &workqueues, list) {//遍历所有已注册的工作队列
 		WARN(init_rescuer(wq),
 		     "workqueue: failed to create early rescuer for %s",
-		     wq->name);
+		     wq->name);//如果 rescuer 初始化失败，发出警告信息
 	}
 
 	mutex_unlock(&wq_pool_mutex);
@@ -7875,23 +7877,25 @@ void __init workqueue_init(void)
 	 * represents the shared BH execution context and thus doesn't get
 	 * affected by hotplug events. Create the BH pseudo workers for all
 	 * possible CPUs here.
+	 * 创建初始工作者。每个 BH（后台处理）池都有一个伪线程，它代表共享的
+	 * BH 执行上下文，并且不受热插拔事件影响。这里为所有可能的CPU创建这些BH伪线程。
 	 */
-	for_each_possible_cpu(cpu)
-		for_each_bh_worker_pool(pool, cpu)
-			BUG_ON(!create_worker(pool));
+	for_each_possible_cpu(cpu)//遍历所有可能的CPU
+		for_each_bh_worker_pool(pool, cpu)// 遍历每个 CPU 的 BH 工作池
+			BUG_ON(!create_worker(pool));//如果线程创建失败，触发内核 BUG 终止操作
 
-	for_each_online_cpu(cpu) {
-		for_each_cpu_worker_pool(pool, cpu) {
-			pool->flags &= ~POOL_DISASSOCIATED;
-			BUG_ON(!create_worker(pool));
+	for_each_online_cpu(cpu) {//遍历当前在线的 CPU
+		for_each_cpu_worker_pool(pool, cpu) {//遍历每个在线 CPU 的普通工作池
+			pool->flags &= ~POOL_DISASSOCIATED;//清除工作池的分离标志，标志池恢复关联
+			BUG_ON(!create_worker(pool));//如果线程创建失败，触发内核 BUG
 		}
 	}
 
-	hash_for_each(unbound_pool_hash, bkt, pool, hash_node)
-		BUG_ON(!create_worker(pool));
+	hash_for_each(unbound_pool_hash, bkt, pool, hash_node)//遍历未绑定到特定 CPU 的工作池
+		BUG_ON(!create_worker(pool));//如果线程创建失败，触发内核 BUG
 
-	wq_online = true;
-	wq_watchdog_init();
+	wq_online = true;//设置全局标志，表示工作队列子系统已启动完成
+	wq_watchdog_init();//初始化工作队列的看门狗线程，用于监控线程运行状态
 }
 
 /*
@@ -7900,40 +7904,40 @@ void __init workqueue_init(void)
  * and consecutive pod ID. The rest of @pt is initialized accordingly.
  */
 static void __init init_pod_type(struct wq_pod_type *pt,
-				 bool (*cpus_share_pod)(int, int))
+				 bool (*cpus_share_pod)(int, int))//初始化工作队列 POD 类型结构
 {
-	int cur, pre, cpu, pod;
+	int cur, pre, cpu, pod;//定义当前 CPU、前一个 CPU、遍历 CPU 及 POD 计数器
 
-	pt->nr_pods = 0;
+	pt->nr_pods = 0;//初始化 POD 数量为 0
 
-	/* init @pt->cpu_pod[] according to @cpus_share_pod() */
-	pt->cpu_pod = kcalloc(nr_cpu_ids, sizeof(pt->cpu_pod[0]), GFP_KERNEL);
-	BUG_ON(!pt->cpu_pod);
+	/* 根据传入的 cpus_share_pod 函数初始化 @pt->cpu_pod[] */
+	pt->cpu_pod = kcalloc(nr_cpu_ids, sizeof(pt->cpu_pod[0]), GFP_KERNEL);//为每个 CPU 分配 POD ID 数组
+	BUG_ON(!pt->cpu_pod);// 如果内存分配失败，触发内核 BUG
 
-	for_each_possible_cpu(cur) {
-		for_each_possible_cpu(pre) {
-			if (pre >= cur) {
-				pt->cpu_pod[cur] = pt->nr_pods++;
-				break;
+	for_each_possible_cpu(cur) {//遍历每个可能的 CPU
+		for_each_possible_cpu(pre) {//遍历当前CPU之前的所有 CPU
+			if (pre >= cur) {//如果遍历到自己
+				pt->cpu_pod[cur] = pt->nr_pods++;//为该 CPU 分配一个新的 POD ID
+				break;// 跳出内层循环
 			}
-			if (cpus_share_pod(cur, pre)) {
-				pt->cpu_pod[cur] = pt->cpu_pod[pre];
+			if (cpus_share_pod(cur, pre)) {//如果两个 CPU 共享同一个 POD
+				pt->cpu_pod[cur] = pt->cpu_pod[pre];//设置当前 CPU 与前一个 CPU 相同的 POD ID
 				break;
 			}
 		}
 	}
 
-	/* init the rest to match @pt->cpu_pod[] */
-	pt->pod_cpus = kcalloc(pt->nr_pods, sizeof(pt->pod_cpus[0]), GFP_KERNEL);
-	pt->pod_node = kcalloc(pt->nr_pods, sizeof(pt->pod_node[0]), GFP_KERNEL);
-	BUG_ON(!pt->pod_cpus || !pt->pod_node);
+	/* 根据 @pt->cpu_pod[] 初始化剩余数据 */
+	pt->pod_cpus = kcalloc(pt->nr_pods, sizeof(pt->pod_cpus[0]), GFP_KERNEL);//为每个 POD 分配 cpumask（CPU 掩码）
+	pt->pod_node = kcalloc(pt->nr_pods, sizeof(pt->pod_node[0]), GFP_KERNEL);//为每个 POD 分配 NUMA 节点数组
+	BUG_ON(!pt->pod_cpus || !pt->pod_node);//如果内存分配失败，触发内核 BUG
 
-	for (pod = 0; pod < pt->nr_pods; pod++)
-		BUG_ON(!zalloc_cpumask_var(&pt->pod_cpus[pod], GFP_KERNEL));
+	for (pod = 0; pod < pt->nr_pods; pod++)//遍历所有 POD
+		BUG_ON(!zalloc_cpumask_var(&pt->pod_cpus[pod], GFP_KERNEL));//为每个 POD 初始化 CPU 掩码
 
-	for_each_possible_cpu(cpu) {
-		cpumask_set_cpu(cpu, pt->pod_cpus[pt->cpu_pod[cpu]]);
-		pt->pod_node[pt->cpu_pod[cpu]] = cpu_to_node(cpu);
+	for_each_possible_cpu(cpu) {//遍历所有可能的 CPU
+		cpumask_set_cpu(cpu, pt->pod_cpus[pt->cpu_pod[cpu]]);//将 CPU 添加到所属的 POD 的 CPU 掩码中
+		pt->pod_node[pt->cpu_pod[cpu]] = cpu_to_node(cpu);//设置该 POD 的 NUMA 节点
 	}
 }
 
@@ -7963,36 +7967,39 @@ static bool __init cpus_share_numa(int cpu0, int cpu1)
  * invoked after SMP and topology information are fully initialized. It
  * initializes the unbound CPU pods accordingly.
  */
-void __init workqueue_init_topology(void)
+void __init workqueue_init_topology(void)//初始化工作队列拓扑信息
 {
-	struct workqueue_struct *wq;
+	struct workqueue_struct *wq;//定义一个工作队列结构体指针
 	int cpu;
 
-	init_pod_type(&wq_pod_types[WQ_AFFN_CPU], cpus_dont_share);
-	init_pod_type(&wq_pod_types[WQ_AFFN_SMT], cpus_share_smt);
-	init_pod_type(&wq_pod_types[WQ_AFFN_CACHE], cpus_share_cache);
-	init_pod_type(&wq_pod_types[WQ_AFFN_NUMA], cpus_share_numa);
+	init_pod_type(&wq_pod_types[WQ_AFFN_CPU], cpus_dont_share);//初始化 WQ_AFFN_CPU 类型，CPU 不共享工作池
+	init_pod_type(&wq_pod_types[WQ_AFFN_SMT], cpus_share_smt);//初始化 WQ_AFFN_SMT 类型，共享超线程 (SMT) 工作池
+	init_pod_type(&wq_pod_types[WQ_AFFN_CACHE], cpus_share_cache);//初始化 WQ_AFFN_CACHE 类型，共享缓存的工作池
+	init_pod_type(&wq_pod_types[WQ_AFFN_NUMA], cpus_share_numa);//初始化 WQ_AFFN_NUMA 类型，共享 NUMA 节点的工作池
 
-	wq_topo_initialized = true;
+	wq_topo_initialized = true;//标志位，表示工作队列拓扑初始化完成
 
-	mutex_lock(&wq_pool_mutex);
+	mutex_lock(&wq_pool_mutex);//获取工作队列池的互斥锁，防止并发修改
 
 	/*
 	 * Workqueues allocated earlier would have all CPUs sharing the default
 	 * worker pool. Explicitly call wq_update_pod() on all workqueue and CPU
 	 * combinations to apply per-pod sharing.
+	 * 在拓扑初始化之前分配的工作队列默认所有 CPU 使用同一个 worker pool。
+	 * 这里遍历所有的工作队列和在线 CPU 组合，通过调用 wq_update_pod()
+	 * 来应用基于 POD 类型的 CPU 共享策略。
 	 */
-	list_for_each_entry(wq, &workqueues, list) {
-		for_each_online_cpu(cpu)
-			wq_update_pod(wq, cpu, cpu, true);
-		if (wq->flags & WQ_UNBOUND) {
-			mutex_lock(&wq->mutex);
-			wq_update_node_max_active(wq, -1);
-			mutex_unlock(&wq->mutex);
+	list_for_each_entry(wq, &workqueues, list) {//遍历所有工作队列
+		for_each_online_cpu(cpu)//遍历每个在线 CPU
+			wq_update_pod(wq, cpu, cpu, true);//更新该 CPU 对应的工作队列 POD
+		if (wq->flags & WQ_UNBOUND) {//如果工作队列是无边界的（不绑定 CPU）
+			mutex_lock(&wq->mutex);//加锁工作队列，防止并发修改
+			wq_update_node_max_active(wq, -1);//更新无边界工作队列的活动节点限制为默认值
+			mutex_unlock(&wq->mutex);//解锁工作队列
 		}
 	}
 
-	mutex_unlock(&wq_pool_mutex);
+	mutex_unlock(&wq_pool_mutex);//释放工作队列池的互斥锁
 }
 
 void __warn_flushing_systemwide_wq(void)

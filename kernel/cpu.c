@@ -122,23 +122,23 @@ static inline void cpuhp_lock_release(bool bringup) { }
  * @cant_stop:	Bringup/teardown can't be stopped at this step
  * @multi_instance:	State has multiple instances which get added afterwards
  */
-struct cpuhp_step {
-	const char		*name;
+struct cpuhp_step {//CPU 热插拔步骤结构体，定义每个步骤在 CPU 上线/下线时的操作
+	const char		*name;//步骤名称，用于调试和日志输出
 	union {
-		int		(*single)(unsigned int cpu);
+		int		(*single)(unsigned int cpu);//单实例回调函数，针对特定 CPU 进行操作
 		int		(*multi)(unsigned int cpu,
-					 struct hlist_node *node);
-	} startup;
+					 struct hlist_node *node);//多实例回调函数，支持传入多个节点
+	} startup;//CPU 上线时的操作函数
 	union {
-		int		(*single)(unsigned int cpu);
+		int		(*single)(unsigned int cpu);//单实例回调函数，用于下线操作
 		int		(*multi)(unsigned int cpu,
-					 struct hlist_node *node);
-	} teardown;
+					 struct hlist_node *node);//多实例回调函数，支持传入多个节点
+	} teardown;//CPU 下线时的操作函数
 	/* private: */
-	struct hlist_head	list;
+	struct hlist_head	list;//步骤链表，保存所有已注册的步骤，供系统遍历调用
 	/* public: */
-	bool			cant_stop;
-	bool			multi_instance;
+	bool			cant_stop;//标志位，表示此步骤是否允许在 CPU 下线时跳过或中断
+	bool			multi_instance;//标志位，表示此步骤是否为多实例步骤
 };
 
 static DEFINE_MUTEX(cpuhp_state_mutex);

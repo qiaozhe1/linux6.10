@@ -46,29 +46,29 @@ extern unsigned int coherency_max_size;
  * While @of_node, @disable_sysfs and @priv are used for internal book
  * keeping, the remaining members form the core properties of the cache
  */
-struct cacheinfo {
-	unsigned int id;
-	enum cache_type type;
-	unsigned int level;
-	unsigned int coherency_line_size;
-	unsigned int number_of_sets;
-	unsigned int ways_of_associativity;
-	unsigned int physical_line_partition;
-	unsigned int size;
-	cpumask_t shared_cpu_map;
-	unsigned int attributes;
-#define CACHE_WRITE_THROUGH	BIT(0)
-#define CACHE_WRITE_BACK	BIT(1)
+struct cacheinfo {//描述与系统中的缓存层次结构相关的信息。它提供了缓存的基本属性
+	unsigned int id;//缓存的唯一标识符
+	enum cache_type type;//缓存类型（数据、指令或联合）
+	unsigned int level;//缓存级别（L1、L2 等）
+	unsigned int coherency_line_size;//缓存一致性行的大小（以字节为单位）
+	unsigned int number_of_sets;//缓存中的总集合数
+	unsigned int ways_of_associativity;//缓存的关联度（几路组相联）
+	unsigned int physical_line_partition;//缓存物理分区的大小
+	unsigned int size;//缓存的总大小（以字节为单位）
+	cpumask_t shared_cpu_map;//共享此缓存的 CPU 掩码
+	unsigned int attributes;//缓存属性，表示写策略和分配策略等
+#define CACHE_WRITE_THROUGH	BIT(0)//表示写穿缓存策略
+#define CACHE_WRITE_BACK	BIT(1)//表示写回缓存策略
 #define CACHE_WRITE_POLICY_MASK		\
-	(CACHE_WRITE_THROUGH | CACHE_WRITE_BACK)
-#define CACHE_READ_ALLOCATE	BIT(2)
-#define CACHE_WRITE_ALLOCATE	BIT(3)
+	(CACHE_WRITE_THROUGH | CACHE_WRITE_BACK)//写策略掩码，用于筛选写穿和写回
+#define CACHE_READ_ALLOCATE	BIT(2)//表示读取时分配缓存
+#define CACHE_WRITE_ALLOCATE	BIT(3)//表示写入时分配缓存
 #define CACHE_ALLOCATE_POLICY_MASK	\
-	(CACHE_READ_ALLOCATE | CACHE_WRITE_ALLOCATE)
-#define CACHE_ID		BIT(4)
-	void *fw_token;
-	bool disable_sysfs;
-	void *priv;
+	(CACHE_READ_ALLOCATE | CACHE_WRITE_ALLOCATE)//分配策略掩码，用于筛选读取或写入分配
+#define CACHE_ID		BIT(4)//用于标识缓存 ID 的掩码
+	void *fw_token;//固件提供的标识缓存的令牌
+	bool disable_sysfs;//是否禁用与该缓存相关的 sysfs 接口
+	void *priv;//指向私有数据的指针，供缓存相关的特定实现使用
 };
 
 struct cpu_cacheinfo {//用于描述每个 CPU 的缓存信息
