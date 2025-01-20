@@ -1218,40 +1218,43 @@ static void __free_pages_ok(struct page *page, unsigned int order,
 	__count_vm_events(PGFREE, 1 << order);
 }
 
-void __free_pages_core(struct page *page, unsigned int order)
+void __free_pages_core(struct page *page, unsigned int order)//负责释放内存页块并将其返回到系统的空闲页列表中。
 {
-	unsigned int nr_pages = 1 << order;
-	struct page *p = page;
-	unsigned int loop;
+	unsigned int nr_pages = 1 << order;//根据 order 计算页的数量
+	struct page *p = page;//页结构指针，用于遍历页块
+	unsigned int loop;//循环计数器
 
 	/*
 	 * When initializing the memmap, __init_single_page() sets the refcount
 	 * of all pages to 1 ("allocated"/"not free"). We have to set the
 	 * refcount of all involved pages to 0.
+	 * 初始化内存映射时，__init_single_page() 会将所有页的引用计数设置为1
+	 * 表示已分配/不可用）。此处需要将所有相关页的引用计数设置为0。
 	 */
-	prefetchw(p);
-	for (loop = 0; loop < (nr_pages - 1); loop++, p++) {
-		prefetchw(p + 1);
-		__ClearPageReserved(p);
-		set_page_count(p, 0);
+	prefetchw(p);//预取第一个页的写入缓存
+	for (loop = 0; loop < (nr_pages - 1); loop++, p++) {//遍历每个页，减去最后一页
+		prefetchw(p + 1);//预取下一个页
+		__ClearPageReserved(p);//清除页的保留标志，标记为可用
+		set_page_count(p, 0);//将页的引用计数设置为 0
 	}
-	__ClearPageReserved(p);
-	set_page_count(p, 0);
+	__ClearPageReserved(p);// 清除最后一页的保留标志
+	set_page_count(p, 0);//设置最后一页的引用计数为 0
 
-	atomic_long_add(nr_pages, &page_zone(page)->managed_pages);
+	atomic_long_add(nr_pages, &page_zone(page)->managed_pages);//将这些页添加到管理页计数器中
 
-	if (page_contains_unaccepted(page, order)) {
-		if (order == MAX_PAGE_ORDER && __free_unaccepted(page))
+	if (page_contains_unaccepted(page, order)) {//检查页是否包含未接受的内存
+		if (order == MAX_PAGE_ORDER && __free_unaccepted(page))//如果是最大阶且释放未接受的页成功
 			return;
 
-		accept_page(page, order);
+		accept_page(page, order);//否则接受该页块
 	}
 
 	/*
 	 * Bypass PCP and place fresh pages right to the tail, primarily
 	 * relevant for memory onlining.
+	 * 跳过 PCP 缓存，直接将新页放入尾部。这对于内存上线尤其重要。
 	 */
-	__free_pages_ok(page, order, FPI_TO_TAIL);
+	__free_pages_ok(page, order, FPI_TO_TAIL);//调用核心函数释放页块
 }
 
 /*

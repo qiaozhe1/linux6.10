@@ -1934,26 +1934,26 @@ static void __init deferred_free_range(unsigned long pfn,
 	struct page *page;
 	unsigned long i;
 
-	if (!nr_pages)
+	if (!nr_pages)//如果要释放的页数为零，直接返回
 		return;
 
-	page = pfn_to_page(pfn);
+	page = pfn_to_page(pfn);//将页帧号 (pfn) 转换为页结构的指针
 
-	/* Free a large naturally-aligned chunk if possible */
+	/* 如果页数为最大阶并且页帧号是最大阶对齐的，尝试释放一个大块的内存 */
 	if (nr_pages == MAX_ORDER_NR_PAGES && IS_MAX_ORDER_ALIGNED(pfn)) {
-		for (i = 0; i < nr_pages; i += pageblock_nr_pages)
-			set_pageblock_migratetype(page + i, MIGRATE_MOVABLE);
-		__free_pages_core(page, MAX_PAGE_ORDER);
+		for (i = 0; i < nr_pages; i += pageblock_nr_pages)//按页块大小遍历每块
+			set_pageblock_migratetype(page + i, MIGRATE_MOVABLE);//将页块类型设置为可移动
+		__free_pages_core(page, MAX_PAGE_ORDER);//释放整个大块内存
 		return;
 	}
 
-	/* Accept chunks smaller than MAX_PAGE_ORDER upfront */
-	accept_memory(PFN_PHYS(pfn), PFN_PHYS(pfn + nr_pages));
+	/* 接受小于最大页阶的内存块，立即使其可用 */
+	accept_memory(PFN_PHYS(pfn), PFN_PHYS(pfn + nr_pages));// 标记物理内存可用
 
-	for (i = 0; i < nr_pages; i++, page++, pfn++) {
-		if (pageblock_aligned(pfn))
-			set_pageblock_migratetype(page, MIGRATE_MOVABLE);
-		__free_pages_core(page, 0);
+	for (i = 0; i < nr_pages; i++, page++, pfn++) {//遍历每页
+		if (pageblock_aligned(pfn)) //如果页帧号与页块对齐
+			set_pageblock_migratetype(page, MIGRATE_MOVABLE);//设置页块为可移动类型
+		__free_pages_core(page, 0);// 释放单页内存
 	}
 }
 
@@ -1989,7 +1989,7 @@ static void __init deferred_free_pages(unsigned long pfn,
 {
 	unsigned long nr_free = 0;//记录连续可释放页的数量。
 
-	for (; pfn < end_pfn; pfn++) {//遍历从 pfn 到 end_pfn 的页帧。
+	for (; pfn < end_pfn; pfn++) {//遍历从pfn到end_pfn的页帧。
 		if (!deferred_pfn_valid(pfn)) {//如果当前页帧号无效
 			deferred_free_range(pfn - nr_free, nr_free);//释放从当前页帧号减去累计数量开始的页
 			nr_free = 0;
