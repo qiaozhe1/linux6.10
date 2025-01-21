@@ -725,7 +725,7 @@ static noinline void __ref __noreturn rest_init(void)
 	 * 将 init 进程固定在启动 CPU 上。在 sched_init_smp() 运行之前，任务迁移并不能正常工作。
 	 * 该函数将设置 init 进程的允许 CPU 为非隔离的 CPU。
 	 */
-	rcu_read_lock();//获取 RCU 读取锁，防止在读取任务时发生并发更改
+	rcu_read_lock();//获取RCU读取锁，防止在读取任务时发生并发更改
 	tsk = find_task_by_pid_ns(pid, &init_pid_ns);//根据进程 ID 在初始命名空间中查找 init 任务
 	tsk->flags |= PF_NO_SETAFFINITY;//设置任务标志，禁止设置 CPU 亲和性
 	set_cpus_allowed_ptr(tsk, cpumask_of(smp_processor_id()));//将 init 进程限制在启动 CPU 上运行
@@ -1484,7 +1484,7 @@ void __weak free_initmem(void)
 }
 /*由 `kthreadd` 调用的初始化函数,负责初始化内核以及启动用户态的 init 进程
  *内核线程的主要目标是在内核启动并完成基本初始化后，将控制权交给用户态的初始化程序。
- * */
+ */
 static int __ref kernel_init(void *unused)
 {
 	int ret;
@@ -1564,16 +1564,16 @@ static int __ref kernel_init(void *unused)
 /* Open /dev/console, for stdin/stdout/stderr, this should never fail */
 void __init console_on_rootfs(void)
 {
-	struct file *file = filp_open("/dev/console", O_RDWR, 0);
+	struct file *file = filp_open("/dev/console", O_RDWR, 0);//打开设备文件 "/dev/console"，以读写模式（O_RDWR）打开
 
 	if (IS_ERR(file)) {
-		pr_err("Warning: unable to open an initial console.\n");
+		pr_err("Warning: unable to open an initial console.\n");//如果打开失败，打印错误信息
 		return;
 	}
-	init_dup(file);
-	init_dup(file);
-	init_dup(file);
-	fput(file);
+	init_dup(file);//对打开的文件进行初始化，并为其创建副本
+	init_dup(file);//再次为该文件创建副本，可能是为了将其与不同的终端进行绑定
+	init_dup(file);//再次创建副本，通常用于文件描述符分配
+	fput(file);//释放 `file` 指向的文件结构，关闭文件
 }
 
 static noinline void __init kernel_init_freeable(void)

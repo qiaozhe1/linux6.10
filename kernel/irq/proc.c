@@ -433,17 +433,17 @@ void init_irq_proc(void)
 	struct irq_desc *desc;
 
 	/* create /proc/irq */
-	root_irq_dir = proc_mkdir("irq", NULL);
-	if (!root_irq_dir)
-		return;
+	root_irq_dir = proc_mkdir("irq", NULL);//在 `/proc` 目录下创建一个名为 "irq" 的子目录，用于存放 IRQ 相关的 proc 文件
+	if (!root_irq_dir)//如果创建目录失败
+		return;//直接返回，不做进一步操作
 
-	register_default_affinity_proc();
+	register_default_affinity_proc();//注册默认的 IRQ 亲和性 proc 条目
 
 	/*
 	 * Create entries for all existing IRQs.
 	 */
-	for_each_irq_desc(irq, desc)
-		register_irq_proc(irq, desc);
+	for_each_irq_desc(irq, desc)// 遍历系统中所有的 IRQ 描述符
+		register_irq_proc(irq, desc);//为每个 IRQ 描述符创建 proc 条目
 }
 
 #ifdef CONFIG_GENERIC_IRQ_SHOW

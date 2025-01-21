@@ -259,9 +259,9 @@ int __init init_dup(struct file *file)
 {
 	int fd;
 
-	fd = get_unused_fd_flags(0);
+	fd = get_unused_fd_flags(0);//获取一个未使用的文件描述符，并将其标记为不带任何特定标志（0表示没有附加标志）
 	if (fd < 0)
 		return fd;
-	fd_install(fd, get_file(file));
+	fd_install(fd, get_file(file));//安装文件并将其与新的文件描述符`fd`关联
 	return 0;
 }
