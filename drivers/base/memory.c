@@ -965,7 +965,7 @@ void __init memory_dev_init(void)
 	unsigned long block_sz, nr;
 
 	/* Validate the configured memory block size */
-	block_sz = memory_block_size_bytes();
+	block_sz = memory_block_size_bytes();//获取配置的内存块大小
 	if (!is_power_of_2(block_sz) || block_sz < MIN_MEMORY_BLOCK_SIZE)
 		panic("Memory block size not suitable: 0x%lx\n", block_sz);
 	sections_per_block = block_sz / MIN_MEMORY_BLOCK_SIZE;

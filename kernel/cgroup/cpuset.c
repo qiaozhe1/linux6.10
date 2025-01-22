@@ -4666,13 +4666,14 @@ static int cpuset_track_online_nodes(struct notifier_block *self,
  *
  * Description: Finish top cpuset after cpu, node maps are initialized
  */
-void __init cpuset_init_smp(void)
+void __init cpuset_init_smp(void)//初始化多处理器系统中的 cpuset 功能的一部分
 {
 	/*
 	 * cpus_allowd/mems_allowed set to v2 values in the initial
 	 * cpuset_bind() call will be reset to v1 values in another
 	 * cpuset_bind() call when v1 cpuset is mounted.
 	 */
+<<<<<<< HEAD
 	top_cpuset.old_mems_allowed = top_cpuset.mems_allowed;//备份当前的 mems_allowed 值到 old_mems_allowed，为后续版本切换做准备
 
 	cpumask_copy(top_cpuset.effective_cpus, cpu_active_mask);//将当前系统的活跃 CPU 掩码复制到 top_cpuset 的 effective_cpus
@@ -4682,6 +4683,17 @@ void __init cpuset_init_smp(void)
 
 	cpuset_migrate_mm_wq = alloc_ordered_workqueue("cpuset_migrate_mm", 0);//创建一个有序的工作队列，用于处理内存迁移任务
 	BUG_ON(!cpuset_migrate_mm_wq);//如果工作队列创建失败，触发内核崩溃，防止系统进入不一致状态
+=======
+	top_cpuset.old_mems_allowed = top_cpuset.mems_allowed;//保存当前 top_cpuset 的 mems_allowed 状态为 old_mems_allowed，以便后续回滚
+
+	cpumask_copy(top_cpuset.effective_cpus, cpu_active_mask);// 将当前活跃的 CPU 核心掩码复制到 top_cpuset 的 effective_cpus
+	top_cpuset.effective_mems = node_states[N_MEMORY];//设置 top_cpuset 的 effective_mems 为当前系统中的所有内存节点
+
+	hotplug_memory_notifier(cpuset_track_online_nodes, CPUSET_CALLBACK_PRI);//注册内存热插拔通知，以跟踪在线的内存节点
+
+	cpuset_migrate_mm_wq = alloc_ordered_workqueue("cpuset_migrate_mm", 0);// 为 cpuset 迁移分配一个有序的工作队列
+	BUG_ON(!cpuset_migrate_mm_wq);//如果分配工作队列失败，则触发错误
+>>>>>>> c802de9f743ea120b6e91142d8b04f332bbecd89
 }
 
 /**
