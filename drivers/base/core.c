@@ -4124,35 +4124,35 @@ struct device *device_find_any_child(struct device *parent)
 }
 EXPORT_SYMBOL_GPL(device_find_any_child);
 
-int __init devices_init(void)
+int __init devices_init(void)//用于初始化设备管理相关的 sysfs 结构。
 {
-	devices_kset = kset_create_and_add("devices", &device_uevent_ops, NULL);
+	devices_kset = kset_create_and_add("devices", &device_uevent_ops, NULL);//创建并注册设备 kset，用于设备管理
 	if (!devices_kset)
 		return -ENOMEM;
-	dev_kobj = kobject_create_and_add("dev", NULL);
+	dev_kobj = kobject_create_and_add("dev", NULL);//创建并注册设备 kobject，挂载在根目录下
 	if (!dev_kobj)
 		goto dev_kobj_err;
-	sysfs_dev_block_kobj = kobject_create_and_add("block", dev_kobj);
+	sysfs_dev_block_kobj = kobject_create_and_add("block", dev_kobj);//创建并注册 "block" kobject，用于块设备
 	if (!sysfs_dev_block_kobj)
 		goto block_kobj_err;
-	sysfs_dev_char_kobj = kobject_create_and_add("char", dev_kobj);
+	sysfs_dev_char_kobj = kobject_create_and_add("char", dev_kobj);//创建并注册 "char" kobject，用于字符设备
 	if (!sysfs_dev_char_kobj)
 		goto char_kobj_err;
-	device_link_wq = alloc_workqueue("device_link_wq", 0, 0);
+	device_link_wq = alloc_workqueue("device_link_wq", 0, 0);//创建一个用于设备链接的工作队列
 	if (!device_link_wq)
 		goto wq_err;
 
 	return 0;
 
  wq_err:
-	kobject_put(sysfs_dev_char_kobj);
+	kobject_put(sysfs_dev_char_kobj);//释放字符设备 kobject
  char_kobj_err:
 	kobject_put(sysfs_dev_block_kobj);
  block_kobj_err:
 	kobject_put(dev_kobj);
  dev_kobj_err:
-	kset_unregister(devices_kset);
-	return -ENOMEM;
+	kset_unregister(devices_kset);//注销设备 kset
+	return -ENOMEM;//返回内存不足错误
 }
 
 static int device_check_offline(struct device *dev, void *not_used)

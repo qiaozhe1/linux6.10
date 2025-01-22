@@ -160,46 +160,50 @@ struct bdi_writeback {
 #endif
 };
 
-struct backing_dev_info {
-	u64 id;
-	struct rb_node rb_node; /* keyed by ->id */
-	struct list_head bdi_list;
-	unsigned long ra_pages;	/* max readahead in PAGE_SIZE units */
-	unsigned long io_pages;	/* max allowed IO size */
+struct backing_dev_info {//用于管理后台设备信息的核心结构体,提供了内核对后台设备（如块设备）写回和管理的支持
+	u64 id;// 唯一标识后台设备信息的 ID
+	struct rb_node rb_node; /* 红黑树节点，用于通过ID组织和索引 */
+	struct list_head bdi_list;	//链表头，用于链接所有后台设备信息实例
+	unsigned long ra_pages;	/* 最大预读大小，以 PAGE_SIZE 为单位 */
+	unsigned long io_pages;	/* 最大允许的 I/O 大小 */
 
-	struct kref refcnt;	/* Reference counter for the structure */
-	unsigned int capabilities; /* Device capabilities */
-	unsigned int min_ratio;
-	unsigned int max_ratio, max_prop_frac;
+	struct kref refcnt;	/* 结构体的引用计数器，用于内存管理 */
+	unsigned int capabilities; /* 设备的功能标志 */
+	unsigned int min_ratio;//最小使用比例
+	unsigned int max_ratio, max_prop_frac;//最大使用比例和最大属性分数
 
 	/*
 	 * Sum of avg_write_bw of wbs with dirty inodes.  > 0 if there are
 	 * any dirty wbs, which is depended upon by bdi_has_dirty().
+	 * 包含带有脏 inode 的写回结构的平均写入带宽总和。如果有脏数据，
+	 * bdi_has_dirty() 将依赖此值返回 > 0。
 	 */
 	atomic_long_t tot_write_bandwidth;
 	/*
 	 * Jiffies when last process was dirty throttled on this bdi. Used by
 	 * blk-wbt.
+	 * 记录最后一个进程在该 bdi 上因脏数据限制而被阻塞的时间（以 jiffies 为单位）。
+	 * 由 blk-wbt 使用。
 	 */
 	unsigned long last_bdp_sleep;
 
-	struct bdi_writeback wb;  /* the root writeback info for this bdi */
-	struct list_head wb_list; /* list of all wbs */
+	struct bdi_writeback wb;  /* 根写回信息，用于该 bdi 的写回操作 */
+	struct list_head wb_list; /* 所有写回结构的链表 */
 #ifdef CONFIG_CGROUP_WRITEBACK
-	struct radix_tree_root cgwb_tree; /* radix tree of active cgroup wbs */
-	struct mutex cgwb_release_mutex;  /* protect shutdown of wb structs */
-	struct rw_semaphore wb_switch_rwsem; /* no cgwb switch while syncing */
+	struct radix_tree_root cgwb_tree; /* 活跃 cgroup 写回结构的基数树 */
+	struct mutex cgwb_release_mutex;  /* 保护写回结构关闭时的互斥锁 */
+	struct rw_semaphore wb_switch_rwsem; /* 在同步期间禁止 cgroup 写回切换 */
 #endif
-	wait_queue_head_t wb_waitq;
+	wait_queue_head_t wb_waitq;//等待队列头，用于写回任务等待
 
-	struct device *dev;
-	char dev_name[64];
-	struct device *owner;
+	struct device *dev;//指向相关设备的指针
+	char dev_name[64];//设备名称字符串
+	struct device *owner;//设备的拥有者，可能是父设备
 
-	struct timer_list laptop_mode_wb_timer;
+	struct timer_list laptop_mode_wb_timer;//定时器，用于笔记本模式的写回调度
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *debug_dir;
+	struct dentry *debug_dir;//用于 debugfs 的目录节点
 #endif
 };
 

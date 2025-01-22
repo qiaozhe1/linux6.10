@@ -4673,15 +4673,15 @@ void __init cpuset_init_smp(void)
 	 * cpuset_bind() call will be reset to v1 values in another
 	 * cpuset_bind() call when v1 cpuset is mounted.
 	 */
-	top_cpuset.old_mems_allowed = top_cpuset.mems_allowed;
+	top_cpuset.old_mems_allowed = top_cpuset.mems_allowed;//备份当前的 mems_allowed 值到 old_mems_allowed，为后续版本切换做准备
 
-	cpumask_copy(top_cpuset.effective_cpus, cpu_active_mask);
-	top_cpuset.effective_mems = node_states[N_MEMORY];
+	cpumask_copy(top_cpuset.effective_cpus, cpu_active_mask);//将当前系统的活跃 CPU 掩码复制到 top_cpuset 的 effective_cpus
+	top_cpuset.effective_mems = node_states[N_MEMORY];//设置 top_cpuset 的有效内存节点，表示当前系统可用的内存节点
 
-	hotplug_memory_notifier(cpuset_track_online_nodes, CPUSET_CALLBACK_PRI);
+	hotplug_memory_notifier(cpuset_track_online_nodes, CPUSET_CALLBACK_PRI);//注册内存热插拔通知，用于动态跟踪在线的内存节点
 
-	cpuset_migrate_mm_wq = alloc_ordered_workqueue("cpuset_migrate_mm", 0);
-	BUG_ON(!cpuset_migrate_mm_wq);
+	cpuset_migrate_mm_wq = alloc_ordered_workqueue("cpuset_migrate_mm", 0);//创建一个有序的工作队列，用于处理内存迁移任务
+	BUG_ON(!cpuset_migrate_mm_wq);//如果工作队列创建失败，触发内核崩溃，防止系统进入不一致状态
 }
 
 /**

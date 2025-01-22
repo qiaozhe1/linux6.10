@@ -411,16 +411,16 @@ static void __noreturn devtmpfs_work_loop(void)
 
 static noinline int __init devtmpfs_setup(void *p)
 {
-	int err;
+	int err;//定义返回值变量，用于存储函数的执行结果
 
-	err = ksys_unshare(CLONE_NEWNS);
+	err = ksys_unshare(CLONE_NEWNS);//调用系统函数分离当前命名空间，使用新的挂载命名空间
 	if (err)
 		goto out;
-	err = init_mount("devtmpfs", "/", "devtmpfs", DEVTMPFS_MFLAGS, NULL);
+	err = init_mount("devtmpfs", "/", "devtmpfs", DEVTMPFS_MFLAGS, NULL);//初始化挂载 devtmpfs 文件系统到根目录
 	if (err)
 		goto out;
-	init_chdir("/.."); /* will traverse into overmounted root */
-	init_chroot(".");
+	init_chdir("/.."); /* 改变当前工作目录到根目录的父目录，确保路径一致性 */
+	init_chroot(".");//将当前目录设置为新的根目录
 out:
 	*(int *)p = err;
 	return err;
@@ -431,14 +431,14 @@ out:
  * calls.  That call is done while devtmpfs_init, which is marked __init,
  * synchronously waits for it to complete.
  */
-static int __ref devtmpfsd(void *p)
+static int __ref devtmpfsd(void *p)//负责完成文件系统的初始化，并进入工作循环以管理文件系统的操作
 {
-	int err = devtmpfs_setup(p);
+	int err = devtmpfs_setup(p);//设置 devtmpfs 文件系统，`p` 是传递的参数
 
-	complete(&setup_done);
+	complete(&setup_done);//通知等待 `setup_done` 的任务，设置过程已完成
 	if (err)
 		return err;
-	devtmpfs_work_loop();
+	devtmpfs_work_loop();//进入 devtmpfs 的工作循环，用于处理后续的文件系统操作
 	return 0;
 }
 
@@ -446,37 +446,37 @@ static int __ref devtmpfsd(void *p)
  * Create devtmpfs instance, driver-core devices will add their device
  * nodes here.
  */
-int __init devtmpfs_init(void)
+int __init devtmpfs_init(void)//用于初始化 devtmpfs 文件系统,通过创建 devtmpfs 文件系统和相关的内核线程，实现设备节点的自动创建和管理
 {
-	char opts[] = "mode=0755";
+	char opts[] = "mode=0755";//文件系统的挂载选项，默认模式为 0755
 	int err;
 
-	mnt = vfs_kern_mount(&internal_fs_type, 0, "devtmpfs", opts);
-	if (IS_ERR(mnt)) {
+	mnt = vfs_kern_mount(&internal_fs_type, 0, "devtmpfs", opts);//挂载 devtmpfs 文件系统
+	if (IS_ERR(mnt)) {//检查挂载是否成功
 		pr_err("unable to create devtmpfs %ld\n", PTR_ERR(mnt));
-		return PTR_ERR(mnt);
+		return PTR_ERR(mnt);//返回错误码
 	}
-	err = register_filesystem(&dev_fs_type);
+	err = register_filesystem(&dev_fs_type);//注册 devtmpfs 文件系统类型
 	if (err) {
 		pr_err("unable to register devtmpfs type %d\n", err);
 		return err;
 	}
 
-	thread = kthread_run(devtmpfsd, &err, "kdevtmpfs");
+	thread = kthread_run(devtmpfsd, &err, "kdevtmpfs");//创建并运行一个内核线程 "kdevtmpfs"
 	if (!IS_ERR(thread)) {
-		wait_for_completion(&setup_done);
+		wait_for_completion(&setup_done);//等待线程初始化完成
 	} else {
-		err = PTR_ERR(thread);
-		thread = NULL;
+		err = PTR_ERR(thread);//获取线程错误码
+		thread = NULL;//设置线程指针为 NULL
 	}
 
 	if (err) {
 		pr_err("unable to create devtmpfs %d\n", err);
-		unregister_filesystem(&dev_fs_type);
-		thread = NULL;
+		unregister_filesystem(&dev_fs_type);//注销文件系统类型
+		thread = NULL;//设置线程指针为 NULL
 		return err;
 	}
 
-	pr_info("initialized\n");
+	pr_info("initialized\n");//打印初始化成功信息
 	return 0;
 }

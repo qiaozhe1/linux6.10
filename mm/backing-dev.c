@@ -827,20 +827,20 @@ struct bdi_writeback *wb_get_create(struct backing_dev_info *bdi,
 	return wb;
 }
 
-static int cgwb_bdi_init(struct backing_dev_info *bdi)
+static int cgwb_bdi_init(struct backing_dev_info *bdi)//为 `backing_dev_info` 添加 cgroup 写回支持
 {
 	int ret;
 
-	INIT_RADIX_TREE(&bdi->cgwb_tree, GFP_ATOMIC);
-	mutex_init(&bdi->cgwb_release_mutex);
-	init_rwsem(&bdi->wb_switch_rwsem);
+	INIT_RADIX_TREE(&bdi->cgwb_tree, GFP_ATOMIC);//初始化基数树，用于存储 cgroup 写回结构
+	mutex_init(&bdi->cgwb_release_mutex);//初始化互斥锁，用于保护写回结构的释放操作
+	init_rwsem(&bdi->wb_switch_rwsem);//初始化读写信号量，防止同步期间的 cgroup 写回切换
 
-	ret = wb_init(&bdi->wb, bdi, GFP_KERNEL);
-	if (!ret) {
-		bdi->wb.memcg_css = &root_mem_cgroup->css;
-		bdi->wb.blkcg_css = blkcg_root_css;
+	ret = wb_init(&bdi->wb, bdi, GFP_KERNEL);//调用 `wb_init` 初始化根写回信息
+	if (!ret) {//如果初始化成功
+		bdi->wb.memcg_css = &root_mem_cgroup->css;//将 memcg CSS 设置为根内存 cgroup 的 CSS
+		bdi->wb.blkcg_css = blkcg_root_css;//将 blkcg CSS 设置为根块 cgroup 的 CSS
 	}
-	return ret;
+	return ret;//返回初始化结果
 }
 
 static void cgwb_bdi_unregister(struct backing_dev_info *bdi)
@@ -1000,18 +1000,18 @@ static void cgwb_remove_from_bdi_list(struct bdi_writeback *wb)
 
 int bdi_init(struct backing_dev_info *bdi)
 {
-	bdi->dev = NULL;
+	bdi->dev = NULL;//初始化设备指针为 NULL
 
-	kref_init(&bdi->refcnt);
-	bdi->min_ratio = 0;
-	bdi->max_ratio = 100 * BDI_RATIO_SCALE;
-	bdi->max_prop_frac = FPROP_FRAC_BASE;
-	INIT_LIST_HEAD(&bdi->bdi_list);
-	INIT_LIST_HEAD(&bdi->wb_list);
-	init_waitqueue_head(&bdi->wb_waitq);
-	bdi->last_bdp_sleep = jiffies;
+	kref_init(&bdi->refcnt);//初始化引用计数器
+	bdi->min_ratio = 0;//设置最小比例为 0
+	bdi->max_ratio = 100 * BDI_RATIO_SCALE;//设置最大比例为100，经过比例缩放
+	bdi->max_prop_frac = FPROP_FRAC_BASE;//初始化最大属性分数为基础值
+	INIT_LIST_HEAD(&bdi->bdi_list);//初始化 `bdi_list` 链表头
+	INIT_LIST_HEAD(&bdi->wb_list);//初始化 `wb_list` 链表头
+	init_waitqueue_head(&bdi->wb_waitq);//初始化等待队列头，用于写回等待
+	bdi->last_bdp_sleep = jiffies;//设置最后一次休眠时间为当前时间
 
-	return cgwb_bdi_init(bdi);
+	return cgwb_bdi_init(bdi);//cgroup writeback 初始化
 }
 
 struct backing_dev_info *bdi_alloc(int node_id)
