@@ -105,63 +105,63 @@ enum {
  */
 static int smpboot_thread_fn(void *data)
 {
-	struct smpboot_thread_data *td = data;
-	struct smp_hotplug_thread *ht = td->ht;
+	struct smpboot_thread_data *td = data;//提取线程数据
+	struct smp_hotplug_thread *ht = td->ht;//获取与线程关联的热插拔线程信息
 
-	while (1) {
-		set_current_state(TASK_INTERRUPTIBLE);
-		preempt_disable();
-		if (kthread_should_stop()) {
-			__set_current_state(TASK_RUNNING);
-			preempt_enable();
+	while (1) {//无限循环，线程持续运行
+		set_current_state(TASK_INTERRUPTIBLE);//将线程状态设置为可中断的休眠状态
+		preempt_disable();//禁用抢占，保护临界区
+		if (kthread_should_stop()) {//检查线程是否需要停止
+			__set_current_state(TASK_RUNNING);//恢复线程状态为运行
+			preempt_enable();//启用抢占
 			/* cleanup must mirror setup */
-			if (ht->cleanup && td->status != HP_THREAD_NONE)
-				ht->cleanup(td->cpu, cpu_online(td->cpu));
-			kfree(td);
-			return 0;
+			if (ht->cleanup && td->status != HP_THREAD_NONE)//如果需要清理，并且线程处于活动状态
+				ht->cleanup(td->cpu, cpu_online(td->cpu));//执行清理回调
+			kfree(td);//释放线程数据内存
+			return 0;//线程退出
 		}
 
-		if (kthread_should_park()) {
-			__set_current_state(TASK_RUNNING);
-			preempt_enable();
-			if (ht->park && td->status == HP_THREAD_ACTIVE) {
-				BUG_ON(td->cpu != smp_processor_id());
-				ht->park(td->cpu);
-				td->status = HP_THREAD_PARKED;
+		if (kthread_should_park()) {//检查线程是否需要暂停
+			__set_current_state(TASK_RUNNING);//恢复线程状态为运行
+			preempt_enable();//启用抢占
+			if (ht->park && td->status == HP_THREAD_ACTIVE) {//如果需要暂停，并且线程处于活动状态
+				BUG_ON(td->cpu != smp_processor_id());//验证线程是否绑定到正确的CPU
+				ht->park(td->cpu);//执行暂停回调
+				td->status = HP_THREAD_PARKED;//更新线程状态为已暂停
 			}
-			kthread_parkme();
+			kthread_parkme();//暂停线程，等待被唤醒
 			/* We might have been woken for stop */
 			continue;
 		}
 
-		BUG_ON(td->cpu != smp_processor_id());
+		BUG_ON(td->cpu != smp_processor_id());//验证线程绑定的 CPU 是否正确
 
 		/* Check for state change setup */
-		switch (td->status) {
-		case HP_THREAD_NONE:
-			__set_current_state(TASK_RUNNING);
-			preempt_enable();
-			if (ht->setup)
-				ht->setup(td->cpu);
-			td->status = HP_THREAD_ACTIVE;
+		switch (td->status) {//检查状态变化并执行初始化操作
+		case HP_THREAD_NONE://线程未初始化
+			__set_current_state(TASK_RUNNING);//恢复线程状态为运行
+			preempt_enable();//启用抢占
+			if (ht->setup)//如果存在初始化回调
+				ht->setup(td->cpu);//执行初始化回调
+			td->status = HP_THREAD_ACTIVE;//更新线程状态为活动
 			continue;
 
-		case HP_THREAD_PARKED:
-			__set_current_state(TASK_RUNNING);
-			preempt_enable();
-			if (ht->unpark)
-				ht->unpark(td->cpu);
-			td->status = HP_THREAD_ACTIVE;
+		case HP_THREAD_PARKED://线程已暂停
+			__set_current_state(TASK_RUNNING);//恢复线程状态为运行
+			preempt_enable();//启用抢占
+			if (ht->unpark)//如果存在唤醒回调
+				ht->unpark(td->cpu);//执行唤醒回调
+			td->status = HP_THREAD_ACTIVE;//更新线程状态为活动
 			continue;
 		}
 
-		if (!ht->thread_should_run(td->cpu)) {
-			preempt_enable_no_resched();
-			schedule();
+		if (!ht->thread_should_run(td->cpu)) {//如果线程不需要运行
+			preempt_enable_no_resched();//启用抢占但不重新调度
+			schedule();//调度其他任务运行
 		} else {
-			__set_current_state(TASK_RUNNING);
-			preempt_enable();
-			ht->thread_fn(td->cpu);
+			__set_current_state(TASK_RUNNING);//设置线程状态为运行
+			preempt_enable();//启用抢占
+			ht->thread_fn(td->cpu);//执行线程的主要功能
 		}
 	}
 }
@@ -182,7 +182,7 @@ __smpboot_create_thread(struct smp_hotplug_thread *ht, unsigned int cpu)//为指
 	td->ht = ht;//设置线程数据中的热插拔线程指针
 
 	tsk = kthread_create_on_cpu(smpboot_thread_fn, td, cpu,
-				    ht->thread_comm);//在指定的 CPU 上创建内核线程，并将线程数据和命令名称传递给它
+				    ht->thread_comm);//在指定的CPU上创建内核线程，并将线程数据和命令名称传递给它
 	if (IS_ERR(tsk)) {// 如果线程创建失败
 		kfree(td);//释放已分配的线程数据内存
 		return PTR_ERR(tsk);//返回错误码，表示线程创建失败
@@ -269,12 +269,12 @@ static void smpboot_destroy_threads(struct smp_hotplug_thread *ht)
 	unsigned int cpu;
 
 	/* We need to destroy also the parked threads of offline cpus */
-	for_each_possible_cpu(cpu) {
-		struct task_struct *tsk = *per_cpu_ptr(ht->store, cpu);
+	for_each_possible_cpu(cpu) {// 遍历系统中所有可能的 CPU
+		struct task_struct *tsk = *per_cpu_ptr(ht->store, cpu);//获取与 CPU 关联的线程任务结构
 
-		if (tsk) {
-			kthread_stop_put(tsk);
-			*per_cpu_ptr(ht->store, cpu) = NULL;
+		if (tsk) {//如果线程任务结构非空
+			kthread_stop_put(tsk);//停止线程并释放其引用计数
+			*per_cpu_ptr(ht->store, cpu) = NULL;//将线程存储指针置为 NULL
 		}
 	}
 }

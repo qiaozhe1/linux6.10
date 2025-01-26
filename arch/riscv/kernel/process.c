@@ -109,18 +109,18 @@ bool compat_elf_check_arch(Elf32_Ehdr *hdr)
 	       hdr->e_ident[EI_CLASS] == ELFCLASS32;
 }
 
-static int __init compat_mode_detect(void)
+static int __init compat_mode_detect(void)//用于检测 RISC-V 平台是否支持 32 位 ELF 兼容模式
 {
-	unsigned long tmp = csr_read(CSR_STATUS);
+	unsigned long tmp = csr_read(CSR_STATUS);//读取 CSR_STATUS 寄存器的当前值
 
-	csr_write(CSR_STATUS, (tmp & ~SR_UXL) | SR_UXL_32);
+	csr_write(CSR_STATUS, (tmp & ~SR_UXL) | SR_UXL_32);//修改寄存器值以启用 32 位兼容模式
 	compat_mode_supported =
-			(csr_read(CSR_STATUS) & SR_UXL) == SR_UXL_32;
+			(csr_read(CSR_STATUS) & SR_UXL) == SR_UXL_32;//检查修改是否成功以确认兼容模式支持
 
-	csr_write(CSR_STATUS, tmp);
+	csr_write(CSR_STATUS, tmp);//恢复原始的 CSR_STATUS 值
 
 	pr_info("riscv: ELF compat mode %s",
-			compat_mode_supported ? "supported" : "unsupported");
+				compat_mode_supported ? "supported" : "unsupported");//打印兼容模式支持状态
 
 	return 0;
 }

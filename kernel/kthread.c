@@ -575,15 +575,15 @@ struct task_struct *kthread_create_on_cpu(int (*threadfn)(void *data),
 					  void *data, unsigned int cpu,
 					  const char *namefmt)
 {
-	struct task_struct *p;
+	struct task_struct *p;//指向创建线程的任务结构指针
 
 	p = kthread_create_on_node(threadfn, data, cpu_to_node(cpu), namefmt,
-				   cpu);
-	if (IS_ERR(p))
+				   cpu);//在指定 CPU 节点上创建内核线程
+	if (IS_ERR(p))//检查线程创建是否成功
 		return p;
-	kthread_bind(p, cpu);
+	kthread_bind(p, cpu);//将线程绑定到指定的CPU
 	/* CPU hotplug need to bind once again when unparking the thread. */
-	to_kthread(p)->cpu = cpu;
+	to_kthread(p)->cpu = cpu;//记录线程所属的CPU
 	return p;
 }
 EXPORT_SYMBOL(kthread_create_on_cpu);
@@ -622,22 +622,25 @@ bool kthread_is_per_cpu(struct task_struct *p)
  * waits for it to return. If the thread is marked percpu then its
  * bound to the cpu again.
  */
-void kthread_unpark(struct task_struct *k)
+void kthread_unpark(struct task_struct *k)//用于唤醒一个暂停的内核线程，使其重新进入运行状态
 {
-	struct kthread *kthread = to_kthread(k);
+	struct kthread *kthread = to_kthread(k);//将任务结构转换为 kthread 结构
 
 	/*
 	 * Newly created kthread was parked when the CPU was offline.
 	 * The binding was lost and we need to set it again.
+	 * 新创建的 kthread 如果在 CPU 离线时被创建，默认是暂停状态。
+	 * 此时绑定信息可能丢失，需要重新设置绑定。
 	 */
-	if (test_bit(KTHREAD_IS_PER_CPU, &kthread->flags))
-		__kthread_bind(k, kthread->cpu, TASK_PARKED);
+	if (test_bit(KTHREAD_IS_PER_CPU, &kthread->flags))//检查线程是否绑定到特定 CPU
+		__kthread_bind(k, kthread->cpu, TASK_PARKED);//重新绑定线程到其目标 CPU
 
-	clear_bit(KTHREAD_SHOULD_PARK, &kthread->flags);
+	clear_bit(KTHREAD_SHOULD_PARK, &kthread->flags);//清除线程应暂停的标志
 	/*
 	 * __kthread_parkme() will either see !SHOULD_PARK or get the wakeup.
+	 * __kthread_parkme() 要么检测到 SHOULD_PARK 标志被清除，要么接收到唤醒信号。
 	 */
-	wake_up_state(k, TASK_PARKED);
+	wake_up_state(k, TASK_PARKED);//唤醒线程并设置其状态为 TASK_PARKED
 }
 EXPORT_SYMBOL_GPL(kthread_unpark);
 

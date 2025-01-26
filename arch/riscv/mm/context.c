@@ -224,7 +224,7 @@ static inline void set_mm(struct mm_struct *prev,
 	}
 }
 
-static int __init asids_init(void)
+static int __init asids_init(void)//初始化 ASID（地址空间标识符）管理功能，
 {
 	unsigned long asid_bits, old;
 

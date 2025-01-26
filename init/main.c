@@ -1284,37 +1284,55 @@ static inline void do_trace_initcall_finish(initcall_t fn, int ret)
 
 int __init_or_module do_one_initcall(initcall_t fn)
 {
-	int count = preempt_count();
-	char msgbuf[64];
-	int ret;
+	int count = preempt_count();//记录当前的抢占计数器值
+	char msgbuf[64];//用于存储错误信息的缓冲区
+	int ret;// 存储初始化函数的返回值
 
-	if (initcall_blacklisted(fn))
+	if (initcall_blacklisted(fn))//检查初始化函数是否被列入黑名单
 		return -EPERM;
 
-	do_trace_initcall_start(fn);
-	ret = fn();
-	do_trace_initcall_finish(fn, ret);
+	do_trace_initcall_start(fn);//跟踪初始化函数开始执行
+	ret = fn();//执行初始化函数，并保存其返回值
+	do_trace_initcall_finish(fn, ret);//跟踪初始化函数执行完成
 
-	msgbuf[0] = 0;
+	msgbuf[0] = 0;//初始化消息缓冲区为空
 
-	if (preempt_count() != count) {
-		sprintf(msgbuf, "preemption imbalance ");
-		preempt_count_set(count);
+	if (preempt_count() != count) {//检查抢占计数是否恢复到初始值
+		sprintf(msgbuf, "preemption imbalance ");//如果不匹配，记录抢占不平衡错误
+		preempt_count_set(count);//恢复抢占计数器的值
 	}
-	if (irqs_disabled()) {
-		strlcat(msgbuf, "disabled interrupts ", sizeof(msgbuf));
-		local_irq_enable();
+	if (irqs_disabled()) {//检查中断是否被禁用
+		strlcat(msgbuf, "disabled interrupts ", sizeof(msgbuf));//记录中断禁用错误
+		local_irq_enable();//重新启用本地中断
 	}
-	WARN(msgbuf[0], "initcall %pS returned with %s\n", fn, msgbuf);
+	WARN(msgbuf[0], "initcall %pS returned with %s\n", fn, msgbuf);//如果存在错误，记录警告信息
 
-	add_latent_entropy();
+	add_latent_entropy();//添加潜在熵，用于增强随机数生成的安全性
 	return ret;
 }
 
-
+/*
+ * compat_mode_detect, asids_init, spawn_ksoftirqd, init_signal_sysctls, init_umh_sysctls, migration_init,
+ * srcu_bootup_announce, rcu_sysrq_init, check_cpu_stall_init, rcu_spawn_gp_kthread, cpu_stop_init,
+ * init_kprobes, irq_work_init_threads, jump_label_init_module, init_zero_pfn, init_fs_inode_sysctls,
+ * init_fs_locks_sysctls, init_fs_sysctls, init_security_keys_sysctls, renesas_soc_init
+ *
+ * ipc_ns_init, init_mmap_min_addr, pci_realloc_setup_params, inet_frag_wq_init, riscv_v_init, cpu_hotplug_pm_sync_init
+ * alloc_frozen_cpus, wq_sysfs_init, ksysfs_init, pm_init, rcu_set_runtime_mode, init_jiffies_clocksource, futex_init
+ * cgroup_wq_init, cgroup1_wq_init, cpu_pm_init, bpf_offload_init, fsnotify_init, filelock_init, init_script_binfmt
+ * init_elf_binfmt, init_compat_elf_binfmt, debugfs_init, securityfs_init, pinctrl_init, gpiolib_dev_init, clk_mpfs_init
+ * clk_ccc_init, genpd_bus_init, virtio_init, regulator_init, iommu_init, component_debug_init, soc_bus_register
+ * register_cpufreq_notifier, opp_debug_init, cpufreq_core_init, cpufreq_gov_performance_init, cpufreq_gov_userspace_init
+ * CPU_FREQ_GOV_ONDEMAND_init, cpufreq_dt_platdev_init, cpuidle_init, sock_init, sock_struct_check, net_inuse_init
+ * net_defaults_init, init_default_flow_dissectors, netlink_proto_init, genl_init, irq_sysfs_init, dma_atomic_pool_init
+ * audit_init, bdi_class_init, mm_sysfs_init, init_per_zone_wmark_min, mpi_init, acpi_gpio_setup_params, pcibus_class_init
+ * pci_driver_init, amba_init, tty_class_init, vtconsole_class_init, iommu_dev_init, mipi_dsi_bus_init, devlink_class_init
+ * software_node_init, wakeup_sources_debugfs_init, wakeup_sources_sysfs_init, regmap_initcall, syscon_init, spi_init
+ * thermal_init, 
+ * */
 static initcall_entry_t *initcall_levels[] __initdata = {
-	__initcall0_start,
-	__initcall1_start,
+	__initcall0_start, //early_initcall()	
+	__initcall1_start,// postcore_initcall() , core_initcall() 
 	__initcall2_start,
 	__initcall3_start,
 	__initcall4_start,
@@ -1344,7 +1362,7 @@ static int __init ignore_unknown_bootoption(char *param, char *val,
 
 static void __init do_initcall_level(int level, char *command_line)
 {
-	initcall_entry_t *fn;
+	initcall_entry_t *fn;//指向初始化函数的入口点
 
 	parse_args(initcall_level_names[level],
 		   command_line, __start___param,
@@ -1353,27 +1371,27 @@ static void __init do_initcall_level(int level, char *command_line)
 		   NULL, ignore_unknown_bootoption);
 
 	trace_initcall_level(initcall_level_names[level]);
-	for (fn = initcall_levels[level]; fn < initcall_levels[level+1]; fn++)
-		do_one_initcall(initcall_from_entry(fn));
+	for (fn = initcall_levels[level]; fn < initcall_levels[level+1]; fn++)//遍历当前级别的所有初始化函数
+		do_one_initcall(initcall_from_entry(fn));//执行每个初始化函数
 }
 
-static void __init do_initcalls(void)
+static void __init do_initcalls(void)//负责执行内核启动过程中的所有初始化调用（initcalls）
 {
 	int level;
-	size_t len = saved_command_line_len + 1;
-	char *command_line;
+	size_t len = saved_command_line_len + 1;//计算保存的命令行长度，并加 1 以包含终止符
+	char *command_line;//指向保存命令行的指针
 
-	command_line = kzalloc(len, GFP_KERNEL);
-	if (!command_line)
-		panic("%s: Failed to allocate %zu bytes\n", __func__, len);
+	command_line = kzalloc(len, GFP_KERNEL);//分配内存以保存命令行内容
+	if (!command_line)//检查内存分配是否成功
+		panic("%s: Failed to allocate %zu bytes\n", __func__, len);//如果分配失败，触发内核崩溃
 
-	for (level = 0; level < ARRAY_SIZE(initcall_levels) - 1; level++) {
+	for (level = 0; level < ARRAY_SIZE(initcall_levels) - 1; level++) {//遍历所有初始化级别
 		/* Parser modifies command_line, restore it each time */
-		strcpy(command_line, saved_command_line);
-		do_initcall_level(level, command_line);
+		strcpy(command_line, saved_command_line);//复制保存的命令行到分配的内存中，恢复原始内容
+		do_initcall_level(level, command_line);//执行当前级别的初始化调用，并传递命令行参数
 	}
 
-	kfree(command_line);
+	kfree(command_line);//释放分配的命令行内存
 }
 
 /*

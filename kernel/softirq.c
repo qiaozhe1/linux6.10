@@ -254,8 +254,8 @@ EXPORT_SYMBOL(__local_bh_enable_ip);
  */
 static inline void ksoftirqd_run_begin(void)
 {
-	__local_bh_disable_ip(_RET_IP_, SOFTIRQ_OFFSET);
-	local_irq_disable();
+	__local_bh_disable_ip(_RET_IP_, SOFTIRQ_OFFSET);//禁用本地软中断，并记录调用地址
+	local_irq_disable();//禁用本地中断，防止软中断处理期间被打断
 }
 
 /* Counterpart to ksoftirqd_run_begin() */
@@ -510,77 +510,79 @@ static inline void lockdep_softirq_end(bool in_hardirq) { }
 
 static void handle_softirqs(bool ksirqd)
 {
-	unsigned long end = jiffies + MAX_SOFTIRQ_TIME;
-	unsigned long old_flags = current->flags;
-	int max_restart = MAX_SOFTIRQ_RESTART;
-	struct softirq_action *h;
-	bool in_hardirq;
-	__u32 pending;
-	int softirq_bit;
+	unsigned long end = jiffies + MAX_SOFTIRQ_TIME;//计算软中断允许的最大运行时间
+	unsigned long old_flags = current->flags;//保存当前任务的标志位
+	int max_restart = MAX_SOFTIRQ_RESTART;//允许的最大软中断重启次数
+	struct softirq_action *h;//指向软中断向量表的指针
+	bool in_hardirq;//用于记录是否处于硬中断上下文
+	__u32 pending;//挂起的软中断位图
+	int softirq_bit;//当前处理的软中断位
 
 	/*
 	 * Mask out PF_MEMALLOC as the current task context is borrowed for the
 	 * softirq. A softirq handled, such as network RX, might set PF_MEMALLOC
 	 * again if the socket is related to swapping.
+	 * 屏蔽 PF_MEMALLOC 标志，因为当前任务上下文被借用用于软中断处理。某些软
+	 * 中断处理程序（如网络接收）可能再次设置该标志。
 	 */
 	current->flags &= ~PF_MEMALLOC;
 
-	pending = local_softirq_pending();
+	pending = local_softirq_pending();//获取当前CPU挂起的软中断位图
 
-	softirq_handle_begin();
-	in_hardirq = lockdep_softirq_start();
-	account_softirq_enter(current);
+	softirq_handle_begin();//开始软中断处理的跟踪和计时
+	in_hardirq = lockdep_softirq_start();//记录当前是否处于硬中断上下文
+	account_softirq_enter(current);//记录当前任务进入软中断上下文
 
 restart:
 	/* Reset the pending bitmask before enabling irqs */
-	set_softirq_pending(0);
+	set_softirq_pending(0);//在启用中断之前重置挂起的软中断位图
 
-	local_irq_enable();
+	local_irq_enable();//启用本地中断，允许处理其他中断
 
-	h = softirq_vec;
+	h = softirq_vec;//初始化软中断向量指针
 
-	while ((softirq_bit = ffs(pending))) {
-		unsigned int vec_nr;
-		int prev_count;
+	while ((softirq_bit = ffs(pending))) {// 找到第一个挂起的软中断位
+		unsigned int vec_nr;//当前软中断向量编号
+		int prev_count;//保存处理软中断之前的抢占计数
 
-		h += softirq_bit - 1;
+		h += softirq_bit - 1;//更新指向当前软中断处理程序的指针
 
-		vec_nr = h - softirq_vec;
-		prev_count = preempt_count();
+		vec_nr = h - softirq_vec;//计算当前软中断的索引
+		prev_count = preempt_count();//获取当前抢占计数
 
-		kstat_incr_softirqs_this_cpu(vec_nr);
+		kstat_incr_softirqs_this_cpu(vec_nr);//增加当前 CPU 的软中断统计计数
 
-		trace_softirq_entry(vec_nr);
-		h->action(h);
-		trace_softirq_exit(vec_nr);
-		if (unlikely(prev_count != preempt_count())) {
+		trace_softirq_entry(vec_nr);//跟踪软中断进入事件
+		h->action(h);//调用当前软中断的处理程序
+		trace_softirq_exit(vec_nr);//跟踪软中断退出事件
+		if (unlikely(prev_count != preempt_count())) {//检查抢占计数是否匹配
 			pr_err("huh, entered softirq %u %s %p with preempt_count %08x, exited with %08x?\n",
 			       vec_nr, softirq_to_name[vec_nr], h->action,
 			       prev_count, preempt_count());
-			preempt_count_set(prev_count);
+			preempt_count_set(prev_count);//恢复抢占计数
 		}
-		h++;
-		pending >>= softirq_bit;
+		h++;//指向下一个软中断处理程序
+		pending >>= softirq_bit;//清除已处理的软中断位
 	}
 
-	if (!IS_ENABLED(CONFIG_PREEMPT_RT) && ksirqd)
-		rcu_softirq_qs();
+	if (!IS_ENABLED(CONFIG_PREEMPT_RT) && ksirqd)//如果未启用实时内核支持并且由 ksoftirqd 调用
+		rcu_softirq_qs();//通知 RCU 已完成软中断处理
 
-	local_irq_disable();
+	local_irq_disable();//禁用本地中断
 
-	pending = local_softirq_pending();
+	pending = local_softirq_pending();//检查是否有新的挂起软中断
 	if (pending) {
-		if (time_before(jiffies, end) && !need_resched() &&
-		    --max_restart)
-			goto restart;
+		if (time_before(jiffies, end) && !need_resched() &&//检查时间限制和调度需求
+		    --max_restart)//检查重启次数限制
+			goto restart;//如果条件满足，重新开始处理挂起的软中断
 
-		wakeup_softirqd();
+		wakeup_softirqd();//唤醒软中断线程以继续处理剩余的软中断
 	}
 
-	account_softirq_exit(current);
-	lockdep_softirq_end(in_hardirq);
-	softirq_handle_end();
-	current_restore_flags(old_flags, PF_MEMALLOC);
+	account_softirq_exit(current);//记录当前任务退出软中断上下文
+	lockdep_softirq_end(in_hardirq);//结束软中断上下文锁定检查
+	softirq_handle_end();//停止软中断处理的跟踪和计时
+	current_restore_flags(old_flags, PF_MEMALLOC);//恢复当前任务的标志位
 }
 
 asmlinkage __visible void __softirq_entry __do_softirq(void)
@@ -919,18 +921,19 @@ static int ksoftirqd_should_run(unsigned int cpu)
 
 static void run_ksoftirqd(unsigned int cpu)
 {
-	ksoftirqd_run_begin();
-	if (local_softirq_pending()) {
+	ksoftirqd_run_begin();//开始运行软中断线程的计时和跟踪
+	if (local_softirq_pending()) {//检查当前 CPU 是否有挂起的软中断
 		/*
 		 * We can safely run softirq on inline stack, as we are not deep
 		 * in the task stack here.
+		 * 我们可以安全地在内联栈上运行软中断，因为此时不处于任务堆栈的深层。
 		 */
-		handle_softirqs(true);
-		ksoftirqd_run_end();
-		cond_resched();
-		return;
+		handle_softirqs(true);//处理挂起的软中断
+		ksoftirqd_run_end();//结束软中断线程的计时和跟踪
+		cond_resched();//检查是否需要重新调度，以防止长时间运行
+		return;//提前退出，因为软中断已经处理完成
 	}
-	ksoftirqd_run_end();
+	ksoftirqd_run_end();//没有挂起的软中断，直接结束计时和跟踪
 }
 
 #ifdef CONFIG_HOTPLUG_CPU
@@ -975,8 +978,8 @@ static struct smp_hotplug_thread softirq_threads = {
 static __init int spawn_ksoftirqd(void)
 {
 	cpuhp_setup_state_nocalls(CPUHP_SOFTIRQ_DEAD, "softirq:dead", NULL,
-				  takeover_tasklets);
-	BUG_ON(smpboot_register_percpu_thread(&softirq_threads));
+				  takeover_tasklets);//注册 CPU 热插拔状态以接管任务队列
+	BUG_ON(smpboot_register_percpu_thread(&softirq_threads));//注册软中断线程，如果失败，触发内核崩溃
 
 	return 0;
 }

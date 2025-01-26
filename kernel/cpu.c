@@ -2455,6 +2455,7 @@ EXPORT_SYMBOL_GPL(__cpuhp_state_add_instance);
  *      Positive state number if @state is CPUHP_AP_ONLINE_DYN;
  *      0 for all other states
  *   On failure: proper (negative) error code
+ *   用于设置 CPU 热插拔状态，并可选择调用启动或拆卸回调。
  */
 int __cpuhp_setup_state_cpuslocked(enum cpuhp_state state,
 				   const char *name, bool invoke,
@@ -2465,42 +2466,43 @@ int __cpuhp_setup_state_cpuslocked(enum cpuhp_state state,
 	int cpu, ret = 0;
 	bool dynstate;
 
-	lockdep_assert_cpus_held();
+	lockdep_assert_cpus_held();//确保调用方已锁定 CPU
 
-	if (cpuhp_cb_check(state) || !name)
+	if (cpuhp_cb_check(state) || !name)//检查状态是否合法以及名称是否有效
 		return -EINVAL;
 
 	mutex_lock(&cpuhp_state_mutex);
 
 	ret = cpuhp_store_callbacks(state, name, startup, teardown,
-				    multi_instance);
+				    multi_instance);//存储回调函数
 
-	dynstate = state == CPUHP_AP_ONLINE_DYN;
-	if (ret > 0 && dynstate) {
+	dynstate = state == CPUHP_AP_ONLINE_DYN;//检查是否为动态分配的状态
+	if (ret > 0 && dynstate) {// 如果是动态状态，更新状态值
 		state = ret;
 		ret = 0;
 	}
 
-	if (ret || !invoke || !startup)
+	if (ret || !invoke || !startup)//如果发生错误或不需要调用启动函数
 		goto out;
 
 	/*
 	 * Try to call the startup callback for each present cpu
 	 * depending on the hotplug state of the cpu.
+	 * 尝试为每个在线 CPU 调用启动回调函数，具体取决于CPU的热插拔状态。
 	 */
-	for_each_present_cpu(cpu) {
-		struct cpuhp_cpu_state *st = per_cpu_ptr(&cpuhp_state, cpu);
-		int cpustate = st->state;
+	for_each_present_cpu(cpu) {//遍历所有存在的CPU
+		struct cpuhp_cpu_state *st = per_cpu_ptr(&cpuhp_state, cpu);//获取每 CPU 的热插拔状态
+		int cpustate = st->state;//获取当前 CPU 的状态
 
-		if (cpustate < state)
+		if (cpustate < state)// 如果 CPU 状态小于目标状态
 			continue;
 
-		ret = cpuhp_issue_call(cpu, state, true, NULL);
-		if (ret) {
-			if (teardown)
-				cpuhp_rollback_install(cpu, state, NULL);
-			cpuhp_store_callbacks(state, NULL, NULL, NULL, false);
-			goto out;
+		ret = cpuhp_issue_call(cpu, state, true, NULL);//调用启动回调函数
+		if (ret) {//如果回调失败
+			if (teardown)//如果存在拆卸回调
+				cpuhp_rollback_install(cpu, state, NULL);//回滚已安装的回调
+			cpuhp_store_callbacks(state, NULL, NULL, NULL, false);//移除回调
+			goto out;//跳转到释放锁的位置
 		}
 	}
 out:
@@ -2508,9 +2510,10 @@ out:
 	/*
 	 * If the requested state is CPUHP_AP_ONLINE_DYN, return the
 	 * dynamically allocated state in case of success.
+	 * 如果请求的状态是 CPUHP_AP_ONLINE_DYN，在成功的情况下返回动态分配的状态值。
 	 */
 	if (!ret && dynstate)
-		return state;
+		return state;//返回动态分配的状态值
 	return ret;
 }
 EXPORT_SYMBOL(__cpuhp_setup_state_cpuslocked);
