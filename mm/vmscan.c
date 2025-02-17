@@ -72,49 +72,52 @@
 
 struct scan_control {
 	/* How many pages shrink_list() should reclaim */
-	unsigned long nr_to_reclaim;
+	unsigned long nr_to_reclaim;//需要回收的页面数（shrink_list() 的目标）
 
 	/*
 	 * Nodemask of nodes allowed by the caller. If NULL, all nodes
 	 * are scanned.
+	 * 允许扫描的 NUMA 节点掩码（NULL 表示所有节点）用于限制内存回收仅在特定 NUMA 节点进行
 	 */
 	nodemask_t	*nodemask;
 
 	/*
 	 * The memory cgroup that hit its limit and as a result is the
 	 * primary target of this reclaim invocation.
+	 * 触发此次回收的内存控制组（memcg）， 当某个 cgroup 达到内存限制时，成为回收的主要目标
 	 */
 	struct mem_cgroup *target_mem_cgroup;
 
 	/*
 	 * Scan pressure balancing between anon and file LRUs
+	 * 匿名页（anon）与文件页（file）LRU 的扫描压力平衡成本,用于动态调整两类页面的回收比例，优化整体效率
 	 */
 	unsigned long	anon_cost;
 	unsigned long	file_cost;
 
-	/* Can active folios be deactivated as part of reclaim? */
-#define DEACTIVATE_ANON 1
-#define DEACTIVATE_FILE 2
-	unsigned int may_deactivate:2;
-	unsigned int force_deactivate:1;
-	unsigned int skipped_deactivate:1;
+	/* 允许将活跃页面降级为非活跃状态（位掩码) */
+#define DEACTIVATE_ANON 1//允许解除匿名页活跃状态
+#define DEACTIVATE_FILE 2//允许解除文件页活跃状态
+	unsigned int may_deactivate:2;//是否允许降级
+	unsigned int force_deactivate:1;//强制降级（跳过检查）
+	unsigned int skipped_deactivate:1;//是否因保护机制跳过了降级
 
-	/* Writepage batching in laptop mode; RECLAIM_WRITE */
+	/* 允许在「笔记本电脑模式」下批量写回脏页（RECLAIM_WRITE）*/
 	unsigned int may_writepage:1;
 
-	/* Can mapped folios be reclaimed? */
+	/* 是否允许解除页面的映射（如取消 PTE 映射） */
 	unsigned int may_unmap:1;
 
-	/* Can folios be swapped as part of reclaim? */
+	/* 是否允许将页面交换到磁盘（Swap） */
 	unsigned int may_swap:1;
 
-	/* Not allow cache_trim_mode to be turned on as part of reclaim? */
+	/* 禁止启用缓存修剪模式（cache_trim_mode） */
 	unsigned int no_cache_trim_mode:1;
 
-	/* Has cache_trim_mode failed at least once? */
+	/* 缓存修剪模式是否至少失败过一次 */
 	unsigned int cache_trim_mode_failed:1;
 
-	/* Proactive reclaim invoked by userspace through memory.reclaim */
+	/* 是否由用户空间主动触发回收（如通过 memory.reclaim 接口） */
 	unsigned int proactive:1;
 
 	/*
@@ -124,53 +127,57 @@ struct scan_control {
 	 * setting (memcg_low_skipped), and nothing is reclaimed as a
 	 * result, then go back for one more cycle that reclaims the protected
 	 * memory (memcg_low_reclaim) to avert OOM.
+	 * 内存控制组（memcg）低内存保护相关标志：
+	 * - memcg_low_reclaim: 当前处于低内存保护回收阶段
+	 * - memcg_low_skipped: 因内存未耗尽跳过了回收，需重试
 	 */
 	unsigned int memcg_low_reclaim:1;
 	unsigned int memcg_low_skipped:1;
 
-	unsigned int hibernation_mode:1;
+	unsigned int hibernation_mode:1;//是否处于休眠（Hibernation）模式
 
-	/* One of the zones is ready for compaction */
+	/* 是否有 zone 准备好进行内存碎片整理（Compaction） */
 	unsigned int compaction_ready:1;
 
-	/* There is easily reclaimable cold cache in the current node */
+	/* 当前节点是否存在可回收的冷缓存（cache_trim_mode） */
 	unsigned int cache_trim_mode:1;
 
-	/* The file folios on the current node are dangerously low */
+	/* 当前节点的文件页（file folios）极度不足 */
 	unsigned int file_is_tiny:1;
 
-	/* Always discard instead of demoting to lower tier memory */
+	/* 是否禁止将页面降级到更低层级内存（如 NUMA 冷节点） */
 	unsigned int no_demotion:1;
 
-	/* Allocation order */
+	/* 内存分配请求的阶数（order） */
 	s8 order;
 
-	/* Scan (total_size >> priority) pages at once */
+	/* 回收优先级（值越小越激进）,控制每次扫描的页面量（总页数 >> priority） */
 	s8 priority;
 
-	/* The highest zone to isolate folios for reclaim from */
+	/* 最高扫描的内存区域（zone）类型索引（如 ZONE_NORMAL、ZONE_HIGHMEM） */
 	s8 reclaim_idx;
 
-	/* This context's GFP mask */
+	/* 当前回收上下文的 GFP 掩码（如 __GFP_IO、__GFP_FS） */
 	gfp_t gfp_mask;
 
-	/* Incremented by the number of inactive pages that were scanned */
+	/* 已扫描的非活跃页面数 */
 	unsigned long nr_scanned;
 
-	/* Number of pages freed so far during a call to shrink_zones() */
+	/* 当前回收周期中已成功释放的页面数 */
 	unsigned long nr_reclaimed;
 
+	/* 细粒度回收统计（按类型分类） */
 	struct {
-		unsigned int dirty;
-		unsigned int unqueued_dirty;
-		unsigned int congested;
-		unsigned int writeback;
-		unsigned int immediate;
-		unsigned int file_taken;
-		unsigned int taken;
+		unsigned int dirty;//脏页数量
+		unsigned int unqueued_dirty;//未加入回写队列的脏页
+		unsigned int congested;//处于 I/O 拥塞状态的页
+		unsigned int writeback;//正在回写的页
+		unsigned int immediate;//立即回收的页（kswapd 跳过）
+		unsigned int file_taken;//从文件 LRU 中取出的页
+		unsigned int taken;//总取出的页
 	} nr;
 
-	/* for recording the reclaimed slab by now */
+	/* 记录当前已回收的 Slab 缓存信息 */
 	struct reclaim_state reclaim_state;
 };
 
@@ -5844,98 +5851,107 @@ static inline bool should_continue_reclaim(struct pglist_data *pgdat,
 
 static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 {
-	struct mem_cgroup *target_memcg = sc->target_mem_cgroup;
-	struct mem_cgroup *memcg;
+	struct mem_cgroup *target_memcg = sc->target_mem_cgroup;//触发回收的目标内存控制组
+	struct mem_cgroup *memcg;//当前迭代处理的内存控制组
 
+	//初始化 memcg 迭代器，从目标 memcg 的子层级开始遍历（若 target_memcg 为 NULL，遍历全局 memcg）
 	memcg = mem_cgroup_iter(target_memcg, NULL, NULL);
-	do {
-		struct lruvec *lruvec = mem_cgroup_lruvec(memcg, pgdat);
-		unsigned long reclaimed;
-		unsigned long scanned;
+	do {//遍历所有符合条件的 memcg
+		struct lruvec *lruvec = mem_cgroup_lruvec(memcg, pgdat);//当前 memcg 在当前目标节点上的 LRU 集合
+		unsigned long reclaimed;//记录当前 memcg 回收的页面数
+		unsigned long scanned;//记录当前 memcg 扫描的页面数
 
 		/*
 		 * This loop can become CPU-bound when target memcgs
 		 * aren't eligible for reclaim - either because they
 		 * don't have any reclaimable pages, or because their
 		 * memory is explicitly protected. Avoid soft lockups.
+		 * 避免软锁死（soft lockup）：当目标 memcg 或其子树因内存保护（如 memory.min/memory.low）
+		 * 无法回收时，此循环可能长时间占用 CPU。主动调用 cond_resched() 让出 CPU。
 		 */
 		cond_resched();
 
-		mem_cgroup_calculate_protection(target_memcg, memcg);
+		mem_cgroup_calculate_protection(target_memcg, memcg);// 计算当前 memcg 的内存保护状态（基于 memory.min/memory.low 等配置）
 
-		if (mem_cgroup_below_min(target_memcg, memcg)) {
+		if (mem_cgroup_below_min(target_memcg, memcg)) {//检查当前 memcg 是否低于硬保护（memory.min）
 			/*
 			 * Hard protection.
 			 * If there is no reclaimable memory, OOM.
+			 * 硬保护（Hard Protection）：该 memcg 的内存使用已低于其 memory.min 配置，
+			 * 禁止回收其内存。若系统无其他可回收内存，将触发 OOM。
 			 */
-			continue;
+			continue;//跳过此 memcg
 		} else if (mem_cgroup_below_low(target_memcg, memcg)) {
 			/*
 			 * Soft protection.
 			 * Respect the protection only as long as
 			 * there is an unprotected supply
 			 * of reclaimable memory from other cgroups.
+			 * 软保护（Soft Protection）：该 memcg 的内存使用低于其 memory.low 配置，
+			 * 但仅在存在其他未受保护 memcg 的可回收内存时，才尊重此保护。
 			 */
-			if (!sc->memcg_low_reclaim) {
-				sc->memcg_low_skipped = 1;
-				continue;
+			if (!sc->memcg_low_reclaim) {//未处于低保护回收模式
+				sc->memcg_low_skipped = 1;//标记已跳过受保护 memcg
+				continue;//跳过此 memcg
 			}
-			memcg_memory_event(memcg, MEMCG_LOW);
+			memcg_memory_event(memcg, MEMCG_LOW);//触发 MEMCG_LOW 内存事件（通知用户空间或记录日志）
 		}
 
-		reclaimed = sc->nr_reclaimed;
-		scanned = sc->nr_scanned;
+		reclaimed = sc->nr_reclaimed;//记录全局已回收页数（用于计算增量）
+		scanned = sc->nr_scanned;//记录全局已扫描页数
 
-		shrink_lruvec(lruvec, sc);
+		shrink_lruvec(lruvec, sc);//核心操作：回收该 memcg 的 LRU 页面（匿名页和文件页）
 
 		shrink_slab(sc->gfp_mask, pgdat->node_id, memcg,
-			    sc->priority);
+			    sc->priority);//回收该 memcg 的 Slab 缓存（如 dentry、inode 缓存）
 
-		/* Record the group's reclaim efficiency */
+		/*  若非主动回收（如进程直接触发），报告该 memcg 的回收效率 */
 		if (!sc->proactive)
 			vmpressure(sc->gfp_mask, memcg, false,
 				   sc->nr_scanned - scanned,
 				   sc->nr_reclaimed - reclaimed);
 
-	} while ((memcg = mem_cgroup_iter(target_memcg, memcg, NULL)));
+	} while ((memcg = mem_cgroup_iter(target_memcg, memcg, NULL)));// 迭代下一个 memcg
 }
 
 static void shrink_node(pg_data_t *pgdat, struct scan_control *sc)
 {
 	unsigned long nr_reclaimed, nr_scanned, nr_node_reclaimed;
-	struct lruvec *target_lruvec;
-	bool reclaimable = false;
+	struct lruvec *target_lruvec;//目标内存控制组（memcg）的 LRU 链表集合
+	bool reclaimable = false;//标记当前节点是否成功回收了页面
 
+	//检查是否启用了多代 LRU（Generational LRU）且当前是全局根回收（非 memcg 专属回收）
 	if (lru_gen_enabled() && root_reclaim(sc)) {
-		lru_gen_shrink_node(pgdat, sc);
-		return;
+		lru_gen_shrink_node(pgdat, sc);//调用多代 LRU 的专用回收逻辑
+		return;//使用新算法后直接返回，无需传统 LRU 处理
 	}
 
-	target_lruvec = mem_cgroup_lruvec(sc->target_mem_cgroup, pgdat);
+	target_lruvec = mem_cgroup_lruvec(sc->target_mem_cgroup, pgdat);//获取当前目标 memcg 在该 NUMA 节点上的 LRU 向量（包含各类型 LRU 链表）
 
 again:
-	memset(&sc->nr, 0, sizeof(sc->nr));
+	memset(&sc->nr, 0, sizeof(sc->nr));//重置 sc->nr 中的细粒度统计计数器（如脏页、回写页等）
 
-	nr_reclaimed = sc->nr_reclaimed;
-	nr_scanned = sc->nr_scanned;
+	nr_reclaimed = sc->nr_reclaimed;// 记录全局已回收页数（用于计算本节点贡献）
+	nr_scanned = sc->nr_scanned;//记录全局已扫描页数
 
-	prepare_scan_control(pgdat, sc);
+	prepare_scan_control(pgdat, sc);//准备扫描参数，例如根据节点状态调整扫描优先级或初始化局部变量
 
-	shrink_node_memcgs(pgdat, sc);
+	shrink_node_memcgs(pgdat, sc);//核心函数：遍历该节点下的所有 memcg，逐一回收其内存
 
-	flush_reclaim_state(sc);
+	flush_reclaim_state(sc);//将当前回收状态（如 Slab 缓存释放的页面）刷新到全局统计中
 
-	nr_node_reclaimed = sc->nr_reclaimed - nr_reclaimed;
+	nr_node_reclaimed = sc->nr_reclaimed - nr_reclaimed;//计算本轮在该节点上实际回收的页面数（全局增量）
 
-	/* Record the subtree's reclaim efficiency */
+	/* 若非主动触发回收（如进程直接调用），向 memcg 发送内存压力事件 */
 	if (!sc->proactive)
 		vmpressure(sc->gfp_mask, sc->target_mem_cgroup, true,
 			   sc->nr_scanned - nr_scanned, nr_node_reclaimed);
 
-	if (nr_node_reclaimed)
+	if (nr_node_reclaimed)//若本节点有页面被回收，标记为可回收节点（后续可能影响 kswapd 行为）
 		reclaimable = true;
 
-	if (current_is_kswapd()) {
+	/* ----- kswapd 专属逻辑（后台回收线程） ------ */
+	if (current_is_kswapd()) {//当前执行上下文是 kswapd 内核线程
 		/*
 		 * If reclaim is isolating dirty pages under writeback,
 		 * it implies that the long-lived page allocation rate
@@ -5952,11 +5968,18 @@ again:
 		 * count the number of pages under pages flagged for
 		 * immediate reclaim and stall if any are encountered
 		 * in the nr_immediate check below.
+		 * 若所有被回收的页面均处于回写状态（sc->nr.writeback == sc->nr.taken），
+		 * 表示页面周转过快，I/O 成为瓶颈。设置 PGDAT_WRITEBACK 标志，后续 kswapd 
+		 * 可能进入限流状态等待回写完成。
 		 */
 		if (sc->nr.writeback && sc->nr.writeback == sc->nr.taken)
 			set_bit(PGDAT_WRITEBACK, &pgdat->flags);
 
-		/* Allow kswapd to start writing pages during reclaim.*/
+		/* Allow kswapd to start writing pages during reclaim.
+		 *  若未加入回写队列的脏页数（unqueued_dirty）等于从文件 LRU 取出的页数（file_taken），
+		 *  表示文件页回收产生大量脏页，需立即回写。设置 PGDAT_DIRTY 标志，允许 kswapd 主动触
+		 *  发回写。
+		 * */
 		if (sc->nr.unqueued_dirty == sc->nr.file_taken)
 			set_bit(PGDAT_DIRTY, &pgdat->flags);
 
@@ -5966,23 +5989,30 @@ again:
 		 * implies that pages are cycling through the LRU
 		 * faster than they are written so forcibly stall
 		 * until some pages complete writeback.
+		 * 若存在需立即回收的页面（nr_immediate），说明页面在 LRU 中快速循环，
+		 * 可能因 I/O 延迟无法及时回收。调用 reclaim_throttle 限流，让 kswapd 
+		 * 等待部分页面回写完成。
 		 */
 		if (sc->nr.immediate)
 			reclaim_throttle(pgdat, VMSCAN_THROTTLE_WRITEBACK);
 	}
 
+	/* --------------------- 拥塞状态标记与限流处理 --------------------- */
 	/*
 	 * Tag a node/memcg as congested if all the dirty pages were marked
 	 * for writeback and immediate reclaim (counted in nr.congested).
 	 *
 	 * Legacy memcg will stall in page writeback so avoid forcibly
 	 * stalling in reclaim_throttle().
+	 * 若所有脏页（nr.dirty）均处于 I/O 拥塞状态（nr.congested），标记 LRU 向量为拥塞：
+	 * 1. 对 memcg 回收：设置 LRUVEC_CGROUP_CONGESTED，限制该 cgroup 的回收速率。
+	 * 2. 对节点全局回收：设置 LRUVEC_NODE_CONGESTED，影响节点内所有进程。
 	 */
 	if (sc->nr.dirty && sc->nr.dirty == sc->nr.congested) {
-		if (cgroup_reclaim(sc) && writeback_throttling_sane(sc))
+		if (cgroup_reclaim(sc) && writeback_throttling_sane(sc))// 针对 memcg 设置拥塞标记（需确保回写流控正常）
 			set_bit(LRUVEC_CGROUP_CONGESTED, &target_lruvec->flags);
 
-		if (current_is_kswapd())
+		if (current_is_kswapd())// kswapd 设置节点级拥塞标记
 			set_bit(LRUVEC_NODE_CONGESTED, &target_lruvec->flags);
 	}
 
@@ -5991,6 +6021,9 @@ again:
 	 * node is congested. Allow kswapd to continue until it
 	 * starts encountering unqueued dirty pages or cycling through
 	 * the LRU too quickly.
+	 * 若非 kswapd（如直接内存回收）且允许限流（current_may_throttle），
+	 * 且节点或 cgroup 处于拥塞状态，且非休眠模式，则调用 reclaim_throttle 
+	 * 限流，防止 I/O 过载。
 	 */
 	if (!current_is_kswapd() && current_may_throttle() &&
 	    !sc->hibernation_mode &&
@@ -5998,18 +6031,21 @@ again:
 	     test_bit(LRUVEC_NODE_CONGESTED, &target_lruvec->flags)))
 		reclaim_throttle(pgdat, VMSCAN_THROTTLE_CONGESTED);
 
-	if (should_continue_reclaim(pgdat, nr_node_reclaimed, sc))
+	if (should_continue_reclaim(pgdat, nr_node_reclaimed, sc))//判断是否需要继续回收（例如未达到目标或仍有可回收页面）
 		goto again;
 
+	/* --------------------- 收尾处理与状态更新 --------------------- */
 	/*
 	 * Kswapd gives up on balancing particular nodes after too
 	 * many failures to reclaim anything from them and goes to
 	 * sleep. On reclaim progress, reset the failure counter. A
 	 * successful direct reclaim run will revive a dormant kswapd.
+	 * 若本节点有页面被回收（reclaimable = true），重置 kswapd 失败计数器（pgdat->kswapd_failures），
+	 * 表示该节点仍有回收潜力，避免 kswapd 过早休眠。
 	 */
 	if (reclaimable)
 		pgdat->kswapd_failures = 0;
-	else if (sc->cache_trim_mode)
+	else if (sc->cache_trim_mode) //若未回收页面且处于缓存修剪模式（sc->cache_trim_mode），标记该模式失败，后续可能禁用此模式。
 		sc->cache_trim_mode_failed = 1;
 }
 
@@ -6088,35 +6124,41 @@ static void consider_reclaim_throttle(pg_data_t *pgdat, struct scan_control *sc)
  */
 static void shrink_zones(struct zonelist *zonelist, struct scan_control *sc)
 {
-	struct zoneref *z;
+	struct zoneref *z;//内存区域引用（描述 zone 在 zonelist 中的位置）
 	struct zone *zone;
-	unsigned long nr_soft_reclaimed;
-	unsigned long nr_soft_scanned;
-	gfp_t orig_mask;
-	pg_data_t *last_pgdat = NULL;
-	pg_data_t *first_pgdat = NULL;
+	unsigned long nr_soft_reclaimed;//通过 memcg 软限制回收的页面数
+	unsigned long nr_soft_scanned;//在软限制回收中扫描的页面数
+	gfp_t orig_mask;//保存原始的 GFP 内存分配掩码
+	pg_data_t *last_pgdat = NULL;//记录上一个处理的 NUMA 节点
+	pg_data_t *first_pgdat = NULL;//记录第一个处理的 NUMA 节点（用于限流统计）
 
 	/*
 	 * If the number of buffer_heads in the machine exceeds the maximum
 	 * allowed level, force direct reclaim to scan the highmem zone as
 	 * highmem pages could be pinning lowmem pages storing buffer_heads
+	 * 如果系统中 buffer_heads（块设备缓存元数据）数量超过限制，
+	 * 强制回收扫描高内存区域（HighMem），因为 HighMem 页面可能
+	 * 持有对低内存（LowMem）中 buffer_heads 的引用，导致死锁。
 	 */
-	orig_mask = sc->gfp_mask;
-	if (buffer_heads_over_limit) {
-		sc->gfp_mask |= __GFP_HIGHMEM;
-		sc->reclaim_idx = gfp_zone(sc->gfp_mask);
+	orig_mask = sc->gfp_mask;// 保存原始 GFP 掩码
+	if (buffer_heads_over_limit) {//检查 buffer_heads 是否超额
+		sc->gfp_mask |= __GFP_HIGHMEM;//强制允许分配高内存
+		sc->reclaim_idx = gfp_zone(sc->gfp_mask);//更新回收的 zone 类型索引
 	}
 
 	for_each_zone_zonelist_nodemask(zone, z, zonelist,
-					sc->reclaim_idx, sc->nodemask) {
+					sc->reclaim_idx, sc->nodemask) {//遍历 zonelist 中所有符合条件的内存区域（按优先级顺序）
 		/*
 		 * Take care memory controller reclaiming has small influence
 		 * to global LRU.
+		 * 全局内存回收（非 cgroup 专属回收）时的额外处理：
+		 * - 检查 CPU 允许的内存区域
+		 * - 避免干扰内存碎片整理（compaction）
 		 */
-		if (!cgroup_reclaim(sc)) {
+		if (!cgroup_reclaim(sc)) {// 如果不是针对 cgroup 的专属回收
 			if (!cpuset_zone_allowed(zone,
-						 GFP_KERNEL | __GFP_HARDWALL))
-				continue;
+						 GFP_KERNEL | __GFP_HARDWALL))//检查当前 CPU 是否允许从该 zone 分配内存（硬性限制）
+				continue;//不允许则跳过该 zone
 
 			/*
 			 * If we already have plenty of memory free for
@@ -6126,12 +6168,15 @@ static void shrink_zones(struct zonelist *zonelist, struct scan_control *sc)
 			 * reclamation is disruptive enough to become a
 			 * noticeable problem, like transparent huge
 			 * page allocations.
+			 * 如果当前 zone 的内存碎片整理（compaction）已就绪，
+			 * 且分配阶数（order）较高（如透明大页），则跳过回收，
+			 * 避免干扰碎片整理效率。
 			 */
-			if (IS_ENABLED(CONFIG_COMPACTION) &&
-			    sc->order > PAGE_ALLOC_COSTLY_ORDER &&
-			    compaction_ready(zone, sc)) {
-				sc->compaction_ready = true;
-				continue;
+			if (IS_ENABLED(CONFIG_COMPACTION) &&//内核启用了碎片整理
+			    sc->order > PAGE_ALLOC_COSTLY_ORDER &&// 分配阶数大于阈值（通常为 3，即 8
+			    compaction_ready(zone, sc)) {//检查 zone 是否准备好进行碎片整理
+				sc->compaction_ready = true;//标记碎片整理就绪
+				continue;// 跳过当前 zone 的回收
 			}
 
 			/*
@@ -6139,43 +6184,49 @@ static void shrink_zones(struct zonelist *zonelist, struct scan_control *sc)
 			 * zonelist is ordered by zone (not the default) then a
 			 * node may be shrunk multiple times but in that case
 			 * the user prefers lower zones being preserved.
+			 * 每个 NUMA 节点（pgdat）仅处理一次，避免重复回收。
+			 * 如果 zonelist 按 zone 排序（非默认），可能多次扫描同一节点，
+			 * 但此时需保留低 zone（如 DMA）。
 			 */
-			if (zone->zone_pgdat == last_pgdat)
-				continue;
+			if (zone->zone_pgdat == last_pgdat)// 当前 zone 属于已处理的节点
+				continue;// 跳过
 
 			/*
 			 * This steals pages from memory cgroups over softlimit
 			 * and returns the number of reclaimed pages and
 			 * scanned pages. This works for global memory pressure
 			 * and balancing, not for a memcg's limit.
+			 * 对超出软限制（soft limit）的 memcg 进行页面回收，
+			 *  更新全局回收统计（nr_reclaimed 和 nr_scanned）。
+			 *  此操作针对全局内存压力平衡，而非单个 memcg 的硬限制。
 			 */
 			nr_soft_scanned = 0;
 			nr_soft_reclaimed = mem_cgroup_soft_limit_reclaim(zone->zone_pgdat,
 						sc->order, sc->gfp_mask,
 						&nr_soft_scanned);
-			sc->nr_reclaimed += nr_soft_reclaimed;
-			sc->nr_scanned += nr_soft_scanned;
+			sc->nr_reclaimed += nr_soft_reclaimed;//累加回收页面数
+			sc->nr_scanned += nr_soft_scanned;//累加扫描页面数
 			/* need some check for avoid more shrink_zone() */
 		}
 
-		if (!first_pgdat)
+		if (!first_pgdat)//记录第一个处理的 NUMA 节点（用于后续限流）
 			first_pgdat = zone->zone_pgdat;
 
-		/* See comment about same check for global reclaim above */
+		/* 确保每个 NUMA 节点仅调用一次 shrink_node */
 		if (zone->zone_pgdat == last_pgdat)
 			continue;
-		last_pgdat = zone->zone_pgdat;
-		shrink_node(zone->zone_pgdat, sc);
+		last_pgdat = zone->zone_pgdat;//更新上一个处理的节点
+		shrink_node(zone->zone_pgdat, sc);//核心函数：回收该节点的内存
 	}
 
-	if (first_pgdat)
+	if (first_pgdat)//若存在有效节点，考虑回收限流（防止过度回收导致 CPU 饥饿）
 		consider_reclaim_throttle(first_pgdat, sc);
 
 	/*
 	 * Restore to original mask to avoid the impact on the caller if we
 	 * promoted it to __GFP_HIGHMEM.
 	 */
-	sc->gfp_mask = orig_mask;
+	sc->gfp_mask = orig_mask;//恢复原始 GFP 掩码，避免临时修改影响调用者
 }
 
 static void snapshot_refaults(struct mem_cgroup *target_memcg, pg_data_t *pgdat)
@@ -6212,63 +6263,65 @@ static void snapshot_refaults(struct mem_cgroup *target_memcg, pg_data_t *pgdat)
 static unsigned long do_try_to_free_pages(struct zonelist *zonelist,
 					  struct scan_control *sc)
 {
-	int initial_priority = sc->priority;
-	pg_data_t *last_pgdat;
-	struct zoneref *z;
-	struct zone *zone;
+	int initial_priority = sc->priority;//保存初始优先级
+	pg_data_t *last_pgdat;//遍历时的上一个节点（NUMA优化）
+	struct zoneref *z;//内存区域引用指针
+	struct zone *zone;//当前处理的内存区域
 retry:
-	delayacct_freepages_start();
+	delayacct_freepages_start();//开始延迟统计（统计内存回收耗时）
 
-	if (!cgroup_reclaim(sc))
-		__count_zid_vm_events(ALLOCSTALL, sc->reclaim_idx, 1);
+	if (!cgroup_reclaim(sc))//判断是否为全局回收（非cgroup限制）
+		__count_zid_vm_events(ALLOCSTALL, sc->reclaim_idx, 1);// 统计全局内存分配停滞事件
 
-	do {
-		if (!sc->proactive)
+	do {//渐进式压力循环（优先级从初始值递减到0）
+		if (!sc->proactive)//如果本次回收是「被动触发」（如分配失败，kswapd）
 			vmpressure_prio(sc->gfp_mask, sc->target_mem_cgroup,
-					sc->priority);
-		sc->nr_scanned = 0;
-		shrink_zones(zonelist, sc);
+					sc->priority);//发送内存压力事件给用户空间
+		sc->nr_scanned = 0;//重置已扫描页计数器
+		shrink_zones(zonelist, sc);//核心回收函数（遍历所有zone）
 
-		if (sc->nr_reclaimed >= sc->nr_to_reclaim)
+		if (sc->nr_reclaimed >= sc->nr_to_reclaim)//若已回收足够页面
 			break;
 
-		if (sc->compaction_ready)
-			break;
+		if (sc->compaction_ready)//若内存碎片整理（compaction）已就绪
+			break;//退出循环，优先让 compaction 处理
 
 		/*
 		 * If we're getting trouble reclaiming, start doing
 		 * writepage even in laptop mode.
+		 * 当优先级降低到一定程度（更激进），允许在「笔记本电脑模式」下执行写回
 		 */
-		if (sc->priority < DEF_PRIORITY - 2)
-			sc->may_writepage = 1;
-	} while (--sc->priority >= 0);
+		if (sc->priority < DEF_PRIORITY - 2)//DEF_PRIORITY 默认为 12
+			sc->may_writepage = 1;// 允许脏页写回磁盘（可能增加 I/O）
+	} while (--sc->priority >= 0);//降低优先级继续尝试（优先级值越小越激进）
 
-	last_pgdat = NULL;
+	/* 后处理阶段：更新 NUMA 节点和 cgroup 状态 */
+	last_pgdat = NULL;// 用于检测重复节点
 	for_each_zone_zonelist_nodemask(zone, z, zonelist, sc->reclaim_idx,
-					sc->nodemask) {
-		if (zone->zone_pgdat == last_pgdat)
+					sc->nodemask) {//遍历zonelist中所有符合条件的zone
+		if (zone->zone_pgdat == last_pgdat)//跳过已处理的节点
 			continue;
-		last_pgdat = zone->zone_pgdat;
+		last_pgdat = zone->zone_pgdat;//记录当前处理的节点
 
-		snapshot_refaults(sc->target_mem_cgroup, zone->zone_pgdat);
+		snapshot_refaults(sc->target_mem_cgroup, zone->zone_pgdat);//记录页面的「重新失效」次数（用于计算 refault distance）
 
-		if (cgroup_reclaim(sc)) {
-			struct lruvec *lruvec;
+		if (cgroup_reclaim(sc)) {// 如果是针对 cgroup 的回收
+			struct lruvec *lruvec;//
 
 			lruvec = mem_cgroup_lruvec(sc->target_mem_cgroup,
-						   zone->zone_pgdat);
-			clear_bit(LRUVEC_CGROUP_CONGESTED, &lruvec->flags);
+						   zone->zone_pgdat);//获取cgroup对应的lruvec结构
+			clear_bit(LRUVEC_CGROUP_CONGESTED, &lruvec->flags);//清除cgroup的LRU拥塞标志
 		}
 	}
 
-	delayacct_freepages_end();
+	delayacct_freepages_end();//结束延迟统计
 
-	if (sc->nr_reclaimed)
+	if (sc->nr_reclaimed)//成功回收页面时直接返回
 		return sc->nr_reclaimed;
 
-	/* Aborted reclaim to try compaction? don't OOM, then */
+	/* 如果内存规整就绪 */
 	if (sc->compaction_ready)
-		return 1;
+		return 1;//返回1让上层尝试内存压缩而非触发OOM
 
 	/*
 	 * We make inactive:active ratio decisions based on the node's
@@ -6279,23 +6332,23 @@ retry:
 	 * entire cgroup subtree up front, we assume the estimates are
 	 * good, and retry with forcible deactivation if that fails.
 	 */
-	if (sc->skipped_deactivate) {
-		sc->priority = initial_priority;
-		sc->force_deactivate = 1;
-		sc->skipped_deactivate = 0;
-		goto retry;
+	if (sc->skipped_deactivate) {//若因跳过页面停用（deactivate）导致回收失败，重试并强制停用
+		sc->priority = initial_priority;// 重置优先级
+		sc->force_deactivate = 1;//强制停用非活跃页面
+		sc->skipped_deactivate = 0;//清除跳过标记
+		goto retry;//重新尝试回收
 	}
 
-	/* Untapped cgroup reserves?  Don't OOM, retry. */
+	/* 若 cgroup 保留内存未耗尽，重试并标记为低内存回收 */
 	if (sc->memcg_low_skipped) {
-		sc->priority = initial_priority;
-		sc->force_deactivate = 0;
-		sc->memcg_low_reclaim = 1;
-		sc->memcg_low_skipped = 0;
-		goto retry;
+		sc->priority = initial_priority;// 重置优先级
+		sc->force_deactivate = 0;//禁用强制停用
+		sc->memcg_low_reclaim = 1;//标记为 cgroup 低内存回收模式
+		sc->memcg_low_skipped = 0;//清除跳过标记
+		goto retry;//重新尝试回收
 	}
 
-	return 0;
+	return 0;//完全失败，返回 0（可能触发 OOM）
 }
 
 static bool allow_direct_reclaim(pg_data_t *pgdat)
@@ -6430,44 +6483,46 @@ out:
 unsigned long try_to_free_pages(struct zonelist *zonelist, int order,
 				gfp_t gfp_mask, nodemask_t *nodemask)
 {
-	unsigned long nr_reclaimed;
-	struct scan_control sc = {
-		.nr_to_reclaim = SWAP_CLUSTER_MAX,
-		.gfp_mask = current_gfp_context(gfp_mask),
-		.reclaim_idx = gfp_zone(gfp_mask),
-		.order = order,
-		.nodemask = nodemask,
-		.priority = DEF_PRIORITY,
-		.may_writepage = !laptop_mode,
-		.may_unmap = 1,
-		.may_swap = 1,
+	unsigned long nr_reclaimed;//实际回收的页面计数器
+	struct scan_control sc = {//内存回收控制结构
+		.nr_to_reclaim = SWAP_CLUSTER_MAX,// 单次回收目标页数（通常32页）
+		.gfp_mask = current_gfp_context(gfp_mask),//处理后的GFP标志（考虑cgroup限制）
+		.reclaim_idx = gfp_zone(gfp_mask),//确定回收的最高zone类型
+		.order = order,//需求的连续页块大小
+		.nodemask = nodemask,// NUMA节点掩码（限制回收范围）
+		.priority = DEF_PRIORITY,//初始扫描优先级（默认12，范围0-12）
+		.may_writepage = !laptop_mode,// 写回脏页控制（电源敏感模式）
+		.may_unmap = 1,//必须解除页表映射才能回收
+		.may_swap = 1,//允许交换匿名页（受全局swappiness调控）
 	};
 
 	/*
 	 * scan_control uses s8 fields for order, priority, and reclaim_idx.
 	 * Confirm they are large enough for max values.
+	 * 内核编译时静态检查：确保数据结构字段的容量,由于struct scan_control使用s8存储这些值，必须验证最大值
 	 */
-	BUILD_BUG_ON(MAX_PAGE_ORDER >= S8_MAX);
-	BUILD_BUG_ON(DEF_PRIORITY > S8_MAX);
-	BUILD_BUG_ON(MAX_NR_ZONES > S8_MAX);
+	BUILD_BUG_ON(MAX_PAGE_ORDER >= S8_MAX);//检查最大页阶（当前值10→最大1024页）
+	BUILD_BUG_ON(DEF_PRIORITY > S8_MAX);//默认优先级12 < 127
+	BUILD_BUG_ON(MAX_NR_ZONES > S8_MAX);//最大内存区域类型数检查
 
 	/*
 	 * Do not enter reclaim if fatal signal was delivered while throttled.
 	 * 1 is returned so that the page allocator does not OOM kill at this
 	 * point.
+	 * 直接回收节流机制：防止过多进程同时回收导致系统卡顿
 	 */
 	if (throttle_direct_reclaim(sc.gfp_mask, zonelist, nodemask))
 		return 1;
 
-	set_task_reclaim_state(current, &sc.reclaim_state);
-	trace_mm_vmscan_direct_reclaim_begin(order, sc.gfp_mask);
+	set_task_reclaim_state(current, &sc.reclaim_state);//绑定当前进程的回收状态（用于统计和防止递归）
+	trace_mm_vmscan_direct_reclaim_begin(order, sc.gfp_mask);//内存回收跟踪点（用于ftrace/perf分析）
 
-	nr_reclaimed = do_try_to_free_pages(zonelist, &sc);
+	nr_reclaimed = do_try_to_free_pages(zonelist, &sc);// 执行核心回收逻辑
 
 	trace_mm_vmscan_direct_reclaim_end(nr_reclaimed);
-	set_task_reclaim_state(current, NULL);
+	set_task_reclaim_state(current, NULL);//解除当前进程的回收状态绑定
 
-	return nr_reclaimed;
+	return nr_reclaimed;//返回实际回收页数
 }
 
 #ifdef CONFIG_MEMCG
@@ -7547,4 +7602,4 @@ void check_move_unevictable_folios(struct folio_batch *fbatch)
 		count_vm_events(UNEVICTABLE_PGSCANNED, pgscanned);
 	}
 }
-EXPORT_SYMBOL_GPL(check_move_unevictable_folios);
+
