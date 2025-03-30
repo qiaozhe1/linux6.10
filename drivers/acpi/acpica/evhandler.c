@@ -323,148 +323,180 @@ union acpi_operand_object *acpi_ev_find_region_handler(acpi_adr_space_type
  *              Assumes namespace is locked
  *
  ******************************************************************************/
-
+/**
+ * acpi_ev_install_space_handler - 安装ACPI地址空间处理程序
+ * @node: 命名空间节点(设备/处理器/热区/根节点)
+ * @space_id: 地址空间类型(ACPI_ADR_SPACE_*)
+ * @handler: 地址空间访问处理函数
+ * @setup: 区域初始化函数
+ * @context: 传递给处理程序的上下文数据
+ *
+ * 返回值:
+ *   AE_OK - 安装成功
+ *   AE_BAD_PARAMETER - 参数无效
+ *   AE_ALREADY_EXISTS - 已存在不同处理程序
+ *   AE_SAME_HANDLER - 已存在相同处理程序
+ *   AE_NO_MEMORY - 内存分配失败
+ *
+ * 功能说明:
+ * 1. 验证节点类型有效性
+ * 2. 处理默认处理程序情况
+ * 3. 创建/获取设备对象
+ * 4. 检查处理程序是否已存在
+ * 5. 创建并初始化处理程序对象
+ * 6. 遍历命名空间安装处理程序
+ */
 acpi_status
 acpi_ev_install_space_handler(struct acpi_namespace_node *node,
 			      acpi_adr_space_type space_id,
 			      acpi_adr_space_handler handler,
 			      acpi_adr_space_setup setup, void *context)
 {
-	union acpi_operand_object *obj_desc;
-	union acpi_operand_object *handler_obj;
+	union acpi_operand_object *obj_desc;//设备对象描述符
+	union acpi_operand_object *handler_obj;//地址空间处理程序对象
 	acpi_status status = AE_OK;
-	acpi_object_type type;
-	u8 flags = 0;
+	acpi_object_type type;//对象类型
+	u8 flags = 0;//处理程序标志
 
 	ACPI_FUNCTION_TRACE(ev_install_space_handler);
 
 	/*
-	 * This registration is valid for only the types below and the root.
-	 * The root node is where the default handlers get installed.
+	 * 此注册仅对以下类型及根节点有效。根节点是默认处理程序安装的位置。
 	 */
-	if ((node->type != ACPI_TYPE_DEVICE) &&
-	    (node->type != ACPI_TYPE_PROCESSOR) &&
-	    (node->type != ACPI_TYPE_THERMAL) && (node != acpi_gbl_root_node)) {
-		status = AE_BAD_PARAMETER;
-		goto unlock_and_exit;
+	if ((node->type != ACPI_TYPE_DEVICE) &&//不是设备节点
+	    (node->type != ACPI_TYPE_PROCESSOR) &&//不是处理器节点
+	    (node->type != ACPI_TYPE_THERMAL) && (node != acpi_gbl_root_node)) {//不是热区节点也不是根节点
+		status = AE_BAD_PARAMETER;//设置错误状态为无效参数
+		goto unlock_and_exit;//跳转到统一的清理退出点
 	}
 
+	/* 当handler参数为ACPI_DEFAULT_HANDLER时，根据地址空间类型(space_id)
+	 * 设置对应的默认处理函数和区域初始化函数。
+	 * */
 	if (handler == ACPI_DEFAULT_HANDLER) {
-		flags = ACPI_ADDR_HANDLER_DEFAULT_INSTALLED;
+		flags = ACPI_ADDR_HANDLER_DEFAULT_INSTALLED;//标志表示这是默认处理程序
 
-		switch (space_id) {
-		case ACPI_ADR_SPACE_SYSTEM_MEMORY:
+		switch (space_id) {//根据空间类型设置默认处理程序
+		case ACPI_ADR_SPACE_SYSTEM_MEMORY://系统内存空间处理
 
-			handler = acpi_ex_system_memory_space_handler;
-			setup = acpi_ev_system_memory_region_setup;
+			handler = acpi_ex_system_memory_space_handler;//系统内存访问处理函数
+			setup = acpi_ev_system_memory_region_setup;//内存区域初始化函数
 			break;
 
-		case ACPI_ADR_SPACE_SYSTEM_IO:
+		case ACPI_ADR_SPACE_SYSTEM_IO://系统I/O空间处理
 
-			handler = acpi_ex_system_io_space_handler;
-			setup = acpi_ev_io_space_region_setup;
-			break;
-#ifdef ACPI_PCI_CONFIGURED
-		case ACPI_ADR_SPACE_PCI_CONFIG:
-
-			handler = acpi_ex_pci_config_space_handler;
-			setup = acpi_ev_pci_config_region_setup;
-			break;
-#endif
-		case ACPI_ADR_SPACE_CMOS:
-
-			handler = acpi_ex_cmos_space_handler;
-			setup = acpi_ev_cmos_region_setup;
+			handler = acpi_ex_system_io_space_handler;//I/O端口访问处理函数
+			setup = acpi_ev_io_space_region_setup;//I/O区域初始化函数
 			break;
 #ifdef ACPI_PCI_CONFIGURED
-		case ACPI_ADR_SPACE_PCI_BAR_TARGET:
+		case ACPI_ADR_SPACE_PCI_CONFIG://PCI配置空间处理
 
-			handler = acpi_ex_pci_bar_space_handler;
-			setup = acpi_ev_pci_bar_region_setup;
+			handler = acpi_ex_pci_config_space_handler;// PCI配置空间处理函数
+			setup = acpi_ev_pci_config_region_setup;//PCI区域初始化函数
 			break;
 #endif
-		case ACPI_ADR_SPACE_DATA_TABLE:
+		case ACPI_ADR_SPACE_CMOS:// CMOS空间处理
 
-			handler = acpi_ex_data_table_space_handler;
-			setup = acpi_ev_data_table_region_setup;
+			handler = acpi_ex_cmos_space_handler;//CMOS访问处理函数
+			setup = acpi_ev_cmos_region_setup;//CMOS区域初始化函数
+			break;
+#ifdef ACPI_PCI_CONFIGURED
+		case ACPI_ADR_SPACE_PCI_BAR_TARGET://PCI BAR目标空间处理
+
+			handler = acpi_ex_pci_bar_space_handler;//PCI BAR空间处理函数
+			setup = acpi_ev_pci_bar_region_setup;//PCI BAR区域初始化函数
+			break;
+#endif
+		case ACPI_ADR_SPACE_DATA_TABLE:// ACPI数据表空间处理
+
+			handler = acpi_ex_data_table_space_handler;//数据表访问处理函数
+			setup = acpi_ev_data_table_region_setup;//数据表区域初始化函数
 			break;
 
-		default:
+		default://不支持的地址空间类型
 
-			status = AE_BAD_PARAMETER;
-			goto unlock_and_exit;
+			status = AE_BAD_PARAMETER;//设置无效参数错误状态
+			goto unlock_and_exit;//跳转到错误处理路径
 		}
 	}
 
-	/* If the caller hasn't specified a setup routine, use the default */
+	/* 如果调用者未指定设置程序，则使用默认设置
+	 * 当调用者未提供setup函数时，使用默认的acpi_ev_default_region_setup
+	 * 作为兜底。这个默认函数会执行基本的区域初始化工作。
+	 * */
 
 	if (!setup) {
-		setup = acpi_ev_default_region_setup;
+		setup = acpi_ev_default_region_setup;//设置为默认区域初始化回调
 	}
 
-	/* Check for an existing internal object */
+	/* 
+	 * 检查并处理ACPI内部对象
+	 * 这部分代码处理与命名空间节点关联的内部对象(Operand Object)，
+	 * 确保后续可以安全地安装地址空间处理程序。
+	 */
 
-	obj_desc = acpi_ns_get_attached_object(node);
+	obj_desc = acpi_ns_get_attached_object(node);//获取节点关联的内部对象
 	if (obj_desc) {
 		/*
-		 * The attached device object already exists. Now make sure
-		 * the handler is not already installed.
+		 * 情况1：内部对象已存在，需要检查是否已安装相同space_id的处理程序
 		 */
 		handler_obj = acpi_ev_find_region_handler(space_id,
 							  obj_desc->
 							  common_notify.
-							  handler);
+							  handler);//从公共通知区域获取当前处理程序链
 
 		if (handler_obj) {
-			if (handler_obj->address_space.handler == handler) {
+			if (handler_obj->address_space.handler == handler) {//检查是否尝试安装完全相同的处理程序
 				/*
 				 * It is (relatively) OK to attempt to install the SAME
 				 * handler twice. This can easily happen with the
 				 * PCI_Config space.
+				 * 特殊情况：重复安装相同处理程序,这在PCI配置空间等场景
+				 * 可能发生，不算错误但需要特殊处理
 				 */
-				status = AE_SAME_HANDLER;
-				goto unlock_and_exit;
+				status = AE_SAME_HANDLER;//设置特殊状态码
+				goto unlock_and_exit;//跳转到统一的清理退出点
 			} else {
-				/* A handler is already installed */
+				/* 常规情况：已存在不同处理程序 */
 
-				status = AE_ALREADY_EXISTS;
+				status = AE_ALREADY_EXISTS;//设置冲突错误码
 			}
 
-			goto unlock_and_exit;
+			goto unlock_and_exit;//跳转到清理退出点
 		}
-	} else {
+	} else {//情况2：内部对象不存在,需要创建新的内部对象并附加到节点
 		ACPI_DEBUG_PRINT((ACPI_DB_OPREGION,
 				  "Creating object on Device %p while installing handler\n",
 				  node));
 
-		/* obj_desc does not exist, create one */
+		/* obj_desc 不存在，创建一个 */
 
 		if (node->type == ACPI_TYPE_ANY) {
-			type = ACPI_TYPE_DEVICE;
+			type = ACPI_TYPE_DEVICE;//将ANY类型默认为DEVICE
 		} else {
 			type = node->type;
 		}
 
-		obj_desc = acpi_ut_create_internal_object(type);
+		obj_desc = acpi_ut_create_internal_object(type);//创建新的内部对象
 		if (!obj_desc) {
-			status = AE_NO_MEMORY;
-			goto unlock_and_exit;
+			status = AE_NO_MEMORY;//内存分配失败
+			goto unlock_and_exit;//跳转到错误处理
 		}
 
 		/* Init new descriptor */
 
-		obj_desc->common.type = (u8)type;
+		obj_desc->common.type = (u8)type;//初始化对象类型字段
 
 		/* Attach the new object to the Node */
 
-		status = acpi_ns_attach_object(node, obj_desc, type);
+		status = acpi_ns_attach_object(node, obj_desc, type);//将对象附加到命名空间节点
 
-		/* Remove local reference to the object */
+		/* 移除对象的本地表引用 */
 
 		acpi_ut_remove_reference(obj_desc);
 
 		if (ACPI_FAILURE(status)) {
-			goto unlock_and_exit;
+			goto unlock_and_exit;//附加失败时跳转
 		}
 	}
 
@@ -480,39 +512,46 @@ acpi_ev_install_space_handler(struct acpi_namespace_node *node,
 	 * At this point there is no existing handler. Just allocate the object
 	 * for the handler and link it into the list.
 	 */
+	/*
+ 	 * 创建地址空间处理程序对象
+	 *
+	 * 使用ACPI_TYPE_LOCAL_ADDRESS_HANDLER类型创建专用对象，
+	 * 用于管理该地址空间的所有区域访问。
+	 */
 	handler_obj =
 	    acpi_ut_create_internal_object(ACPI_TYPE_LOCAL_ADDRESS_HANDLER);
 	if (!handler_obj) {
-		status = AE_NO_MEMORY;
-		goto unlock_and_exit;
+		status = AE_NO_MEMORY;//内存分配失败
+		goto unlock_and_exit;//跳转到清理退出点
 	}
 
-	/* Init handler obj */
-
+	/* 初始化处理程序对象 */
+	/* 创建上下文互斥锁 - 保护处理程序并发访问 */
 	status =
 	    acpi_os_create_mutex(&handler_obj->address_space.context_mutex);
 	if (ACPI_FAILURE(status)) {
-		acpi_ut_remove_reference(handler_obj);
+		acpi_ut_remove_reference(handler_obj);//释放处理程序对象
 		goto unlock_and_exit;
 	}
 
-	handler_obj->address_space.space_id = (u8)space_id;
-	handler_obj->address_space.handler_flags = flags;
-	handler_obj->address_space.region_list = NULL;
-	handler_obj->address_space.node = node;
-	handler_obj->address_space.handler = handler;
-	handler_obj->address_space.context = context;
-	handler_obj->address_space.setup = setup;
+	/* 设置处理程序对象属性 */
+	handler_obj->address_space.space_id = (u8)space_id;//地址空间类型
+	handler_obj->address_space.handler_flags = flags;//处理程序标志
+	handler_obj->address_space.region_list = NULL;//初始化区域链表
+	handler_obj->address_space.node = node;//关联的命名空间节点
+	handler_obj->address_space.handler = handler;//访问处理函数
+	handler_obj->address_space.context = context;//处理程序上下文
+	handler_obj->address_space.setup = setup;//区域初始化函数
 
-	/* Install at head of Device.address_space list */
+	/* 将处理程序插入设备处理程序链表头部 */
 
-	handler_obj->address_space.next = obj_desc->common_notify.handler;
+	handler_obj->address_space.next = obj_desc->common_notify.handler;//链表中下一个
 
 	/*
-	 * The Device object is the first reference on the handler_obj.
-	 * Each region that uses the handler adds a reference.
+	 * _obj设备对象是handler_obj上的第一个引用。每个使用处理器的区域
+	 * 都会添加一个引用。
 	 */
-	obj_desc->common_notify.handler = handler_obj;
+	obj_desc->common_notify.handler = handler_obj;//更新链表头指针
 
 	/*
 	 * Walk the namespace finding all of the regions this handler will
@@ -524,11 +563,17 @@ acpi_ev_install_space_handler(struct acpi_namespace_node *node,
 	 *
 	 * In either case, back up and search down the remainder of the branch
 	 */
+	/*
+	 * 遍历命名空间关联区域
+	 *
+	 * 从当前节点开始深度优先搜索，找到所有需要该处理程序管理的区域。
+	 * acpi_ev_install_handler回调函数会将区域添加到处理程序的region_list。
+	 */
 	status = acpi_ns_walk_namespace(ACPI_TYPE_ANY, node,
 					ACPI_UINT32_MAX, ACPI_NS_WALK_UNLOCK,
 					acpi_ev_install_handler, NULL,
 					handler_obj, NULL);
 
-unlock_and_exit:
-	return_ACPI_STATUS(status);
+unlock_and_exit://统一的清理退出点
+	return_ACPI_STATUS(status);//返回操作状态
 }

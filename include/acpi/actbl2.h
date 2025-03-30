@@ -2647,24 +2647,36 @@ struct acpi_prmt_module_header {
 	u16 length;
 };
 
+/**
+ * struct acpi_prmt_module_info - ACPI PRMT模块信息结构体
+ *
+ * 描述PRMT(Platform Runtime Mechanism Table)中单个模块的信息结构，
+ * 用于描述平台运行时机制模块的属性和关联信息。
+ */
 struct acpi_prmt_module_info {
-	u16 revision;
-	u16 length;
-	u8 module_guid[16];
-	u16 major_rev;
-	u16 minor_rev;
-	u16 handler_info_count;
-	u32 handler_info_offset;
-	u64 mmio_list_pointer;
+	u16 revision;//结构体修订版本号，标识该结构的版本
+	u16 length;//整个模块信息结构的总长度(字节数)
+	u8 module_guid[16];//模块的全局唯一标识符(GUID)，16字节
+	u16 major_rev;//模块的主版本号
+	u16 minor_rev;//模块的次版本号
+	u16 handler_info_count;//该模块关联的处理程序(handler)数量
+	u32 handler_info_offset;//处理程序信息列表相对于本结构起始地址的偏移量(字节)
+	u64 mmio_list_pointer;// MMIO(内存映射I/O)范围列表指针，指向该模块可以使用的内存地址范围列表
 };
 
+/**
+ * struct acpi_prmt_handler_info - ACPI PRMT处理程序信息结构体
+ * 
+ * 描述PRMT(Platform Runtime Mechanism Table)中单个处理程序的信息结构，
+ * 用于定义平台运行时机制模块中的具体处理函数及其相关参数。
+ */
 struct acpi_prmt_handler_info {
-	u16 revision;
-	u16 length;
-	u8 handler_guid[16];
-	u64 handler_address;
-	u64 static_data_buffer_address;
-	u64 acpi_param_buffer_address;
+	u16 revision;//结构体修订版本号，标识该结构的版本
+	u16 length;// 整个处理程序信息结构的总长度(字节数)
+	u8 handler_guid[16];//处理程序的全局唯一标识符(GUID)，16字节
+	u64 handler_address;//处理程序入口点的物理地址,需要转换为虚拟地址才能调用
+	u64 static_data_buffer_address;//静态数据缓冲区的物理地址,包含处理程序使用的持久化数据
+	u64 acpi_param_buffer_address;//ACPI参数缓冲区的物理地址,用于处理程序与ACPI之间的参数传递
 };
 
 /*******************************************************************************

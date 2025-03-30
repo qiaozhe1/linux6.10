@@ -130,27 +130,33 @@ typedef enum {
  * position in both the struct acpi_namespace_node and union acpi_operand_object
  * structures.
  */
+/**
+ * struct acpi_namespace_node - ACPI命名空间节点结构
+ *
+ * 表示ACPI命名空间中的一个节点，构成ACPI命名树的树状结构。
+ * 每个节点可以关联操作对象或作为路径节点存在。
+ */
 struct acpi_namespace_node {
-	union acpi_operand_object *object;	/* Interpreter object */
-	u8 descriptor_type;	/* Differentiate object descriptor types */
-	u8 type;		/* ACPI Type associated with this name */
-	u16 flags;		/* Miscellaneous flags */
-	union acpi_name_union name;	/* ACPI Name, always 4 chars per ACPI spec */
-	struct acpi_namespace_node *parent;	/* Parent node */
-	struct acpi_namespace_node *child;	/* First child */
-	struct acpi_namespace_node *peer;	/* First peer */
-	acpi_owner_id owner_id;	/* Node creator */
+	union acpi_operand_object *object;//节点关联的操作对象，没有则为NULL
+	u8 descriptor_type;//描述符类型标识，用于区分不同描述符类型
+	u8 type;//节点类型，对应ACPI对象类型
+	u16 flags;//节点状态标志
+	union acpi_name_union name;//节点名称(4字节ACPI名称)
+	struct acpi_namespace_node *parent;//父节点指针
+	struct acpi_namespace_node *child;//第一个子节点
+	struct acpi_namespace_node *peer;//同级节点(兄弟节点)
+	acpi_owner_id owner_id;//所有者ID
 
 	/*
 	 * The following fields are used by the ASL compiler and disassembler only
 	 */
-#ifdef ACPI_LARGE_NAMESPACE_NODE
-	union acpi_parse_object *op;
-	void *method_locals;
-	void *method_args;
-	u32 value;
-	u32 length;
-	u8 arg_count;
+#ifdef ACPI_LARGE_NAMESPACE_NODE//以下字段仅ASL编译器和反汇编器使用
+	union acpi_parse_object *op;//关联的解析树节点
+	void *method_locals;//方法本地变量存储
+	void *method_args;//方法参数存储
+	u32 value;//常数值
+	u32 length;//数据长度
+	u8 arg_count;//方法参数计数
 
 #endif
 };

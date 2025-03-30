@@ -400,9 +400,14 @@ struct acpi_object_cache_list {
  * union acpi_operand_object descriptor - a giant union of all of the above
  *
  *****************************************************************************/
-
+/**
+ * union acpi_operand_object - ACPI操作对象联合体
+ * 
+ * 表示ACPI解释器可以处理的所有对象类型，通过共用体实现类型多态。
+ * 包含24种不同类型的ACPI对象，共享相同的内存空间。
+ */
 union acpi_operand_object {
-	struct acpi_object_common common;
+	struct acpi_object_common common;//
 	struct acpi_object_integer integer;
 	struct acpi_object_string string;
 	struct acpi_object_buffer buffer;

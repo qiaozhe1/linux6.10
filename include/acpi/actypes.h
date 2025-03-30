@@ -813,20 +813,20 @@ typedef u32 acpi_event_status;
 
 typedef u8 acpi_adr_space_type;
 
-#define ACPI_ADR_SPACE_SYSTEM_MEMORY    (acpi_adr_space_type) 0
-#define ACPI_ADR_SPACE_SYSTEM_IO        (acpi_adr_space_type) 1
-#define ACPI_ADR_SPACE_PCI_CONFIG       (acpi_adr_space_type) 2
-#define ACPI_ADR_SPACE_EC               (acpi_adr_space_type) 3
-#define ACPI_ADR_SPACE_SMBUS            (acpi_adr_space_type) 4
-#define ACPI_ADR_SPACE_CMOS             (acpi_adr_space_type) 5
-#define ACPI_ADR_SPACE_PCI_BAR_TARGET   (acpi_adr_space_type) 6
-#define ACPI_ADR_SPACE_IPMI             (acpi_adr_space_type) 7
-#define ACPI_ADR_SPACE_GPIO             (acpi_adr_space_type) 8
-#define ACPI_ADR_SPACE_GSBUS            (acpi_adr_space_type) 9
-#define ACPI_ADR_SPACE_PLATFORM_COMM    (acpi_adr_space_type) 10
-#define ACPI_ADR_SPACE_PLATFORM_RT      (acpi_adr_space_type) 11
+#define ACPI_ADR_SPACE_SYSTEM_MEMORY    (acpi_adr_space_type) 0//系统内存空间 - 用于访问物理内存区域
+#define ACPI_ADR_SPACE_SYSTEM_IO        (acpi_adr_space_type) 1//系统I/O空间 - 用于x86架构的端口I/O操作
+#define ACPI_ADR_SPACE_PCI_CONFIG       (acpi_adr_space_type) 2//PCI配置空间 - 访问PCI设备的配置寄存器
+#define ACPI_ADR_SPACE_EC               (acpi_adr_space_type) 3//嵌入式控制器空间 - 与嵌入式控制器(EC)通信
+#define ACPI_ADR_SPACE_SMBUS            (acpi_adr_space_type) 4//SMBus空间 - 系统管理总线访问
+#define ACPI_ADR_SPACE_CMOS             (acpi_adr_space_type) 5//CMOS空间 - 访问CMOS/RTC芯片
+#define ACPI_ADR_SPACE_PCI_BAR_TARGET   (acpi_adr_space_type) 6// PCI BAR目标空间 - 访问PCI设备的BAR空间
+#define ACPI_ADR_SPACE_IPMI             (acpi_adr_space_type) 7//IPMI空间 - 智能平台管理接口访问
+#define ACPI_ADR_SPACE_GPIO             (acpi_adr_space_type) 8//GPIO空间 - 通用输入输出引脚控制
+#define ACPI_ADR_SPACE_GSBUS            (acpi_adr_space_type) 9//通用串行总线空间 - 特定设备类型的串行总线
+#define ACPI_ADR_SPACE_PLATFORM_COMM    (acpi_adr_space_type) 10//平台通信空间 - 平台特定通信通道
+#define ACPI_ADR_SPACE_PLATFORM_RT      (acpi_adr_space_type) 11//平台运行时空间 - 平台运行时服务
 
-#define ACPI_NUM_PREDEFINED_REGIONS     12
+#define ACPI_NUM_PREDEFINED_REGIONS     12//预定义区域类型的总数
 
 /*
  * Special Address Spaces

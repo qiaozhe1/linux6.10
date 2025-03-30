@@ -222,14 +222,14 @@ static int kobject_add_internal(struct kobject *kobj)
 		return -EINVAL;
 	}
 
-	parent = kobject_get(kobj->parent);
+	parent = kobject_get(kobj->parent);//获取父对象的引用(增加引用计数)
 
 	/* join kset if set, use it as parent if we do not already have one */
 	if (kobj->kset) {
-		if (!parent)
+		if (!parent)//如果设置了kset但没设置父对象，使用kset作为父对象
 			parent = kobject_get(&kobj->kset->kobj);
-		kobj_kset_join(kobj);
-		kobj->parent = parent;
+		kobj_kset_join(kobj);// 将kobject加入kset
+		kobj->parent = parent;//更新父指针
 	}
 
 	pr_debug("'%s' (%p): %s: parent: '%s', set: '%s'\n",
@@ -237,14 +237,14 @@ static int kobject_add_internal(struct kobject *kobj)
 		 parent ? kobject_name(parent) : "<NULL>",
 		 kobj->kset ? kobject_name(&kobj->kset->kobj) : "<NULL>");
 
-	error = create_dir(kobj);
+	error = create_dir(kobj);//在sysfs中创建对应的目录
 	if (error) {
-		kobj_kset_leave(kobj);
-		kobject_put(parent);
-		kobj->parent = NULL;
+		kobj_kset_leave(kobj);//从kset中移除
+		kobject_put(parent);//释放父对象引用
+		kobj->parent = NULL;//清空父指针
 
 		/* be noisy on error issues */
-		if (error == -EEXIST)
+		if (error == -EEXIST)//根据错误类型打印不同的错误信息
 			pr_err("%s failed for %s with -EEXIST, don't try to register things with the same name in the same directory.\n",
 			       __func__, kobject_name(kobj));
 		else
@@ -252,7 +252,7 @@ static int kobject_add_internal(struct kobject *kobj)
 			       __func__, kobject_name(kobj), error,
 			       parent ? kobject_name(parent) : "'none'");
 	} else
-		kobj->state_in_sysfs = 1;
+		kobj->state_in_sysfs = 1;// 标记已添加到sysfs
 
 	return error;
 }
@@ -342,20 +342,20 @@ void kobject_init(struct kobject *kobj, const struct kobj_type *ktype)
 		err_str = "must have a ktype to be initialized properly!\n";
 		goto error;
 	}
-	if (kobj->state_initialized) {
+	if (kobj->state_initialized) {//检查是否已经初始化过
 		/* do not error out as sometimes we can recover */
 		pr_err("kobject (%p): tried to init an initialized object, something is seriously wrong.\n",
-		       kobj);
-		dump_stack_lvl(KERN_ERR);
+		       kobj);//不直接报错返回，因为有时可以恢复
+		dump_stack_lvl(KERN_ERR);//打印调用栈信息(错误级别)
 	}
 
-	kobject_init_internal(kobj);
-	kobj->ktype = ktype;
+	kobject_init_internal(kobj);//执行实际的kobject初始化工作
+	kobj->ktype = ktype;//关联ktype到kobject
 	return;
 
 error:
-	pr_err("kobject (%p): %s\n", kobj, err_str);
-	dump_stack_lvl(KERN_ERR);
+	pr_err("kobject (%p): %s\n", kobj, err_str);//打印错误信息
+	dump_stack_lvl(KERN_ERR);//打印调用栈信息(错误级别)
 }
 EXPORT_SYMBOL(kobject_init);
 
@@ -365,13 +365,13 @@ static __printf(3, 0) int kobject_add_varg(struct kobject *kobj,
 {
 	int retval;
 
-	retval = kobject_set_name_vargs(kobj, fmt, vargs);
+	retval = kobject_set_name_vargs(kobj, fmt, vargs);//设置kobject名称(使用可变参数)
 	if (retval) {
 		pr_err("can not set name properly!\n");
-		return retval;
+		return retval;//返回错误码
 	}
-	kobj->parent = parent;
-	return kobject_add_internal(kobj);
+	kobj->parent = parent;//设置父对象指针
+	return kobject_add_internal(kobj);// 执行实际的kobject添加操作
 }
 
 /**
@@ -407,26 +407,39 @@ static __printf(3, 0) int kobject_add_varg(struct kobject *kobj,
  *         when the use of the object is finished in order to properly free
  *         everything.
  */
+/**
+ * kobject_add - 将初始化后的kobject添加到内核对象层次结构中
+ * @kobj: 要添加的kobject指针
+ * @parent: 父kobject指针(可为NULL)
+ * @fmt: 格式化字符串，用于设置对象名称
+ * @...: 格式化字符串的可变参数
+ *
+ * 功能说明:
+ * 1. 参数有效性检查
+ * 2. 状态验证(确保kobject已初始化)
+ * 3. 调用实际添加函数
+ * 4. 处理可变参数
+ */
 int kobject_add(struct kobject *kobj, struct kobject *parent,
 		const char *fmt, ...)
 {
-	va_list args;
-	int retval;
+	va_list args;//可变参数列表
+	int retval;//返回值存储
 
-	if (!kobj)
-		return -EINVAL;
+	if (!kobj)//检查kobj指针是否有效
+		return -EINVAL;//无效参数错误
 
-	if (!kobj->state_initialized) {
+	if (!kobj->state_initialized) {//验证kobject是否已经初始化
 		pr_err("kobject '%s' (%p): tried to add an uninitialized object, something is seriously wrong.\n",
-		       kobject_name(kobj), kobj);
-		dump_stack_lvl(KERN_ERR);
-		return -EINVAL;
+		       kobject_name(kobj), kobj);//打印对象名和指针
+		dump_stack_lvl(KERN_ERR);//打印错误级别调用栈
+		return -EINVAL;//返回无效参数错误
 	}
-	va_start(args, fmt);
-	retval = kobject_add_varg(kobj, parent, fmt, args);
-	va_end(args);
+	va_start(args, fmt);//初始化可变参数列表
+	retval = kobject_add_varg(kobj, parent, fmt, args);//调用实际添加函数
+	va_end(args);//清理可变参数
 
-	return retval;
+	return retval;//返回操作结果
 }
 EXPORT_SYMBOL(kobject_add);
 

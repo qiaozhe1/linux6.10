@@ -146,6 +146,25 @@ static __init_or_fwtbl_lib int call_handler(struct acpi_subtable_proc *proc,
  * On success returns sum of all matching entries for all proc handlers.
  * Otherwise, -ENODEV or -EINVAL is returned.
  */
+/**
+ * acpi_parse_entries_array - 解析ACPI表中的多个子表条目
+ * @id: ACPI表签名(4字符)
+ * @table_size: 基本表头大小
+ * @table_header: ACPI表头指针
+ * @max_length: 最大解析长度(0表示不限制)
+ * @proc: 子表处理信息数组
+ * @proc_num: 处理信息数组元素个数
+ * @max_entries: 最大处理条目数(0表示不限制)
+ *
+ * 返回值:
+ *   成功处理的条目数, 或错误码(<0)
+ *
+ * 功能说明:
+ * 1. 计算表长度和边界
+ * 2. 遍历所有子表条目
+ * 3. 匹配并调用对应的处理函数
+ * 4. 处理长度检查和边界条件
+ */
 int __init_or_fwtbl_lib
 acpi_parse_entries_array(char *id, unsigned long table_size,
 			 union fw_table_header *table_header,
@@ -154,58 +173,58 @@ acpi_parse_entries_array(char *id, unsigned long table_size,
 			 int proc_num, unsigned int max_entries)
 {
 	unsigned long table_len, table_end, subtable_len, entry_len;
-	struct acpi_subtable_entry entry;
-	enum acpi_subtable_type type;
-	int count = 0;
-	int i;
+	struct acpi_subtable_entry entry;//当前处理的子表条目
+	enum acpi_subtable_type type;//子表类型
+	int count = 0;//成功处理的条目计数器
+	int i;//循环计数器
 
-	type = acpi_get_subtable_type(id);
-	table_len = acpi_table_get_length(type, table_header);
-	if (max_length && max_length < table_len)
+	type = acpi_get_subtable_type(id);//根据表ID获取子表类型
+	table_len = acpi_table_get_length(type, table_header);//获取ACPI表的总长度
+	if (max_length && max_length < table_len)//如果指定了最大长度且小于表长度，则使用最大长度
 		table_len = max_length;
-	table_end = (unsigned long)table_header + table_len;
+	table_end = (unsigned long)table_header + table_len;//计算表的结束地址 = 起始地址 + 表长度
 
-	/* Parse all entries looking for a match. */
+	/* 解析所有条目以寻找匹配项。 */
 
-	entry.type = type;
+	entry.type = type;//设置子表类型
 	entry.hdr = (union acpi_subtable_headers *)
-	    ((unsigned long)table_header + table_size);
-	subtable_len = acpi_get_subtable_header_length(&entry);
+	    ((unsigned long)table_header + table_size);//计算第一个子表的位置 = 表头地址 + 表头大小
+	subtable_len = acpi_get_subtable_header_length(&entry);//获取子表头的长度
 
-	while (((unsigned long)entry.hdr) + subtable_len < table_end) {
-		for (i = 0; i < proc_num; i++) {
-			if (acpi_get_entry_type(&entry) != proc[i].id)
-				continue;
+	while (((unsigned long)entry.hdr) + subtable_len < table_end) {//循环处理所有子表，直到超出表边界
+		for (i = 0; i < proc_num; i++) {//遍历所有处理程序
+			if (acpi_get_entry_type(&entry) != proc[i].id)//检查当前条目类型是否匹配处理程序ID
+				continue;//不匹配则跳过
 
-			if (!max_entries || count < max_entries)
-				if (call_handler(&proc[i], entry.hdr, table_end))
+			if (!max_entries || count < max_entries)// 检查条目数量限制
+				if (call_handler(&proc[i], entry.hdr, table_end))//调用处理函数，失败则返回错误
 					return -EINVAL;
 
-			proc[i].count++;
-			count++;
-			break;
+			proc[i].count++;//增加该处理程序的成功计数
+			count++;//增加总成功计数
+			break;//匹配后跳出循环
 		}
 
 		/*
 		 * If entry->length is 0, break from this loop to avoid
 		 * infinite loop.
 		 */
-		entry_len = acpi_get_entry_length(&entry);
-		if (entry_len == 0) {
-			pr_err("[%4.4s:0x%02x] Invalid zero length\n", id, proc->id);
+		entry_len = acpi_get_entry_length(&entry);//获取当前条目的长度
+		if (entry_len == 0) {//检查长度是否为0（防止无限循环）
+			pr_err("[%4.4s:0x%02x] Invalid zero length\n", id, proc->id);//打印错误信息：表ID和处理程序ID
 			return -EINVAL;
 		}
 
 		entry.hdr = (union acpi_subtable_headers *)
-		    ((unsigned long)entry.hdr + entry_len);
+		    ((unsigned long)entry.hdr + entry_len);//移动到下一个子表：当前地址 + 当前长度
 	}
 
-	if (max_entries && count > max_entries) {
+	if (max_entries && count > max_entries) {//检查是否超过最大条目限制
 		pr_warn("[%4.4s:0x%02x] ignored %i entries of %i found\n",
 			id, proc->id, count - max_entries, count);
 	}
 
-	return count;
+	return count;//返回成功处理的条目总数
 }
 
 int __init_or_fwtbl_lib

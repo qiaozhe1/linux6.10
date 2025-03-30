@@ -225,13 +225,34 @@ void acpi_table_print_madt_entry(struct acpi_subtable_header *header)
 	}
 }
 
+/**
+ * acpi_table_parse_entries_array - 解析ACPI表中的多个子表类型
+ * @id: ACPI表签名(4字符)
+ * @table_size: 基本表头大小
+ * @proc: 子表处理信息数组
+ * @proc_num: 处理信息数组元素个数
+ * @max_entries: 最大处理条目数(0表示无限制)
+ *
+ * 返回值:
+ *   成功处理的条目数, 或错误码(<0)
+ *
+ * 功能说明:
+ * 1. 参数有效性检查
+ * 2. 特殊处理MADT表(多APIC实例)
+ * 3. 获取ACPI表并解析条目
+ * 4. 资源清理和结果返回
+ *
+ * 注意:
+ * - 支持__init和acpilib两种使用场景
+ * - 可同时处理多种子表类型(通过proc数组)
+ */
 int __init_or_acpilib acpi_table_parse_entries_array(
 	char *id, unsigned long table_size, struct acpi_subtable_proc *proc,
 	int proc_num, unsigned int max_entries)
 {
-	struct acpi_table_header *table_header = NULL;
-	int count;
-	u32 instance = 0;
+	struct acpi_table_header *table_header = NULL;//ACPI表头指针
+	int count;//处理条目计数
+	u32 instance = 0;//表实例号(默认为0)
 
 	if (acpi_disabled)
 		return -ENODEV;
@@ -242,21 +263,21 @@ int __init_or_acpilib acpi_table_parse_entries_array(
 	if (!table_size)
 		return -EINVAL;
 
-	if (!strncmp(id, ACPI_SIG_MADT, 4))
-		instance = acpi_apic_instance;
+	if (!strncmp(id, ACPI_SIG_MADT, 4))//检查是否为MADT签名("APIC")
+		instance = acpi_apic_instance;//使用特定APIC实例号
 
-	acpi_get_table(id, instance, &table_header);
+	acpi_get_table(id, instance, &table_header);//获取ACPI表
 	if (!table_header) {
 		pr_debug("%4.4s not present\n", id);
-		return -ENODEV;
+		return -ENODEV;//返回设备不存在错误
 	}
 
 	count = acpi_parse_entries_array(id, table_size,
 					 (union fw_table_header *)table_header,
-					 0, proc, proc_num, max_entries);
+					 0, proc, proc_num, max_entries);//解析表中的条目
 
-	acpi_put_table(table_header);
-	return count;
+	acpi_put_table(table_header);//释放表引用
+	return count;//返回处理的条目数
 }
 
 static int __init_or_acpilib __acpi_table_parse_entries(
@@ -264,15 +285,15 @@ static int __init_or_acpilib __acpi_table_parse_entries(
 	acpi_tbl_entry_handler handler, acpi_tbl_entry_handler_arg handler_arg,
 	void *arg, unsigned int max_entries)
 {
-	struct acpi_subtable_proc proc = {
-		.id		= entry_id,
-		.handler	= handler,
-		.handler_arg	= handler_arg,
-		.arg		= arg,
+	struct acpi_subtable_proc proc = {//封装处理参数到proc结构
+		.id		= entry_id,//子表ID
+		.handler	= handler,//条目处理函数
+		.handler_arg	= handler_arg,//处理函数参数
+		.arg		= arg,//额外参数
 	};
 
 	return acpi_table_parse_entries_array(id, table_size, &proc, 1,
-						max_entries);
+						max_entries);//调用解析函数(第四个参数表示只处理1种类型的子表)
 }
 
 int __init_or_acpilib

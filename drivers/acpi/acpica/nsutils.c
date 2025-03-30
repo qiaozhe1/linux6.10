@@ -524,7 +524,15 @@ acpi_ns_externalize_name(u32 internal_name_length,
  *       due to a table unload.
  *
  ******************************************************************************/
-
+/**
+ * acpi_ns_validate_handle - 验证并转换ACPI句柄为命名空间节点
+ * @handle: 要验证的ACPI句柄
+ *
+ * 功能说明:
+ * 1. 处理特殊根节点情况
+ * 2. 验证句柄描述符类型
+ * 3. 安全转换句柄为节点指针
+ */
 struct acpi_namespace_node *acpi_ns_validate_handle(acpi_handle handle)
 {
 
@@ -532,17 +540,17 @@ struct acpi_namespace_node *acpi_ns_validate_handle(acpi_handle handle)
 
 	/* Parameter validation */
 
-	if ((!handle) || (handle == ACPI_ROOT_OBJECT)) {
-		return (acpi_gbl_root_node);
+	if ((!handle) || (handle == ACPI_ROOT_OBJECT)) {//检查是否为NULL句柄或根对象
+		return (acpi_gbl_root_node);//返回全局根节点指针
 	}
 
 	/* We can at least attempt to verify the handle */
 
-	if (ACPI_GET_DESCRIPTOR_TYPE(handle) != ACPI_DESC_TYPE_NAMED) {
+	if (ACPI_GET_DESCRIPTOR_TYPE(handle) != ACPI_DESC_TYPE_NAMED) {//检查描述符类型是否为命名节点(ACPI_DESC_TYPE_NAMED)
 		return (NULL);
 	}
 
-	return (ACPI_CAST_PTR(struct acpi_namespace_node, handle));
+	return (ACPI_CAST_PTR(struct acpi_namespace_node, handle));//安全类型转换并返回节点指针
 }
 
 /*******************************************************************************

@@ -1429,42 +1429,56 @@ static int __init acpi_bus_init(void)
 struct kobject *acpi_kobj;
 EXPORT_SYMBOL_GPL(acpi_kobj);
 
+/*
+ * acpi_init - ACPI子系统初始化函数
+ * 
+ * 返回值:
+ *   0 - 初始化成功
+ *   -ENODEV - ACPI被禁用
+ *   其他错误码 - 来自acpi_bus_init()等子系统的错误
+ *
+ * 功能说明:
+ * 1. 检查ACPI是否启用
+ * 2. 创建ACPI sysfs对象
+ * 3. 初始化各ACPI子系统组件
+ * 4. 错误处理和资源清理
+ */
 static int __init acpi_init(void)
 {
-	int result;
+	int result;//用于存储函数调用的返回结果
 
 	if (acpi_disabled) {
 		pr_info("Interpreter disabled.\n");
 		return -ENODEV;
 	}
 
-	acpi_kobj = kobject_create_and_add("acpi", firmware_kobj);
+	acpi_kobj = kobject_create_and_add("acpi", firmware_kobj);//在/sys/firmware/下创建acpi目录.firmware_kobj指向/sys/firmware/
 	if (!acpi_kobj)
-		pr_debug("%s: kset create error\n", __func__);
+		pr_debug("%s: kset create error\n", __func__);//调试信息：创建失败
 
-	init_prmt();
-	acpi_init_pcc();
-	result = acpi_bus_init();
-	if (result) {
-		kobject_put(acpi_kobj);
-		disable_acpi();
-		return result;
+	init_prmt();//初始化平台运行时机制(PRMT)
+	acpi_init_pcc();//初始化平台通信通道(PCC)
+	result = acpi_bus_init();//初始化ACPI总线子系统 - 核心初始化
+	if (result) {//初始化失败时的清理工作
+		kobject_put(acpi_kobj);//释放ACPI sysfs对象
+		disable_acpi();//禁用ACPI
+		return result;//返回错误码
 	}
-	acpi_init_ffh();
+	acpi_init_ffh();//初始化FFH(功能固定硬件)接口
 
-	pci_mmcfg_late_init();
-	acpi_viot_early_init();
-	acpi_hest_init();
-	acpi_ghes_init();
-	acpi_arm_init();
-	acpi_scan_init();
-	acpi_ec_init();
-	acpi_debugfs_init();
-	acpi_sleep_proc_init();
-	acpi_wakeup_device_init();
-	acpi_debugger_init();
-	acpi_setup_sb_notify_handler();
-	acpi_viot_init();
+	pci_mmcfg_late_init();//PCI MMCONFIG配置空间初始化
+	acpi_viot_early_init();//虚拟I/O表早期初始化
+	acpi_hest_init();//硬件错误源表(HEST)初始化
+	acpi_ghes_init();//通用硬件错误源(GHES)初始化
+	acpi_arm_init();// ARM平台特定ACPI初始化
+	acpi_scan_init();//ACPI设备扫描初始化
+	acpi_ec_init();//嵌入式控制器(EC)初始化
+	acpi_debugfs_init();//调试文件系统初始化
+	acpi_sleep_proc_init();//睡眠状态proc文件系统初始化
+	acpi_wakeup_device_init();// 唤醒设备初始化
+	acpi_debugger_init();//ACPI调试器初始化
+	acpi_setup_sb_notify_handler();//设置系统总线通知处理程序
+	acpi_viot_init();//虚拟I/O表最终初始化
 	return 0;
 }
 

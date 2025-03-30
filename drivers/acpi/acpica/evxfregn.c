@@ -42,6 +42,22 @@ ACPI_MODULE_NAME("evxfregn")
  * acpi_execute_reg_methods() to execute _REG.
  *
  ******************************************************************************/
+/**
+ * acpi_install_address_space_handler_internal - 安装ACPI地址空间处理程序(内部实现)
+ * @device: ACPI命名空间节点句柄
+ * @space_id: 地址空间类型(ACPI_ADR_SPACE_SYSTEM_MEMORY等)
+ * @handler: 地址空间处理函数指针
+ * @setup: 初始化设置函数指针
+ * @context: 传递给处理程序的上下文数据
+ * @run_reg: 是否执行_REG方法的标志
+ *
+ * 功能说明:
+ * 1. 参数验证和句柄转换
+ * 2. 获取命名空间互斥锁
+ * 3. 安装地址空间处理程序
+ * 4. 可选执行_REG方法
+ * 5. 错误处理和资源清理
+ */
 static acpi_status
 acpi_install_address_space_handler_internal(acpi_handle device,
 					    acpi_adr_space_type space_id,
@@ -49,48 +65,48 @@ acpi_install_address_space_handler_internal(acpi_handle device,
 					    acpi_adr_space_setup setup,
 					    void *context, u8 run_reg)
 {
-	struct acpi_namespace_node *node;
+	struct acpi_namespace_node *node;//定义命名空间节点指针
 	acpi_status status;
 
 	ACPI_FUNCTION_TRACE(acpi_install_address_space_handler);
 
 	/* Parameter validation */
 
-	if (!device) {
+	if (!device) {//检查设备句柄是否有效
 		return_ACPI_STATUS(AE_BAD_PARAMETER);
 	}
 
-	status = acpi_ut_acquire_mutex(ACPI_MTX_NAMESPACE);
+	status = acpi_ut_acquire_mutex(ACPI_MTX_NAMESPACE);//获取ACPI命名空间互斥锁
 	if (ACPI_FAILURE(status)) {
-		return_ACPI_STATUS(status);
+		return_ACPI_STATUS(status);//返回锁获取失败状态
 	}
 
-	/* Convert and validate the device handle */
+	/* 转换并验证设备句柄 */
 
-	node = acpi_ns_validate_handle(device);
-	if (!node) {
-		status = AE_BAD_PARAMETER;
+	node = acpi_ns_validate_handle(device);//将ACPI句柄转换为命名空间节点
+	if (!node) {// 检查节点是否有效
+		status = AE_BAD_PARAMETER;//设置参数错误状态
 		goto unlock_and_exit;
 	}
 
-	/* Install the handler for all Regions for this Space ID */
+	/* 为指定Space ID安装Region处理程序 */
 
 	status =
 	    acpi_ev_install_space_handler(node, space_id, handler, setup,
-					  context);
+					  context);//调用内部函数安装空间处理程序
 	if (ACPI_FAILURE(status)) {
-		goto unlock_and_exit;
+		goto unlock_and_exit;//跳转到解锁并退出标签
 	}
 
-	/* Run all _REG methods for this address space */
+	/* 执行该地址空间的所有_REG方法 */
 
-	if (run_reg) {
-		acpi_ev_execute_reg_methods(node, space_id, ACPI_REG_CONNECT);
+	if (run_reg) {//检查是否需要执行_REG方法
+		acpi_ev_execute_reg_methods(node, space_id, ACPI_REG_CONNECT);//执行_REG方法，参数表示连接操作
 	}
 
-unlock_and_exit:
-	(void)acpi_ut_release_mutex(ACPI_MTX_NAMESPACE);
-	return_ACPI_STATUS(status);
+unlock_and_exit://解锁并退出标签
+	(void)acpi_ut_release_mutex(ACPI_MTX_NAMESPACE);//释放命名空间互斥锁(忽略返回值)
+	return_ACPI_STATUS(status);//返回最终状态
 }
 
 acpi_status

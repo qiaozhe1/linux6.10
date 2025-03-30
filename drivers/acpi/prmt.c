@@ -26,10 +26,15 @@ struct prm_mmio_addr_range {
 	u64 virt_addr;
 	u32 length;
 };
-
+/**
+ * struct prm_mmio_info - PRM模块的MMIO(内存映射I/O)信息结构体
+ * 
+ * 描述平台运行时机制模块使用的内存映射I/O区域信息，
+ * 包含多个地址范围定义。
+ */
 struct prm_mmio_info {
-	u64 mmio_count;
-	struct prm_mmio_addr_range addr_ranges[];
+	u64 mmio_count;//MMIO地址范围数量,确定addr_ranges数组的大小
+	struct prm_mmio_addr_range addr_ranges[];//MMIO地址范围数组,每个元素描述一个连续的地址范围
 };
 
 struct prm_buffer {
@@ -51,25 +56,36 @@ struct prm_context_buffer {
 
 static LIST_HEAD(prm_module_list);
 
+/**
+ * struct prm_handler_info - 内核PRM处理程序信息结构体
+ * 
+ * 描述内核中管理的平台运行时机制(PRM)处理程序信息，
+ * 用于在运行时调用平台特定的处理函数。
+ */
 struct prm_handler_info {
-	guid_t guid;
-	efi_status_t (__efiapi *handler_addr)(u64, void *);
-	u64 static_data_buffer_addr;
-	u64 acpi_param_buffer_addr;
+	guid_t guid;//处理程序的全局唯一标识符(GUID)
+	efi_status_t (__efiapi *handler_addr)(u64, void *);//处理程序函数指针
+	u64 static_data_buffer_addr;//静态数据缓冲区地址(虚拟地址)
+	u64 acpi_param_buffer_addr;// ACPI参数缓冲区地址(虚拟地址)
 
-	struct list_head handler_list;
+	struct list_head handler_list;//处理程序链表节点
 };
-
+/**
+ * struct prm_module_info - 内核PRM模块信息结构体
+ * 
+ * 描述内核中管理的平台运行时机制(PRM)模块信息，
+ * 包含模块元数据和关联的处理程序数组。
+ */
 struct prm_module_info {
-	guid_t guid;
-	u16 major_rev;
-	u16 minor_rev;
-	u16 handler_count;
-	struct prm_mmio_info *mmio_info;
-	bool updatable;
+	guid_t guid;//模块的全局唯一标识符(GUID)
+	u16 major_rev;//模块主版本号
+	u16 minor_rev;//模块次版本号
+	u16 handler_count;// 处理程序数量
+	struct prm_mmio_info *mmio_info;// MMIO信息指针
+	bool updatable;//可更新标志
 
-	struct list_head module_list;
-	struct prm_handler_info handlers[] __counted_by(handler_count);
+	struct list_head module_list;//模块链表节点
+	struct prm_handler_info handlers[] __counted_by(handler_count);//处理程序数组(柔性数组)
 };
 
 static u64 efi_pa_va_lookup(u64 pa)
@@ -89,79 +105,88 @@ static u64 efi_pa_va_lookup(u64 pa)
 #define get_first_handler(a) ((struct acpi_prmt_handler_info *) ((char *) (a) + a->handler_info_offset))
 #define get_next_handler(a) ((struct acpi_prmt_handler_info *) (sizeof(struct acpi_prmt_handler_info) + (char *) a))
 
+/**
+ * acpi_parse_prmt - 解析ACPI PRMT(Platform Runtime Mechanism Table)模块信息
+ * @header: ACPI子表头指针
+ * @end: 表结束地址(用于边界检查)
+ *
+ * 返回值:
+ *   0 - 解析成功
+ *   -ENOMEM - 内存分配失败
+ */
 static int __init
 acpi_parse_prmt(union acpi_subtable_headers *header, const unsigned long end)
 {
-	struct acpi_prmt_module_info *module_info;
-	struct acpi_prmt_handler_info *handler_info;
-	struct prm_handler_info *th;
-	struct prm_module_info *tm;
-	u64 *mmio_count;
-	u64 cur_handler = 0;
-	u32 module_info_size = 0;
-	u64 mmio_range_size = 0;
-	void *temp_mmio;
+	struct acpi_prmt_module_info *module_info;//定义原始ACPI PRMT模块信息指针
+	struct acpi_prmt_handler_info *handler_info;//定义原始ACPI PRMT处理程序信息指针
+	struct prm_handler_info *th;//定义内核PRM处理程序信息指针
+	struct prm_module_info *tm;//定义内核PRM模块信息指针
+	u64 *mmio_count;//MMIO范围计数指针
+	u64 cur_handler = 0;//当前处理程序索引，初始化为0
+	u32 module_info_size = 0;//模块信息结构大小，初始化为0
+	u64 mmio_range_size = 0;//MMIO范围信息大小，初始化为0
+	void *temp_mmio;//临时MMIO映射指针
 
-	module_info = (struct acpi_prmt_module_info *) header;
-	module_info_size = struct_size(tm, handlers, module_info->handler_info_count);
-	tm = kmalloc(module_info_size, GFP_KERNEL);
+	module_info = (struct acpi_prmt_module_info *) header;//将ACPI表头指针转换为PRMT模块信息指针
+	module_info_size = struct_size(tm, handlers, module_info->handler_info_count);//计算模块信息结构总大小 = 基础结构大小 + 处理程序数组大小
+	tm = kmalloc(module_info_size, GFP_KERNEL);//分配内核内存用于存储模块信息
 	if (!tm)
-		goto parse_prmt_out1;
+		goto parse_prmt_out1;//内存分配失败，跳转到错误处理标签1
 
-	guid_copy(&tm->guid, (guid_t *) module_info->module_guid);
-	tm->major_rev = module_info->major_rev;
-	tm->minor_rev = module_info->minor_rev;
-	tm->handler_count = module_info->handler_info_count;
-	tm->updatable = true;
+	guid_copy(&tm->guid, (guid_t *) module_info->module_guid);//复制模块GUID到内核结构
+	tm->major_rev = module_info->major_rev;//设置模块主版本号
+	tm->minor_rev = module_info->minor_rev;//设置模块次版本号
+	tm->handler_count = module_info->handler_info_count;//设置模块处理程序数量
+	tm->updatable = true;// 默认设置模块为可更新状态
 
-	if (module_info->mmio_list_pointer) {
+	if (module_info->mmio_list_pointer) {//检查是否存在MMIO列表指针
 		/*
 		 * Each module is associated with a list of addr
 		 * ranges that it can use during the service
 		 */
-		mmio_count = (u64 *) memremap(module_info->mmio_list_pointer, 8, MEMREMAP_WB);
-		if (!mmio_count)
-			goto parse_prmt_out2;
+		mmio_count = (u64 *) memremap(module_info->mmio_list_pointer, 8, MEMREMAP_WB);//映射MMIO计数(前8字节)到内核地址空间（MEMREMAP_WB表示使用回写缓存模式）
+		if (!mmio_count)//检查映射是否成功
+			goto parse_prmt_out2;//跳转到错误处理标签2
 
-		mmio_range_size = struct_size(tm->mmio_info, addr_ranges, *mmio_count);
-		tm->mmio_info = kmalloc(mmio_range_size, GFP_KERNEL);
-		if (!tm->mmio_info)
-			goto parse_prmt_out3;
+		mmio_range_size = struct_size(tm->mmio_info, addr_ranges, *mmio_count);//计算MMIO范围信息结构总大小 = 基础结构大小 + 地址范围数组大小
+		tm->mmio_info = kmalloc(mmio_range_size, GFP_KERNEL);//分配内核内存用于存储MMIO范围信息
+		if (!tm->mmio_info)//检查内存是否分配成功
+			goto parse_prmt_out3;// 跳转到错误处理标签3
 
-		temp_mmio = memremap(module_info->mmio_list_pointer, mmio_range_size, MEMREMAP_WB);
+		temp_mmio = memremap(module_info->mmio_list_pointer, mmio_range_size, MEMREMAP_WB);//映射完整的MMIO范围信息到内核地址空间
 		if (!temp_mmio)
-			goto parse_prmt_out4;
-		memmove(tm->mmio_info, temp_mmio, mmio_range_size);
+			goto parse_prmt_out4;//映射失败，跳转到错误处理标签4
+		memmove(tm->mmio_info, temp_mmio, mmio_range_size);//将映射的MMIO数据复制到分配的内核结构中
 	} else {
-		tm->mmio_info = kmalloc(sizeof(*tm->mmio_info), GFP_KERNEL);
+		tm->mmio_info = kmalloc(sizeof(*tm->mmio_info), GFP_KERNEL);//没有MMIO信息的情况，就分配基础MMIO信息结构
 		if (!tm->mmio_info)
-			goto parse_prmt_out2;
+			goto parse_prmt_out2;//分配失败，跳转到错误处理标签2
 
-		tm->mmio_info->mmio_count = 0;
+		tm->mmio_info->mmio_count = 0;//设置MMIO计数为0
 	}
 
-	INIT_LIST_HEAD(&tm->module_list);
-	list_add(&tm->module_list, &prm_module_list);
+	INIT_LIST_HEAD(&tm->module_list);//初始化模块链表头
+	list_add(&tm->module_list, &prm_module_list);//将当前模块添加到全局PRM模块链表
 
-	handler_info = get_first_handler(module_info);
-	do {
-		th = &tm->handlers[cur_handler];
+	handler_info = get_first_handler(module_info);//获取第一个处理程序信息
+	do {//循环复制module_info结构中的所有处理程序到th结构中
+		th = &tm->handlers[cur_handler];//获取当前处理程序的内核结构指针
 
-		guid_copy(&th->guid, (guid_t *)handler_info->handler_guid);
-		th->handler_addr = (void *)efi_pa_va_lookup(handler_info->handler_address);
-		th->static_data_buffer_addr = efi_pa_va_lookup(handler_info->static_data_buffer_address);
-		th->acpi_param_buffer_addr = efi_pa_va_lookup(handler_info->acpi_param_buffer_address);
+		guid_copy(&th->guid, (guid_t *)handler_info->handler_guid);// 复制处理程序GUID到内核结构
+		th->handler_addr = (void *)efi_pa_va_lookup(handler_info->handler_address);//转换处理程序地址从物理地址到虚拟地址
+		th->static_data_buffer_addr = efi_pa_va_lookup(handler_info->static_data_buffer_address);//转换静态数据缓冲区地址从物理地址到虚拟地址
+		th->acpi_param_buffer_addr = efi_pa_va_lookup(handler_info->acpi_param_buffer_address);//转换ACPI参数缓冲区地址从物理地址到虚拟地址
 	} while (++cur_handler < tm->handler_count && (handler_info = get_next_handler(handler_info)));
 
-	return 0;
+	return 0;//成功返回0
 
 parse_prmt_out4:
-	kfree(tm->mmio_info);
+	kfree(tm->mmio_info);//释放MMIO信息结构
 parse_prmt_out3:
-	memunmap(mmio_count);
+	memunmap(mmio_count);//解除MMIO计数映射
 parse_prmt_out2:
-	kfree(tm);
-parse_prmt_out1:
+	kfree(tm);//释放模块信息结构
+parse_prmt_out1://返回内存不足错误
 	return -ENOMEM;
 }
 
@@ -307,34 +332,55 @@ invalid_guid:
 	buffer->prm_status = PRM_HANDLER_GUID_NOT_FOUND;
 	return AE_OK;
 }
-
+/**
+ * init_prmt - 初始化平台运行时机制(PRMT)模块
+ * 
+ * 功能说明:
+ * 1. 获取并解析ACPI PRMT表
+ * 2. 检查EFI运行时服务可用性
+ * 3. 安装ACPI地址空间处理程序
+ * 
+ * 注意:
+ * - PRMT(Platform Runtime Mechanism Table)是ACPI规范的一部分
+ */
 void __init init_prmt(void)
 {
-	struct acpi_table_header *tbl;
-	acpi_status status;
-	int mc;
+	struct acpi_table_header *tbl;//存储ACPI表头指针
+	acpi_status status;//ACPI操作状态
+	int mc;//模块计数(Module Count)
 
-	status = acpi_get_table(ACPI_SIG_PRMT, 0, &tbl);
-	if (ACPI_FAILURE(status))
+	status = acpi_get_table(ACPI_SIG_PRMT, 0, &tbl);//获取PRMT ACPI表
+	if (ACPI_FAILURE(status))//表不存在则直接返回
 		return;
 
+	/*
+	 * 解析PRMT表中的子表条目:
+	 * - 从表头之后开始解析(跳过PRMT表头和模块头),解析出来的所有子表都链接到prm_module_list链表
+	 * - 对每个子表调用acpi_parse_prmt
+	 * - 返回找到的模块数量
+	 * */
 	mc = acpi_table_parse_entries(ACPI_SIG_PRMT, sizeof(struct acpi_table_prmt) +
 					  sizeof (struct acpi_table_prmt_header),
 					  0, acpi_parse_prmt, 0);
-	acpi_put_table(tbl);
+	acpi_put_table(tbl);//释放ACPI表引用
 	/*
 	 * Return immediately if PRMT table is not present or no PRM module found.
 	 */
-	if (mc <= 0)
+	if (mc <= 0)//如果没有找到任何模块则直接返回
 		return;
 
-	pr_info("PRM: found %u modules\n", mc);
+	pr_info("PRM: found %u modules\n", mc);//打印找到的模块数量
 
-	if (!efi_enabled(EFI_RUNTIME_SERVICES)) {
+	if (!efi_enabled(EFI_RUNTIME_SERVICES)) {// 检查EFI运行时服务是否可用
 		pr_err("PRM: EFI runtime services unavailable\n");
 		return;
 	}
 
+	/*
+	 * 安装ACPI平台运行时地址空间处理程序:
+	 *  - 处理ACPI_ADR_SPACE_PLATFORM_RT操作区域
+	 *  - 使用acpi_platformrt_space_handler作为处理程序
+	 * */
 	status = acpi_install_address_space_handler(ACPI_ROOT_OBJECT,
 						    ACPI_ADR_SPACE_PLATFORM_RT,
 						    &acpi_platformrt_space_handler,
