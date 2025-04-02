@@ -168,9 +168,9 @@ acpi_parse_prmt(union acpi_subtable_headers *header, const unsigned long end)
 	INIT_LIST_HEAD(&tm->module_list);//初始化模块链表头
 	list_add(&tm->module_list, &prm_module_list);//将当前模块添加到全局PRM模块链表
 
-	handler_info = get_first_handler(module_info);//获取第一个处理程序信息
+	handler_info = get_first_handler(module_info);//获取第一个处理程序信息对象
 	do {//循环复制module_info结构中的所有处理程序到th结构中
-		th = &tm->handlers[cur_handler];//获取当前处理程序的内核结构指针
+		th = &tm->handlers[cur_handler];//获取当前处理程序信息的内核结构指针
 
 		guid_copy(&th->guid, (guid_t *)handler_info->handler_guid);// 复制处理程序GUID到内核结构
 		th->handler_addr = (void *)efi_pa_va_lookup(handler_info->handler_address);//转换处理程序地址从物理地址到虚拟地址
@@ -356,7 +356,7 @@ void __init init_prmt(void)
 	/*
 	 * 解析PRMT表中的子表条目:
 	 * - 从表头之后开始解析(跳过PRMT表头和模块头),解析出来的所有子表都链接到prm_module_list链表
-	 * - 对每个子表调用acpi_parse_prmt
+	 * - 对每个子表调用acpi_parse_prmt:解析子表信息到内核结构，包括子表处理程序
 	 * - 返回找到的模块数量
 	 * */
 	mc = acpi_table_parse_entries(ACPI_SIG_PRMT, sizeof(struct acpi_table_prmt) +
@@ -379,7 +379,7 @@ void __init init_prmt(void)
 	/*
 	 * 安装ACPI平台运行时地址空间处理程序:
 	 *  - 处理ACPI_ADR_SPACE_PLATFORM_RT操作区域
-	 *  - 使用acpi_platformrt_space_handler作为处理程序
+	 *  - 使用acpi_platformrt_space_handler作为默认处理程序
 	 * */
 	status = acpi_install_address_space_handler(ACPI_ROOT_OBJECT,
 						    ACPI_ADR_SPACE_PLATFORM_RT,

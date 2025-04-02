@@ -407,38 +407,41 @@ struct acpi_object_cache_list {
  * 包含24种不同类型的ACPI对象，共享相同的内存空间。
  */
 union acpi_operand_object {
-	struct acpi_object_common common;//
-	struct acpi_object_integer integer;
-	struct acpi_object_string string;
-	struct acpi_object_buffer buffer;
-	struct acpi_object_package package;
-	struct acpi_object_event event;
-	struct acpi_object_method method;
-	struct acpi_object_mutex mutex;
-	struct acpi_object_region region;
-	struct acpi_object_notify_common common_notify;
-	struct acpi_object_device device;
-	struct acpi_object_power_resource power_resource;
-	struct acpi_object_processor processor;
-	struct acpi_object_thermal_zone thermal_zone;
-	struct acpi_object_field_common common_field;
-	struct acpi_object_region_field field;
-	struct acpi_object_buffer_field buffer_field;
-	struct acpi_object_bank_field bank_field;
-	struct acpi_object_index_field index_field;
-	struct acpi_object_notify_handler notify;
-	struct acpi_object_addr_handler address_space;
-	struct acpi_object_reference reference;
-	struct acpi_object_extra extra;
-	struct acpi_object_data data;
-	struct acpi_object_cache_list cache;
+	struct acpi_object_common common;//基础对象头(所有对象类型共有)
+	struct acpi_object_integer integer;//整数对象(64位有符号)
+	struct acpi_object_string string;//字符串对象(可变长度)
+	struct acpi_object_buffer buffer;//缓冲区对象(二进制数据)
+	struct acpi_object_package package;//包对象(对象数组)
+	struct acpi_object_event event;//事件同步对象 
+	struct acpi_object_method method;//互斥体对象
+	struct acpi_object_mutex mutex;//控制方法对象(AML字节码) 
+	struct acpi_object_region region;//操作地址空间区域对象(寄存器空间映射)
+	struct acpi_object_notify_common common_notify;//地址空间处理程序对象
+	struct acpi_object_device device;//设备对象
+	struct acpi_object_power_resource power_resource;//电源资源
+	struct acpi_object_processor processor;//处理器对象
+	struct acpi_object_thermal_zone thermal_zone;//热区对象
+	/* 字段单元对象(多种变体) */
+	struct acpi_object_field_common common_field;//字段公共部分
+	struct acpi_object_region_field field;//区域字段 
+	struct acpi_object_buffer_field buffer_field;//缓冲区字段 
+	struct acpi_object_bank_field bank_field;//bank字段
+	struct acpi_object_index_field index_field;//索引字段
+	/* 通知/引用对象 */
+	struct acpi_object_notify_handler notify;//通知处理程序
+	struct acpi_object_addr_handler address_space;//
+	struct acpi_object_reference reference;//对象引用
+	/* 特殊用途对象 */
+	struct acpi_object_extra extra;//扩展信息对象
+	struct acpi_object_data data;//数据对象
+	struct acpi_object_cache_list cache;//对象缓存列表 
 
 	/*
 	 * Add namespace node to union in order to simplify code that accepts both
 	 * ACPI_OPERAND_OBJECTs and ACPI_NAMESPACE_NODEs. The structures share
 	 * a common descriptor_type field in order to differentiate them.
 	 */
-	struct acpi_namespace_node node;
+	struct acpi_namespace_node node;//命名空间节点联合(特殊设计)，允许代码同时处理操作对象和命名空间节点，通过descriptor_type字段区分实际类型
 };
 
 /******************************************************************************

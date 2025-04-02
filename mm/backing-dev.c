@@ -517,35 +517,35 @@ static int wb_init(struct bdi_writeback *wb, struct backing_dev_info *bdi,
 {
 	int err;
 
-	memset(wb, 0, sizeof(*wb));
+	memset(wb, 0, sizeof(*wb));//清零整个 `bdi_writeback` 结构体，确保所有字段初始化为零
 
-	wb->bdi = bdi;
-	wb->last_old_flush = jiffies;
-	INIT_LIST_HEAD(&wb->b_dirty);
-	INIT_LIST_HEAD(&wb->b_io);
-	INIT_LIST_HEAD(&wb->b_more_io);
-	INIT_LIST_HEAD(&wb->b_dirty_time);
-	spin_lock_init(&wb->list_lock);
+	wb->bdi = bdi;//关联 `bdi_writeback` 和 `backing_dev_info`（BDI），BDI 表示底层块设备信息
+	wb->last_old_flush = jiffies;//记录最后一次旧数据刷新的时间戳（`jiffies` 是内核的时间基准）
+	INIT_LIST_HEAD(&wb->b_dirty);//初始化“脏页”链表头（待写回磁盘的页面）
+	INIT_LIST_HEAD(&wb->b_io);//初始化“I/O 进行中”链表头（正在写回的页面）
+	INIT_LIST_HEAD(&wb->b_more_io);//初始化“更多 I/O”链表头（需多次写回的页面）
+	INIT_LIST_HEAD(&wb->b_dirty_time);//初始化“脏时间”链表头（记录页面变脏的时间）
+	spin_lock_init(&wb->list_lock);//初始化保护链表操作的自旋锁（防止并发访问冲突）
 
-	atomic_set(&wb->writeback_inodes, 0);
-	wb->bw_time_stamp = jiffies;
-	wb->balanced_dirty_ratelimit = INIT_BW;
-	wb->dirty_ratelimit = INIT_BW;
-	wb->write_bandwidth = INIT_BW;
-	wb->avg_write_bandwidth = INIT_BW;
+	atomic_set(&wb->writeback_inodes, 0);//原子操作：初始化正在写回的 inode 计数为 0
+	wb->bw_time_stamp = jiffies;//记录带宽计算的时间戳（用于动态调整写回带宽）
+	wb->balanced_dirty_ratelimit = INIT_BW;//初始化平衡状态下的脏页写回速率限制
+	wb->dirty_ratelimit = INIT_BW;//初始化当前脏页写回速率限制
+	wb->write_bandwidth = INIT_BW;//初始化写带宽基准值（单位：字节/秒）
+	wb->avg_write_bandwidth = INIT_BW;//初始化平均写带宽（用于平滑计算）
 
-	spin_lock_init(&wb->work_lock);
-	INIT_LIST_HEAD(&wb->work_list);
-	INIT_DELAYED_WORK(&wb->dwork, wb_workfn);
-	INIT_DELAYED_WORK(&wb->bw_dwork, wb_update_bandwidth_workfn);
+	spin_lock_init(&wb->work_lock);//初始化保护工作队列操作的自旋锁
+	INIT_LIST_HEAD(&wb->work_list);//初始化工作项链表头（用于延迟执行的任务）
+	INIT_DELAYED_WORK(&wb->dwork, wb_workfn);//绑定延迟工作队列 `dwork` 到回调函数 `wb_workfn`（负责定期写回脏页）
+	INIT_DELAYED_WORK(&wb->bw_dwork, wb_update_bandwidth_workfn);//绑定延迟工作队列 `bw_dwork` 到回调函数 `wb_update_bandwidth_workfn`（负责更新带宽参数）
 
-	err = fprop_local_init_percpu(&wb->completions, gfp);
-	if (err)
-		return err;
+	err = fprop_local_init_percpu(&wb->completions, gfp);//初始化 per-CPU 的“完成比例”统计结构（用于公平写回）
+	if (err)//如果 per-CPU 初始化失败
+		return err;//直接返回错误码（例如内存不足）
 
-	err = percpu_counter_init_many(wb->stat, 0, gfp, NR_WB_STAT_ITEMS);
-	if (err)
-		fprop_local_destroy_percpu(&wb->completions);
+	err = percpu_counter_init_many(wb->stat, 0, gfp, NR_WB_STAT_ITEMS);//初始化多个 per-CPU 计数器（统计写回状态，如脏页数量）
+	if (err)//// 如果 per-CPU 计数器初始化失败
+		fprop_local_destroy_percpu(&wb->completions);//回滚操作：销毁之前初始化的 `completions` 结构
 
 	return err;
 }

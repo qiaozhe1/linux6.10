@@ -49,7 +49,23 @@ acpi_ut_get_element_length(u8 object_type,
  *              cache should more than make up for this!
  *
  ******************************************************************************/
-
+/**
+ * acpi_ut_create_internal_object_dbg - 创建ACPI内部对象
+ * @module_name: 调用模块名(用于调试)
+ * @line_number: 调用行号(用于调试)
+ * @component_id: 组件ID(用于调试)
+ * @type: 要创建的ACPI对象类型
+ *
+ * 返回值:
+ *   union acpi_operand_object* - 新创建的对象指针
+ *   NULL - 创建失败
+ *
+ * 功能说明:
+ * 1. 分配对象描述符内存
+ * 2. 处理需要二级对象的特殊类型
+ * 3. 初始化对象类型和引用计数
+ * 4. 调试信息记录
+ */
 union acpi_operand_object *acpi_ut_create_internal_object_dbg(const char
 							      *module_name,
 							      u32 line_number,
@@ -57,8 +73,8 @@ union acpi_operand_object *acpi_ut_create_internal_object_dbg(const char
 							      acpi_object_type
 							      type)
 {
-	union acpi_operand_object *object;
-	union acpi_operand_object *second_object;
+	union acpi_operand_object *object;//定义一级对象指针(主对象)
+	union acpi_operand_object *second_object;//定义二级对象指针(用于特殊对象类型)
 
 	ACPI_FUNCTION_TRACE_STR(ut_create_internal_object_dbg,
 				acpi_ut_get_type_name(type));
@@ -67,52 +83,56 @@ union acpi_operand_object *acpi_ut_create_internal_object_dbg(const char
 
 	object =
 	    acpi_ut_allocate_object_desc_dbg(module_name, line_number,
-					     component_id);
-	if (!object) {
-		return_PTR(NULL);
+					     component_id);//分配主对象内存,使用带调试信息的分配函数，便于问题追踪
+	if (!object) {//检查内存分配是否成功
+		return_PTR(NULL);//分配失败返回NULL，并通过return_PTR宏记录调试信息
 	}
 	kmemleak_not_leak(object);
 
-	switch (type) {
-	case ACPI_TYPE_REGION:
-	case ACPI_TYPE_BUFFER_FIELD:
-	case ACPI_TYPE_LOCAL_BANK_FIELD:
+	switch (type) {//特殊对象类型处理 - 需要额外分配二级对象,这些对象类型需要额外的存储空间来维护其状态
+	case ACPI_TYPE_REGION://操作区域对象(用于硬件寄存器访问)
+	case ACPI_TYPE_BUFFER_FIELD://缓冲区字段对象(用于数据缓冲区管理)    
+	case ACPI_TYPE_LOCAL_BANK_FIELD://bank字段对象(用于bank切换场景)
 
 		/* These types require a secondary object */
 
 		second_object =
 		    acpi_ut_allocate_object_desc_dbg(module_name, line_number,
-						     component_id);
-		if (!second_object) {
-			acpi_ut_delete_object_desc(object);
-			return_PTR(NULL);
+						     component_id);//为特殊对象类型分配二级对象
+		if (!second_object) {//检查二级对象分配是否成功
+			acpi_ut_delete_object_desc(object);//分配失败时释放已分配的主对象
+			return_PTR(NULL);//返回NULL表示失败
 		}
 
+		/*
+		 * 初始化二级对象
+		 * 类型设置为LOCAL_EXTRA表示是扩展对象
+		 * */
 		second_object->common.type = ACPI_TYPE_LOCAL_EXTRA;
-		second_object->common.reference_count = 1;
+		second_object->common.reference_count = 1;//初始化引用计数为1(由主对象持有)
 
 		/* Link the second object to the first */
 
-		object->common.next_object = second_object;
+		object->common.next_object = second_object;//将二级对象链接到主对象的next_object指针
 		break;
 
-	default:
+	default://默认情况：不需要二级对象的普通类型
 
 		/* All others have no secondary object */
-		break;
+		break;//空操作，仅用于语法完整性
 	}
 
 	/* Save the object type in the object descriptor */
 
-	object->common.type = (u8) type;
+	object->common.type = (u8) type;//设置主对象的类型字段,使用传入的类型参数，强制转换为u8类型
 
 	/* Init the reference count */
 
-	object->common.reference_count = 1;
+	object->common.reference_count = 1;//初始化主对象的引用计数,新创建对象的初始引用计数为1(由创建者持有)
 
 	/* Any per-type initialization should go here */
 
-	return_PTR(object);
+	return_PTR(object);//返回创建的对象指针,使用return_PTR宏以便在调试模式下记录返回信息
 }
 
 /*******************************************************************************
@@ -348,30 +368,45 @@ u8 acpi_ut_valid_internal_object(void *object)
  *              error conditions.
  *
  ******************************************************************************/
-
+/**
+ * acpi_ut_allocate_object_desc_dbg - 分配ACPI操作对象描述符
+ * @module_name: 调用模块名称(用于错误报告)
+ * @line_number: 源代码行号(用于错误报告)
+ * @component_id: 组件标识符(用于调试分类)
+ *
+ * 返回值:
+ *  成功: 返回新分配的操作对象指针
+ *  失败: 返回NULL指针
+ *
+ * 功能说明:
+ * 1. 从ACPI操作对象缓存池中分配内存
+ * 2. 设置对象描述符类型标记
+ * 3. 记录分配调试信息
+ * 4. 错误情况下记录详细错误日志
+ */
 void *acpi_ut_allocate_object_desc_dbg(const char *module_name,
 				       u32 line_number, u32 component_id)
 {
-	union acpi_operand_object *object;
+	union acpi_operand_object *object;//声明操作对象指针
 
 	ACPI_FUNCTION_TRACE(ut_allocate_object_desc_dbg);
 
-	object = acpi_os_acquire_object(acpi_gbl_operand_cache);
-	if (!object) {
+	object = acpi_os_acquire_object(acpi_gbl_operand_cache);//从ACPI操作对象缓存池中获取对象,acpi_gbl_operand_cache是全局对象缓存
+	if (!object) {//检查对象分配是否成功
 		ACPI_ERROR((module_name, line_number,
-			    "Could not allocate an object descriptor"));
+			    "Could not allocate an object descriptor"));//分配失败记录错误信息,包含模块名、行号等调试信息
 
 		return_PTR(NULL);
 	}
 
 	/* Mark the descriptor type */
 
-	ACPI_SET_DESCRIPTOR_TYPE(object, ACPI_DESC_TYPE_OPERAND);
+	ACPI_SET_DESCRIPTOR_TYPE(object, ACPI_DESC_TYPE_OPERAND);//设置对象描述符类型,标记为ACPI_DESC_TYPE_OPERAND表示标准操作对象
 
 	ACPI_DEBUG_PRINT((ACPI_DB_ALLOCATIONS, "%p Size %X\n",
 			  object, (u32) sizeof(union acpi_operand_object)));
 
-	return_PTR(object);
+	return_PTR(object);//返回分配的对象指针
 }
 
 /*******************************************************************************

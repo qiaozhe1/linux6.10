@@ -33,13 +33,29 @@ ACPI_MODULE_NAME("nsobject")
  * MUTEX:       Assumes namespace is locked
  *
  ******************************************************************************/
+/**
+ * acpi_ns_attach_object - 将ACPI对象附加到命名空间节点
+ * @node: 目标命名空间节点
+ * @object: 要附加的对象(可以是操作对象或命名节点)
+ * @type: 对象类型(当object为NULL时必须为ACPI_TYPE_ANY)
+ *
+ * 返回值:
+ *  AE_OK - 操作成功
+ *  AE_BAD_PARAMETER - 参数无效
+ *
+ * 功能说明:
+ * 1. 参数验证和错误检查
+ * 2. 处理不同类型对象的附加逻辑
+ * 3. 管理对象引用计数
+ * 4. 处理对象链表关系
+ */
 acpi_status
 acpi_ns_attach_object(struct acpi_namespace_node *node,
 		      union acpi_operand_object *object, acpi_object_type type)
 {
-	union acpi_operand_object *obj_desc;
-	union acpi_operand_object *last_obj_desc;
-	acpi_object_type object_type = ACPI_TYPE_ANY;
+	union acpi_operand_object *obj_desc;//实际要附加的对象
+	union acpi_operand_object *last_obj_desc;//对象链表的最后一个对象
+	acpi_object_type object_type = ACPI_TYPE_ANY;//最终对象类型
 
 	ACPI_FUNCTION_TRACE(ns_attach_object);
 
@@ -54,7 +70,7 @@ acpi_ns_attach_object(struct acpi_namespace_node *node,
 		return_ACPI_STATUS(AE_BAD_PARAMETER);
 	}
 
-	if (!object && (ACPI_TYPE_ANY != type)) {
+	if (!object && (ACPI_TYPE_ANY != type)) {//检查对象指针和类型是否匹配(不允许NULL对象+非ANY类型)
 
 		/* Null object */
 
@@ -63,7 +79,7 @@ acpi_ns_attach_object(struct acpi_namespace_node *node,
 		return_ACPI_STATUS(AE_BAD_PARAMETER);
 	}
 
-	if (ACPI_GET_DESCRIPTOR_TYPE(node) != ACPI_DESC_TYPE_NAMED) {
+	if (ACPI_GET_DESCRIPTOR_TYPE(node) != ACPI_DESC_TYPE_NAMED) {//验证节点描述符类型是否为命名节点
 
 		/* Not a name handle */
 
@@ -74,7 +90,7 @@ acpi_ns_attach_object(struct acpi_namespace_node *node,
 
 	/* Check if this object is already attached */
 
-	if (node->object == object) {
+	if (node->object == object) {//检查是否已经附加了相同的对象
 		ACPI_DEBUG_PRINT((ACPI_DB_EXEC,
 				  "Obj %p already installed in NameObj %p\n",
 				  object, node));
@@ -84,7 +100,7 @@ acpi_ns_attach_object(struct acpi_namespace_node *node,
 
 	/* If null object, we will just install it */
 
-	if (!object) {
+	if (!object) {//处理NULL对象的情况(仅清除现有对象)
 		obj_desc = NULL;
 		object_type = ACPI_TYPE_ANY;
 	}
@@ -92,6 +108,7 @@ acpi_ns_attach_object(struct acpi_namespace_node *node,
 	/*
 	 * If the source object is a namespace Node with an attached object,
 	 * we will use that (attached) object
+	 * 处理传递的是命名节点的情况
 	 */
 	else if ((ACPI_GET_DESCRIPTOR_TYPE(object) == ACPI_DESC_TYPE_NAMED) &&
 		 ((struct acpi_namespace_node *)object)->object) {
@@ -99,6 +116,7 @@ acpi_ns_attach_object(struct acpi_namespace_node *node,
 		 * Value passed is a name handle and that name has a
 		 * non-null value. Use that name's value and type.
 		 */
+		//使用命名节点关联的实际对象
 		obj_desc = ((struct acpi_namespace_node *)object)->object;
 		object_type = ((struct acpi_namespace_node *)object)->type;
 	}
@@ -107,12 +125,12 @@ acpi_ns_attach_object(struct acpi_namespace_node *node,
 	 * Otherwise, we will use the parameter object, but we must type
 	 * it first
 	 */
-	else {
+	else {//处理普通操作对象的情况 
 		obj_desc = (union acpi_operand_object *)object;
 
 		/* Use the given type */
 
-		object_type = type;
+		object_type = type;//使用传入的类型参数
 	}
 
 	ACPI_DEBUG_PRINT((ACPI_DB_EXEC, "Installing %p into Node %p [%4.4s]\n",
@@ -120,21 +138,22 @@ acpi_ns_attach_object(struct acpi_namespace_node *node,
 
 	/* Detach an existing attached object if present */
 
-	if (node->object) {
+	if (node->object) {//如果节点已有附加对象，先分离它
 		acpi_ns_detach_object(node);
 	}
 
-	if (obj_desc) {
+	if (obj_desc) {//处理新对象的附加逻辑
 		/*
 		 * Must increment the new value's reference count
 		 * (if it is an internal object)
 		 */
-		acpi_ut_add_reference(obj_desc);
+		acpi_ut_add_reference(obj_desc);//增加新对象的引用计数 
 
 		/*
 		 * Handle objects with multiple descriptors - walk
 		 * to the end of the descriptor list
 		 */
+		/* 处理多对象链表(找到链表末尾) */
 		last_obj_desc = obj_desc;
 		while (last_obj_desc->common.next_object) {
 			last_obj_desc = last_obj_desc->common.next_object;
@@ -142,9 +161,10 @@ acpi_ns_attach_object(struct acpi_namespace_node *node,
 
 		/* Install the object at the front of the object list */
 
-		last_obj_desc->common.next_object = node->object;
+		last_obj_desc->common.next_object = node->object;//将原有对象链接到新对象链表的末尾
 	}
 
+	/* 更新节点的类型和对象指针 */
 	node->type = (u8) object_type;
 	node->object = obj_desc;
 
@@ -242,7 +262,20 @@ void acpi_ns_detach_object(struct acpi_namespace_node *node)
  * DESCRIPTION: Obtain the object attached to a namespace node.
  *
  ******************************************************************************/
-
+/**
+ * acpi_ns_get_attached_object - 获取命名空间节点关联的操作对象
+ * @node: 要查询的ACPI命名空间节点指针
+ *
+ * 返回值:
+ *   union acpi_operand_object* - 有效的操作对象指针
+ *   NULL - 节点无效或没有关联有效对象
+ *
+ * 功能说明:
+ * 1. 参数有效性检查
+ * 2. 对象描述符类型验证
+ * 3. 特殊类型过滤(ACPI_TYPE_LOCAL_DATA)
+ * 4. 返回关联对象的引用(不增加引用计数)
+ */
 union acpi_operand_object *acpi_ns_get_attached_object(struct
 						       acpi_namespace_node
 						       *node)
@@ -254,15 +287,16 @@ union acpi_operand_object *acpi_ns_get_attached_object(struct
 		return_PTR(NULL);
 	}
 
-	if (!node->object ||
+	if (!node->object ||//对象指针为空
+	    /* 检查描述符类型有效性 */
 	    ((ACPI_GET_DESCRIPTOR_TYPE(node->object) != ACPI_DESC_TYPE_OPERAND)
 	     && (ACPI_GET_DESCRIPTOR_TYPE(node->object) !=
 		 ACPI_DESC_TYPE_NAMED))
-	    || ((node->object)->common.type == ACPI_TYPE_LOCAL_DATA)) {
-		return_PTR(NULL);
+	    || ((node->object)->common.type == ACPI_TYPE_LOCAL_DATA)) {//过滤特殊数据类型
+		return_PTR(NULL);//返回空指针
 	}
 
-	return_PTR(node->object);
+	return_PTR(node->object);//返回关联的对象指针
 }
 
 /*******************************************************************************
