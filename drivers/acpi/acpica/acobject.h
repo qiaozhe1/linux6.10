@@ -310,16 +310,16 @@ struct acpi_object_notify_handler {
 };
 
 struct acpi_object_addr_handler {
-	ACPI_OBJECT_COMMON_HEADER;
-	u8 space_id;
-	u8 handler_flags;
-	acpi_adr_space_handler handler;
-	struct acpi_namespace_node *node;	/* Parent device */
-	void *context;
-	acpi_mutex context_mutex;
-	acpi_adr_space_setup setup;
-	union acpi_operand_object *region_list;	/* Regions using this handler */
-	union acpi_operand_object *next;
+	ACPI_OBJECT_COMMON_HEADER;//ACPI对象通用头（类型、引用计数等）
+	u8 space_id;//地址空间类型标识符（如内存、IO、PCI配置空间等）
+	u8 handler_flags;//处理程序标志位（控制行为，如只读、可写等）
+	acpi_adr_space_handler handler;//地址空间访问回调函数（读写操作处理）
+	struct acpi_namespace_node *node;//父设备节点（命名空间中的所属设备）
+	void *context;//用户自定义上下文数据（设备特定参数）
+	acpi_mutex context_mutex;//上下文数据的互斥锁（多线程访问保护）
+	acpi_adr_space_setup setup;//初始化回调（安装处理程序时调用）
+	union acpi_operand_object *region_list;	//使用该处理程序的区域对象链表头
+	union acpi_operand_object *next;//链表指针（用于将多个处理程序对象链接）
 };
 
 /* Flags for address handler (handler_flags) */
@@ -429,7 +429,7 @@ union acpi_operand_object {
 	struct acpi_object_index_field index_field;//索引字段
 	/* 通知/引用对象 */
 	struct acpi_object_notify_handler notify;//通知处理程序
-	struct acpi_object_addr_handler address_space;//
+	struct acpi_object_addr_handler address_space;//处理程序对象
 	struct acpi_object_reference reference;//对象引用
 	/* 特殊用途对象 */
 	struct acpi_object_extra extra;//扩展信息对象

@@ -1906,7 +1906,7 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 		struct lruvec *lruvec, struct scan_control *sc,
 		enum lru_list lru)
 {
-	LIST_HEAD(folio_list);
+	LIST_HEAD(folio_list);//初始化链表头，用于临时存放从 LRU 隔离的页面
 	unsigned long nr_scanned;
 	unsigned int nr_reclaimed = 0;
 	unsigned long nr_taken;
@@ -1916,52 +1916,55 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
 	bool stalled = false;
 
-	while (unlikely(too_many_isolated(pgdat, file, sc))) {
-		if (stalled)
+	while (unlikely(too_many_isolated(pgdat, file, sc))) {//循环检查当前节点是否有过多隔离（isolated）页面，避免内存回收压力过大
+		if (stalled)//若已处于等待状态，直接返回 0（避免死锁）
 			return 0;
 
-		/* wait a bit for the reclaimer. */
-		stalled = true;
-		reclaim_throttle(pgdat, VMSCAN_THROTTLE_ISOLATED);
+		/* 等待一段时间以便回收进程。 */
+		stalled = true//设置stalled为true，表示已进入等待状态
+		reclaim_throttle(pgdat, VMSCAN_THROTTLE_ISOLATED);//调用reclaim_throttle函数来减慢回收进程。
 
 		/* We are about to die and free our memory. Return now. */
-		if (fatal_signal_pending(current))
+		if (fatal_signal_pending(current))//检查当前进程是否接收到致命信号，如果是，返回一个较大值让上层快速结束回收
 			return SWAP_CLUSTER_MAX;
 	}
 
-	lru_add_drain();
+	lru_add_drain();//将 per-CPU 的 LRU 缓存页面加入全局 LRU 链表，确保数据一致性(缓存刷新)
 
-	spin_lock_irq(&lruvec->lru_lock);
+	spin_lock_irq(&lruvec->lru_lock);//获取LRU锁，使其在队列处理期间保持不变。
 
 	nr_taken = isolate_lru_folios(nr_to_scan, lruvec, &folio_list,
-				     &nr_scanned, sc, lru);
+				     &nr_scanned, sc, lru);//核心操作：从 LRU 链表中隔离出指定数量的页面到 folio_list
 
-	__mod_node_page_state(pgdat, NR_ISOLATED_ANON + file, nr_taken);
-	item = PGSCAN_KSWAPD + reclaimer_offset();
-	if (!cgroup_reclaim(sc))
-		__count_vm_events(item, nr_scanned);
-	__count_memcg_events(lruvec_memcg(lruvec), item, nr_scanned);
-	__count_vm_events(PGSCAN_ANON + file, nr_scanned);
+	__mod_node_page_state(pgdat, NR_ISOLATED_ANON + file, nr_taken);//更新节点的隔离页面统计（NR_ISOLATED_ANON 或 NR_ISOLATED_FILE）
+	/* 统计事件：PGSCAN_KSWAPD（kswapd 线程）或 PGSCAN_DIRECT（直接回收） */
+	item = PGSCAN_KSWAPD + reclaimer_offset();//reclaimer_offset() 判断回收者类型
+	if (!cgroup_reclaim(sc))//如果当前不是cgroup页面回收。
+		__count_vm_events(item, nr_scanned);//记录虚拟内存扫描事件。
+	__count_memcg_events(lruvec_memcg(lruvec), item, nr_scanned);//记录内存cgroup扫描事件。
+	__count_vm_events(PGSCAN_ANON + file, nr_scanned);//记录匿名页面或文件页面扫描事件。
 
 	spin_unlock_irq(&lruvec->lru_lock);
 
-	if (nr_taken == 0)
+	if (nr_taken == 0)//如果没有页面被隔离，直接返回。
 		return 0;
 
-	nr_reclaimed = shrink_folio_list(&folio_list, pgdat, sc, &stat, false);
+	nr_reclaimed = shrink_folio_list(&folio_list, pgdat, sc, &stat, false);//核心操作：尝试回收隔离的页面（解除映射、写回脏页、释放内存）
 
-	spin_lock_irq(&lruvec->lru_lock);
-	move_folios_to_lru(lruvec, &folio_list);
+	spin_lock_irq(&lruvec->lru_lock);//再次获取LRU锁。
+	move_folios_to_lru(lruvec, &folio_list);//将未被回收的页面重新加入 LRU 链表
 
-	__mod_node_page_state(pgdat, NR_ISOLATED_ANON + file, -nr_taken);
+	__mod_node_page_state(pgdat, NR_ISOLATED_ANON + file, -nr_taken);//更新节点隔离页面统计（减少已处理的隔离页面）
+									
+	/* 统计事件：PGSTEAL_KSWAPD（kswapd）或 PGSTEAL_DIRECT（直接回收） */
 	item = PGSTEAL_KSWAPD + reclaimer_offset();
-	if (!cgroup_reclaim(sc))
-		__count_vm_events(item, nr_reclaimed);
-	__count_memcg_events(lruvec_memcg(lruvec), item, nr_reclaimed);
-	__count_vm_events(PGSTEAL_ANON + file, nr_reclaimed);
-	spin_unlock_irq(&lruvec->lru_lock);
+	if (!cgroup_reclaim(sc))//如果不是cgroup回收。
+		__count_vm_events(item, nr_reclaimed);//记录页面回收事件。
+	__count_memcg_events(lruvec_memcg(lruvec), item, nr_reclaimed);//记录内存cgroup回收事件。
+	__count_vm_events(PGSTEAL_ANON + file, nr_reclaimed);//记录匿名页面或文件页面回收事件。
+	spin_unlock_irq(&lruvec->lru_lock);//释放LRU锁。
 
-	lru_note_cost(lruvec, file, stat.nr_pageout, nr_scanned - nr_reclaimed);
+	lru_note_cost(lruvec, file, stat.nr_pageout, nr_scanned - nr_reclaimed);//记录回收成本（用于后续 LRU 平衡策略）
 
 	/*
 	 * If dirty folios are scanned that are not queued for IO, it
@@ -1973,9 +1976,12 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 	 * pressure reclaiming all the clean cache. And in some cases,
 	 * the flushers simply cannot keep up with the allocation
 	 * rate. Nudge the flusher threads in case they are asleep.
+	 * 若所有隔离的脏页均未加入写回队列（nr_unqueued_dirty == nr_taken），
+	 * 说明回写线程（flusher）未及时工作，唤醒它们处理脏页。同时针对 cgroup v1
+	 * 的写回节流机制，可能需额外等待。
 	 */
 	if (stat.nr_unqueued_dirty == nr_taken) {
-		wakeup_flusher_threads(WB_REASON_VMSCAN);
+		wakeup_flusher_threads(WB_REASON_VMSCAN);//唤醒回写线程
 		/*
 		 * For cgroupv1 dirty throttling is achieved by waking up
 		 * the kernel flusher here and later waiting on folios
@@ -1984,23 +1990,25 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 		 * Flusher may not be able to issue writeback quickly
 		 * enough for cgroupv1 writeback throttling to work
 		 * on a large system.
+		 * 若 cgroup v1 的写回节流机制不适用（writeback_throttling_sane 返回 false)
+		 *
 		 */
-		if (!writeback_throttling_sane(sc))
-			reclaim_throttle(pgdat, VMSCAN_THROTTLE_WRITEBACK);
+		if (!writeback_throttling_sane(sc))//进行节流等待，避免过量脏页堆积。
+			reclaim_throttle(pgdat, VMSCAN_THROTTLE_WRITEBACK);//如果不可行，调用reclaim_throttle函数控制回收速度。
 	}
 
-	sc->nr.dirty += stat.nr_dirty;
-	sc->nr.congested += stat.nr_congested;
-	sc->nr.unqueued_dirty += stat.nr_unqueued_dirty;
-	sc->nr.writeback += stat.nr_writeback;
-	sc->nr.immediate += stat.nr_immediate;
-	sc->nr.taken += nr_taken;
-	if (file)
-		sc->nr.file_taken += nr_taken;
+	sc->nr.dirty += stat.nr_dirty;//增加扫描控制器的脏页面数量。
+	sc->nr.congested += stat.nr_congested;//增加扫描控制器的拥塞页面数。
+	sc->nr.unqueued_dirty += stat.nr_unqueued_dirty;// 增加扫描控制器的未排队脏页数。
+	sc->nr.writeback += stat.nr_writeback;//增加扫描控制器的写回页数。
+	sc->nr.immediate += stat.nr_immediate;//增加扫描控制器的即时回收页数。
+	sc->nr.taken += nr_taken;//增加扫描控制器的已隔离页数。
+	if (file)//如果是文件页。
+		sc->nr.file_taken += nr_taken;//增加扫描控制器的文件页已隔离数。
 
 	trace_mm_vmscan_lru_shrink_inactive(pgdat->node_id,
-			nr_scanned, nr_reclaimed, &stat, sc->priority, file);
-	return nr_reclaimed;
+			nr_scanned, nr_reclaimed, &stat, sc->priority, file);//记录MM扫描LRU缩减不活跃状态的跟踪。
+	return nr_reclaimed;//返回成功回收的页面数。
 }
 
 /*
@@ -2175,15 +2183,20 @@ unsigned long reclaim_pages(struct list_head *folio_list)
 static unsigned long shrink_list(enum lru_list lru, unsigned long nr_to_scan,
 				 struct lruvec *lruvec, struct scan_control *sc)
 {
-	if (is_active_lru(lru)) {
+	if (is_active_lru(lru)) {//判断当前 LRU 类型是否为活跃链表（LRU_ACTIVE_ANON 或 LRU_ACTIVE_FILE）
+		/*
+		 * 检查是否允许解除该类型 LRU 的活跃状态：
+		 * - sc->may_deactivate 是位掩码，DEACTIVATE_ANON（1 << 0）和 DEACTIVATE_FILE（1 << 1）
+		 * - is_file_lru(lru) 返回 0（匿名页）或 1（文件页），左移后与 may_deactivate 按位与  
+		 * */
 		if (sc->may_deactivate & (1 << is_file_lru(lru)))
-			shrink_active_list(nr_to_scan, lruvec, sc, lru);
+			shrink_active_list(nr_to_scan, lruvec, sc, lru);//允许解除活跃状态，调用活跃链表回收函数
 		else
-			sc->skipped_deactivate = 1;
-		return 0;
+			sc->skipped_deactivate = 1;//不允许解除活跃状态，标记已跳过停用操作
+		return 0;// 活跃链表回收不直接释放页面，返回 0（需后续处理）
 	}
 
-	return shrink_inactive_list(nr_to_scan, lruvec, sc, lru);
+	return shrink_inactive_list(nr_to_scan, lruvec, sc, lru);//非活跃链表（LRU_INACTIVE_ANON 或 LRU_INACTIVE_FILE），调用非活跃链表回收函数
 }
 
 /*
@@ -2357,20 +2370,20 @@ static void prepare_scan_control(pg_data_t *pgdat, struct scan_control *sc)
 static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
 			   unsigned long *nr)
 {
-	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
-	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
-	unsigned long anon_cost, file_cost, total_cost;
-	int swappiness = mem_cgroup_swappiness(memcg);
-	u64 fraction[ANON_AND_FILE];
+	struct pglist_data *pgdat = lruvec_pgdat(lruvec);//获取 NUMA 节点描述符
+	struct mem_cgroup *memcg = lruvec_memcg(lruvec);//当前 LRU 所属的内存控制组
+	unsigned long anon_cost, file_cost, total_cost;//匿名页和文件页的回收成本
+	int swappiness = mem_cgroup_swappiness(memcg);//获取该 memcg 的交换倾向（0-200）
+	u64 fraction[ANON_AND_FILE];//存储匿名页和文件页的扫描比例分数（分子）
 	u64 denominator = 0;	/* gcc */
-	enum scan_balance scan_balance;
-	unsigned long ap, fp;
-	enum lru_list lru;
+	enum scan_balance scan_balance;//扫描平衡策略（SCAN_FILE、SCAN_ANON、SCAN_FRACT 等）
+	unsigned long ap, fp;//匿名页（Anon）和文件页（File）的压力权重
+	enum lru_list lru;// LRU 类型枚举
 
-	/* If we have no swap space, do not bother scanning anon folios. */
+	/* 若不允许交换或无法回收匿名页（如无交换空间），则仅扫描文件页 */
 	if (!sc->may_swap || !can_reclaim_anon_pages(memcg, pgdat->node_id, sc)) {
-		scan_balance = SCAN_FILE;
-		goto out;
+		scan_balance = SCAN_FILE;//强制仅扫描文件页
+		goto out;//跳转到输出处理
 	}
 
 	/*
@@ -2379,6 +2392,7 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
 	 * disable swapping for individual groups completely when
 	 * using the memory controller's swap limit feature would be
 	 * too expensive.
+	 * 对于 memcg 回收，若其 swappiness 为 0（完全禁用交换），即使全局允许交换，也仅扫描文件页。
 	 */
 	if (cgroup_reclaim(sc) && !swappiness) {
 		scan_balance = SCAN_FILE;
@@ -2389,6 +2403,7 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
 	 * Do not apply any pressure balancing cleverness when the
 	 * system is close to OOM, scan both anon and file equally
 	 * (unless the swappiness setting disagrees with swapping).
+	 * 当系统接近 OOM（sc->priority = 0）且 swappiness 非零时，匿名页和文件页按相等比例扫描。
 	 */
 	if (!sc->priority && swappiness) {
 		scan_balance = SCAN_EQUAL;
@@ -2397,6 +2412,7 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
 
 	/*
 	 * If the system is almost out of file pages, force-scan anon.
+	 * 若系统文件页极度短缺（sc->file_is_tiny），强制优先扫描匿名页，避免文件页耗尽导致系统崩溃。
 	 */
 	if (sc->file_is_tiny) {
 		scan_balance = SCAN_ANON;
@@ -2406,13 +2422,14 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
 	/*
 	 * If there is enough inactive page cache, we do not reclaim
 	 * anything from the anonymous working right now.
+	 *  若处于缓存修剪模式（sc->cache_trim_mode），仅扫描文件页，此模式专为释放冷缓存设计。
 	 */
 	if (sc->cache_trim_mode) {
 		scan_balance = SCAN_FILE;
 		goto out;
 	}
 
-	scan_balance = SCAN_FRACT;
+	scan_balance = SCAN_FRACT;//默认按比例（fractional）扫描
 	/*
 	 * Calculate the pressure balance between anon and file pages.
 	 *
@@ -2428,36 +2445,44 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
 	 *
 	 * With swappiness at 100, anon and file have equal IO cost.
 	 */
-	total_cost = sc->anon_cost + sc->file_cost;
-	anon_cost = total_cost + sc->anon_cost;
-	file_cost = total_cost + sc->file_cost;
-	total_cost = anon_cost + file_cost;
+	/* ---------- 计算匿名页和文件页的回收压力平衡 ---------- */
+	/* 
+	 * 成本模型：回收压力与页面重新失效（refault）的概率成反比，
+	 * 并考虑交换匿名页与重新加载文件页的 I/O 成本差异（swappiness）。
+	 * 总压力中至少有 1/3 分配给每类页面，避免完全忽略某一类。
+	 * */
+	total_cost = sc->anon_cost + sc->file_cost;//总成本 = 匿名成本 + 文件成本
+	anon_cost = total_cost + sc->anon_cost;//加权匿名成本（公式设计）
+	file_cost = total_cost + sc->file_cost;//加权文件成本
+	total_cost = anon_cost + file_cost;//新的总成本（用于归一化）
 
-	ap = swappiness * (total_cost + 1);
-	ap /= anon_cost + 1;
+	ap = swappiness * (total_cost + 1);//防止除零
+	ap /= anon_cost + 1;// 匿名压力 = swappiness * 总成本 / 匿名成本
 
-	fp = (200 - swappiness) * (total_cost + 1);
-	fp /= file_cost + 1;
+	fp = (200 - swappiness) * (total_cost + 1);//计算文件页压力权重（剩余比例）
+	fp /= file_cost + 1;//文件压力 = (200 - swappiness) * 总成本 / 文件成本
 
-	fraction[0] = ap;
-	fraction[1] = fp;
-	denominator = ap + fp;
+	fraction[0] = ap;//匿名页扫描比例分子
+	fraction[1] = fp;//文件页扫描比例分子
+	denominator = ap + fp;//分母为两者之和
 out:
-	for_each_evictable_lru(lru) {
-		bool file = is_file_lru(lru);
-		unsigned long lruvec_size;
-		unsigned long low, min;
-		unsigned long scan;
+	for_each_evictable_lru(lru) {//遍历所有可回收的LRU类型（匿名/文件，活跃/非活跃）
+		bool file = is_file_lru(lru);//判断当前 LRU 是否为文件页
+		unsigned long lruvec_size;//当前 LRU 的页面总数
+		unsigned long low, min;// memcg 的内存保护阈值（memory.low 和 memory.min）
+		unsigned long scan;//最终计算的扫描页数
 
-		lruvec_size = lruvec_lru_size(lruvec, lru, sc->reclaim_idx);
+		lruvec_size = lruvec_lru_size(lruvec, lru, sc->reclaim_idx);//获取当前 LRU 在指定回收索引（reclaim_idx）下的页面数量
 		mem_cgroup_protection(sc->target_mem_cgroup, memcg,
-				      &min, &low);
+				      &min, &low);//获取 memcg 的内存保护阈值（min: memory.min，low: memory.low）
 
-		if (min || low) {
+		if (min || low) {//若 memcg 设置了内存保护
 			/*
 			 * Scale a cgroup's reclaim pressure by proportioning
 			 * its current usage to its memory.low or memory.min
 			 * setting.
+			 * 根据 memcg 的内存使用与保护阈值的比例，调整扫描压力。
+			 * 避免因接近保护阈值而完全停止扫描，导致回收停滞。
 			 *
 			 * This is important, as otherwise scanning aggression
 			 * becomes extremely binary -- from nothing as we
@@ -2483,47 +2508,48 @@ out:
 			 * again by how much of the total memory used is under
 			 * hard protection.
 			 */
-			unsigned long cgroup_size = mem_cgroup_size(memcg);
-			unsigned long protection;
+			unsigned long cgroup_size = mem_cgroup_size(memcg);//memcg 总内存使用量
+			unsigned long protection;// 实际使用的保护阈值
 
 			/* memory.low scaling, make sure we retry before OOM */
-			if (!sc->memcg_low_reclaim && low > min) {
+			if (!sc->memcg_low_reclaim && low > min) {//若非低保护回收模式且 memory.low > memory.min，使用 memory.low 作为保护阈值，并标记跳过。
 				protection = low;
 				sc->memcg_low_skipped = 1;
 			} else {
-				protection = min;
+				protection = min;//使用 memory.min 或低保护模式下的 memory.low
 			}
 
 			/* Avoid TOCTOU with earlier protection check */
-			cgroup_size = max(cgroup_size, protection);
+			cgroup_size = max(cgroup_size, protection);//避免除零错误：确保 cgroup_size 不小于 protection
 
 			scan = lruvec_size - lruvec_size * protection /
-				(cgroup_size + 1);
+				(cgroup_size + 1);//计算可扫描的页数：总页数 - 受保护页数
 
 			/*
 			 * Minimally target SWAP_CLUSTER_MAX pages to keep
 			 * reclaim moving forwards, avoiding decrementing
 			 * sc->priority further than desirable.
 			 */
-			scan = max(scan, SWAP_CLUSTER_MAX);
+			scan = max(scan, SWAP_CLUSTER_MAX);//确保至少扫描 SWAP_CLUSTER_MAX（通常 32）页，避免回收停滞
 		} else {
-			scan = lruvec_size;
+			scan = lruvec_size;//无保护阈值，扫描全部页
 		}
 
-		scan >>= sc->priority;
+		scan >>= sc->priority;//根据回收优先级调整扫描量（右移，相当于除以 2^priority）
 
 		/*
 		 * If the cgroup's already been deleted, make sure to
 		 * scrape out the remaining cache.
+		 * 若 memcg 已离线（被删除），强制扫描至少 SWAP_CLUSTER_MAX 页，清理残留缓存。
 		 */
 		if (!scan && !mem_cgroup_online(memcg))
 			scan = min(lruvec_size, SWAP_CLUSTER_MAX);
 
-		switch (scan_balance) {
-		case SCAN_EQUAL:
+		switch (scan_balance) {//根据扫描平衡策略调整最终扫描量
+		case SCAN_EQUAL://平等扫描：按 LRU 大小比例扫描，无需额外调整
 			/* Scan lists relative to size */
 			break;
-		case SCAN_FRACT:
+		case SCAN_FRACT://比例扫描：根据压力权重调整
 			/*
 			 * Scan types proportional to swappiness and
 			 * their relative recent reclaim efficiency.
@@ -2532,22 +2558,22 @@ out:
 			 * round-off error.
 			 */
 			scan = mem_cgroup_online(memcg) ?
-			       div64_u64(scan * fraction[file], denominator) :
+			       div64_u64(scan * fraction[file], denominator) ://在线 memcg 按比例分配
 			       DIV64_U64_ROUND_UP(scan * fraction[file],
-						  denominator);
+						  denominator);//离线 memcg 向上取整
 			break;
-		case SCAN_FILE:
-		case SCAN_ANON:
+		case SCAN_FILE://仅扫描文件页：若非文件 LRU，扫描量置零
+		case SCAN_ANON://仅扫描匿名页：若非匿名 LRU，扫描量置零
 			/* Scan one type exclusively */
 			if ((scan_balance == SCAN_FILE) != file)
 				scan = 0;
 			break;
-		default:
+		default://未知策略，触发内核错误
 			/* Look ma, no brain */
 			BUG();
 		}
 
-		nr[lru] = scan;
+		nr[lru] = scan;//将最终扫描量存入输出数组
 	}
 }
 
@@ -5663,24 +5689,24 @@ static void lru_gen_shrink_node(struct pglist_data *pgdat, struct scan_control *
 
 static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 {
-	unsigned long nr[NR_LRU_LISTS];
-	unsigned long targets[NR_LRU_LISTS];
-	unsigned long nr_to_scan;
-	enum lru_list lru;
-	unsigned long nr_reclaimed = 0;
-	unsigned long nr_to_reclaim = sc->nr_to_reclaim;
-	bool proportional_reclaim;
-	struct blk_plug plug;
+	unsigned long nr[NR_LRU_LISTS];//各 LRU 类型（如匿名非活跃/活跃，文件非活跃/活跃）待扫描页数
+	unsigned long targets[NR_LRU_LISTS];//原始扫描目标（用于后续比例调整）
+	unsigned long nr_to_scan;//单次扫描的页数（不超过 SWAP_CLUSTER_MAX）
+	enum lru_list lru;//LRU 类型枚举（如 LRU_INACTIVE_ANON）
+	unsigned long nr_reclaimed = 0;//当前已回收页数
+	unsigned long nr_to_reclaim = sc->nr_to_reclaim;//总目标回收页数
+	bool proportional_reclaim;//是否启用比例回收模式
+	struct blk_plug plug;//块设备 I/O 插桩（优化批量 I/O 提交）
 
-	if (lru_gen_enabled() && !root_reclaim(sc)) {
+	if (lru_gen_enabled() && !root_reclaim(sc)) {//若启用多代 LRU（Generational LRU）且非根 cgroup 回收，调用专用函数处理
 		lru_gen_shrink_lruvec(lruvec, sc);
-		return;
+		return
 	}
 
-	get_scan_count(lruvec, sc, nr);
+	get_scan_count(lruvec, sc, nr);//计算各 LRU 类型的待扫描页数（考虑优先级、内存压力等）
 
 	/* Record the original scan target for proportional adjustments later */
-	memcpy(targets, nr, sizeof(nr));
+	memcpy(targets, nr, sizeof(nr));//保存原始扫描目标，用于后续比例调整
 
 	/*
 	 * Global reclaiming within direct reclaim at DEF_PRIORITY is a normal
@@ -5692,29 +5718,37 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 	 * do a batch of work at once. For memcg reclaim one check is made to
 	 * abort proportional reclaim if either the file or anon lru has already
 	 * dropped to zero at the first pass.
+	 *
+	 *  比例回收（Proportional Reclaim）触发条件：
+	 *  1. 非 cgroup 回收（全局回收）
+	 *  2. 非 kswapd 线程（直接内存回收）
+	 *  3. 优先级为默认优先级（DEF_PRIORITY）
+	 *  此模式在直接回收场景下，确保匿名页和文件页按比例回收
 	 */
 	proportional_reclaim = (!cgroup_reclaim(sc) && !current_is_kswapd() &&
 				sc->priority == DEF_PRIORITY);
 
-	blk_start_plug(&plug);
+	blk_start_plug(&plug);//启动块设备 I/O 插桩（合并 I/O 请求）
+	/* 循环处理直到所有 LRU 列表扫描完成或达到目标 */
 	while (nr[LRU_INACTIVE_ANON] || nr[LRU_ACTIVE_FILE] ||
 					nr[LRU_INACTIVE_FILE]) {
-		unsigned long nr_anon, nr_file, percentage;
-		unsigned long nr_scanned;
+		unsigned long nr_anon, nr_file, percentage;//匿名页/文件页总量及比例
+		unsigned long nr_scanned;//已扫描页数
 
+		//遍历所有可回收的 LRU 类型（LRU_INACTIVE_ANON, LRU_ACTIVE_FILE 等）
 		for_each_evictable_lru(lru) {
-			if (nr[lru]) {
-				nr_to_scan = min(nr[lru], SWAP_CLUSTER_MAX);
-				nr[lru] -= nr_to_scan;
+			if (nr[lru]) {//当前 LRU 类型有待扫描页
+				nr_to_scan = min(nr[lru], SWAP_CLUSTER_MAX);//计算本次扫描量（不超过 SWAP_CLUSTER_MAX，通常 32 页）
+				nr[lru] -= nr_to_scan;//减少剩余待扫描量
 
 				nr_reclaimed += shrink_list(lru, nr_to_scan,
-							    lruvec, sc);
+							    lruvec, sc);//实际回收操作，返回本次回收的页数
 			}
 		}
 
-		cond_resched();
+		cond_resched();//主动调度，避免长时间占用 CPU
 
-		if (nr_reclaimed < nr_to_reclaim || proportional_reclaim)
+		if (nr_reclaimed < nr_to_reclaim || proportional_reclaim)//若已回收足够页数且不启用比例回收，退出循环
 			continue;
 
 		/*
@@ -5724,6 +5758,8 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 		 * stop reclaiming one LRU and reduce the amount scanning
 		 * proportional to the original scan target.
 		 */
+		/* ---------- 比例回收逻辑（确保匿名页和文件页按比例回收） ---------- */
+		//计算剩余待扫描的匿名页和文件页总量
 		nr_file = nr[LRU_INACTIVE_FILE] + nr[LRU_ACTIVE_FILE];
 		nr_anon = nr[LRU_INACTIVE_ANON] + nr[LRU_ACTIVE_ANON];
 
@@ -5732,51 +5768,55 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 		 * has gone to zero.  And given the way we stop scanning the
 		 * smaller below, this makes sure that we only make one nudge
 		 * towards proportionality once we've got nr_to_reclaim.
+		 * 若某一类（文件或匿名）已无页面可扫，终止比例调整。防止因单类耗尽导致另一类被过度扫描。
 		 */
 		if (!nr_file || !nr_anon)
 			break;
 
-		if (nr_file > nr_anon) {
+		/* 根据剩余页数决定优先限制哪一类扫描 */
+		if (nr_file > nr_anon) {//文件页剩余更多，限制匿名页扫描
 			unsigned long scan_target = targets[LRU_INACTIVE_ANON] +
-						targets[LRU_ACTIVE_ANON] + 1;
-			lru = LRU_BASE;
-			percentage = nr_anon * 100 / scan_target;
-		} else {
+						targets[LRU_ACTIVE_ANON] + 1;//计算匿名页原始扫描目标总和（+1 避免除零）
+			lru = LRU_BASE;//基础 LRU 类型（匿名页）
+			percentage = nr_anon * 100 / scan_target;//计算完成百分比
+		} else {//匿名页剩余更多，限制文件页扫描
 			unsigned long scan_target = targets[LRU_INACTIVE_FILE] +
 						targets[LRU_ACTIVE_FILE] + 1;
-			lru = LRU_FILE;
+			lru = LRU_FILE;//文件页 LRU 类型
 			percentage = nr_file * 100 / scan_target;
 		}
 
-		/* Stop scanning the smaller of the LRU */
-		nr[lru] = 0;
-		nr[lru + LRU_ACTIVE] = 0;
+		/* 停止扫描被限制的 LRU 类型（设为 0） */
+		nr[lru] = 0;//非活跃列表
+		nr[lru + LRU_ACTIVE] = 0;//活跃列表
 
 		/*
 		 * Recalculate the other LRU scan count based on its original
 		 * scan target and the percentage scanning already complete
+		 * 重新计算另一类 LRU 的剩余扫描量，按比例调整
 		 */
-		lru = (lru == LRU_FILE) ? LRU_BASE : LRU_FILE;
-		nr_scanned = targets[lru] - nr[lru];
-		nr[lru] = targets[lru] * (100 - percentage) / 100;
-		nr[lru] -= min(nr[lru], nr_scanned);
+		lru = (lru == LRU_FILE) ? LRU_BASE : LRU_FILE;//切换到未被限制的类别
+		nr_scanned = targets[lru] - nr[lru];// 计算已扫描量：原始目标 - 剩余待扫描
+		nr[lru] = targets[lru] * (100 - percentage) / 100;  //按比例调整剩余待扫描量：剩余量 = 原目标 * (100% - 已完成百分比)
+		nr[lru] -= min(nr[lru], nr_scanned);// 确保剩余量不小于已扫描量（避免负数）
 
-		lru += LRU_ACTIVE;
+		lru += LRU_ACTIVE;//切换到活跃列表
 		nr_scanned = targets[lru] - nr[lru];
 		nr[lru] = targets[lru] * (100 - percentage) / 100;
 		nr[lru] -= min(nr[lru], nr_scanned);
 	}
-	blk_finish_plug(&plug);
-	sc->nr_reclaimed += nr_reclaimed;
+	blk_finish_plug(&plug);//结束块设备 I/O 插桩（提交合并后的 I/O）
+	sc->nr_reclaimed += nr_reclaimed;//累计全局已回收页数
 
 	/*
 	 * Even if we did not try to evict anon pages at all, we want to
 	 * rebalance the anon lru active/inactive ratio.
+	 * 即使未回收匿名页，若匿名非活跃页过少，主动收缩活跃匿名列表以平衡 LRU 比例。
 	 */
-	if (can_age_anon_pages(lruvec_pgdat(lruvec), sc) &&
-	    inactive_is_low(lruvec, LRU_INACTIVE_ANON))
+	if (can_age_anon_pages(lruvec_pgdat(lruvec), sc) &&//允许匿名页老化
+	    inactive_is_low(lruvec, LRU_INACTIVE_ANON))//检查匿名非活跃页是否过少（低于活跃页的 1/4）
 		shrink_active_list(SWAP_CLUSTER_MAX, lruvec,
-				   sc, LRU_ACTIVE_ANON);
+				   sc, LRU_ACTIVE_ANON);//将部分活跃匿名页降级为非活跃，维持 LRU 健康比例。
 }
 
 /* Use reclaim/compaction for costly allocs or under memory pressure */

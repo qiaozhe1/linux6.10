@@ -71,7 +71,6 @@ acpi_install_address_space_handler_internal(acpi_handle device,
 	ACPI_FUNCTION_TRACE(acpi_install_address_space_handler);
 
 	/* Parameter validation */
-
 	if (!device) {//检查设备句柄是否有效
 		return_ACPI_STATUS(AE_BAD_PARAMETER);
 	}
@@ -82,7 +81,6 @@ acpi_install_address_space_handler_internal(acpi_handle device,
 	}
 
 	/* 转换并验证设备句柄 */
-
 	node = acpi_ns_validate_handle(device);//将ACPI句柄转换为命名空间节点
 	if (!node) {// 检查节点是否有效
 		status = AE_BAD_PARAMETER;//设置参数错误状态
@@ -90,7 +88,6 @@ acpi_install_address_space_handler_internal(acpi_handle device,
 	}
 
 	/* 为指定Space ID安装Region处理程序 */
-
 	status =
 	    acpi_ev_install_space_handler(node, space_id, handler, setup,
 					  context);//调用内部函数安装空间处理程序
@@ -99,7 +96,6 @@ acpi_install_address_space_handler_internal(acpi_handle device,
 	}
 
 	/* 执行该地址空间的所有_REG方法 */
-
 	if (run_reg) {//检查是否需要执行_REG方法
 		acpi_ev_execute_reg_methods(node, space_id, ACPI_REG_CONNECT);//执行_REG方法，参数表示连接操作
 	}

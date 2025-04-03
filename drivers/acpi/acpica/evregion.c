@@ -501,10 +501,10 @@ acpi_ev_detach_region(union acpi_operand_object *region_obj,
  *              this is a two way association.
  *
  ******************************************************************************/
-
+/* 将ACPI区域对象（如内存/IO区域）与指定的地址空间处理程序关联 */
 acpi_status
-acpi_ev_attach_region(union acpi_operand_object *handler_obj,
-		      union acpi_operand_object *region_obj,
+acpi_ev_attach_region(union acpi_operand_object *handler_obj,//要关联的地址空间处理程序对象
+		      union acpi_operand_object *region_obj,//需要绑定的ACPI区域对象
 		      u8 acpi_ns_is_locked)
 {
 
@@ -512,8 +512,8 @@ acpi_ev_attach_region(union acpi_operand_object *handler_obj,
 
 	/* Install the region's handler */
 
-	if (region_obj->region.handler) {
-		return_ACPI_STATUS(AE_ALREADY_EXISTS);
+	if (region_obj->region.handler) {// 如果区域已关联处理程序
+		return_ACPI_STATUS(AE_ALREADY_EXISTS);//返回错误（已存在）
 	}
 
 	ACPI_DEBUG_PRINT((ACPI_DB_OPREGION,
@@ -525,10 +525,10 @@ acpi_ev_attach_region(union acpi_operand_object *handler_obj,
 
 	/* Link this region to the front of the handler's list */
 
-	region_obj->region.next = handler_obj->address_space.region_list;
-	handler_obj->address_space.region_list = region_obj;
-	region_obj->region.handler = handler_obj;
-	acpi_ut_add_reference(handler_obj);
+	region_obj->region.next = handler_obj->address_space.region_list;// 将区域的next指向原链表头
+	handler_obj->address_space.region_list = region_obj;//新区域成为链表头
+	region_obj->region.handler = handler_obj;//双向关联：区域指向处理程序
+	acpi_ut_add_reference(handler_obj);//增加处理程序对象的引用计数（防止提前释放）
 
 	return_ACPI_STATUS(AE_OK);
 }
@@ -677,31 +677,47 @@ cleanup1:
  *              Note: assumes namespace is locked, or system init time.
  *
  ******************************************************************************/
-
+/**
+ * acpi_ev_execute_reg_methods - 执行指定地址空间的_REG方法
+ * @node: 命名空间起始节点(通常为设备节点)
+ * @space_id: 地址空间ID(ACPI_ADR_SPACE_*)
+ * @function: 操作类型(ACPI_REG_CONNECT或ACPI_REG_DISCONNECT)
+ *
+ * 功能说明:
+ * 1. 跳过不需要_REG方法的特殊地址空间
+ * 2. 遍历命名空间执行匹配的_REG方法
+ * 3. 处理EC和GPIO空间的特殊"孤儿"_REG方法
+ * 4. 记录调试信息
+ */
 void
 acpi_ev_execute_reg_methods(struct acpi_namespace_node *node,
 			    acpi_adr_space_type space_id, u32 function)
 {
-	struct acpi_reg_walk_info info;
+	struct acpi_reg_walk_info info;//定义_REG方法执行上下文结构
 
 	ACPI_FUNCTION_TRACE(ev_execute_reg_methods);
 
 	/*
-	 * These address spaces do not need a call to _REG, since the ACPI
-	 * specification defines them as: "must always be accessible". Since
-	 * they never change state (never become unavailable), no need to ever
-	 * call _REG on them. Also, a data_table is not a "real" address space,
-	 * so do not call _REG. September 2018.
+	 * 这些地址空间不需要调用_REG，因为ACPI规范将它们定义为：“必须始终可访问”。
+	 * 由于它们的状态永远不会改变（永远不会变得不可用），因此无需在这些地址空
+	 * 间上调用_REG。此外，数据表不是一个“真正的”地址空间，所以也不要调用_REG。
 	 */
+	/*
+    	 * 跳过始终可访问的地址空间:
+    	 * - 系统内存空间(ACPI_ADR_SPACE_SYSTEM_MEMORY)
+    	 * - 系统IO空间(ACPI_ADR_SPACE_SYSTEM_IO)
+    	 * - 数据表空间(ACPI_ADR_SPACE_DATA_TABLE)
+    	 */
 	if ((space_id == ACPI_ADR_SPACE_SYSTEM_MEMORY) ||
 	    (space_id == ACPI_ADR_SPACE_SYSTEM_IO) ||
 	    (space_id == ACPI_ADR_SPACE_DATA_TABLE)) {
-		return_VOID;
+		return_VOID;//直接返回不执行_REG方法
 	}
 
-	info.space_id = space_id;
-	info.function = function;
-	info.reg_run_count = 0;
+	/* 初始化_REG执行上下文 */
+	info.space_id = space_id;//设置目标地址空间ID
+	info.function = function;//设置连接/断开操作类型
+	info.reg_run_count = 0;//初始化_REG方法执行计数器
 
 	ACPI_DEBUG_PRINT_RAW((ACPI_DB_NAMES,
 			      "    Running _REG methods for SpaceId %s\n",
@@ -712,7 +728,18 @@ acpi_ev_execute_reg_methods(struct acpi_namespace_node *node,
 	 * is a separate walk in order to handle any interdependencies between
 	 * regions and _REG methods. (i.e. handlers must be installed for all
 	 * regions of this Space ID before we can run any _REG methods)
+	 * 为这个空间ID运行所有操作区域的所有_REG方法。这是一个单独的遍历过程，
+	 * 以便处理各个区域之间的依赖关系以及_REG方法。（即，我们必须先为这个空间
+	 * ID 的所有区域安装处理程序，然后才能运行任何 _REG 方法）
 	 */
+	/*
+    	 * 遍历命名空间执行_REG方法:
+    	 * - 起始节点: 传入的node参数
+    	 * - 最大深度: 无限制(ACPI_UINT32_MAX)
+    	 * - 标志: 不持有命名空间锁(ACPI_NS_WALK_UNLOCK)
+    	 * - 回调函数: acpi_ev_reg_run(实际执行_REG方法)
+    	 * - 上下文: &info结构传递参数
+    	 */
 	(void)acpi_ns_walk_namespace(ACPI_TYPE_ANY, node, ACPI_UINT32_MAX,
 				     ACPI_NS_WALK_UNLOCK, acpi_ev_reg_run, NULL,
 				     &info, NULL);
@@ -721,6 +748,10 @@ acpi_ev_execute_reg_methods(struct acpi_namespace_node *node,
 	 * Special case for EC and GPIO: handle "orphan" _REG methods with
 	 * no region.
 	 */
+	/*
+    	 * 特殊处理EC和GPIO空间:
+    	 * 执行没有关联区域的"孤儿"_REG方法
+    	 */
 	if (space_id == ACPI_ADR_SPACE_EC || space_id == ACPI_ADR_SPACE_GPIO) {
 		acpi_ev_execute_orphan_reg_method(node, space_id);
 	}
@@ -742,54 +773,72 @@ acpi_ev_execute_reg_methods(struct acpi_namespace_node *node,
  * DESCRIPTION: Run _REG method for region objects of the requested spaceID
  *
  ******************************************************************************/
-
+/**
+ * acpi_ev_reg_run - 执行_REG方法的命名空间遍历回调函数
+ * @obj_handle: 当前节点的对象句柄
+ * @level: 当前遍历深度
+ * @context: 传递的上下文信息(acpi_reg_walk_info结构)
+ * @return_value: 用于返回值的指针(未使用)
+ *
+ * 返回值:
+ *  AE_OK - 继续遍历
+ *  AE_BAD_PARAMETER - 参数错误
+ *  其他 - _REG方法执行失败
+ *
+ * 功能说明:
+ * 1. 验证节点有效性
+ * 2. 过滤非区域节点
+ * 3. 检查地址空间匹配
+ * 4. 执行匹配的_REG方法
+ */
 static acpi_status
 acpi_ev_reg_run(acpi_handle obj_handle,
 		u32 level, void *context, void **return_value)
 {
-	union acpi_operand_object *obj_desc;
-	struct acpi_namespace_node *node;
-	acpi_status status;
-	struct acpi_reg_walk_info *info;
+	union acpi_operand_object *obj_desc;//节点关联的操作对象
+	struct acpi_namespace_node *node;//命名空间节点
+	acpi_status status;//操作状态
+	struct acpi_reg_walk_info *info;//遍历上下文信息
 
-	info = ACPI_CAST_PTR(struct acpi_reg_walk_info, context);
+	info = ACPI_CAST_PTR(struct acpi_reg_walk_info, context);//获取上下文信息
 
 	/* Convert and validate the device handle */
 
-	node = acpi_ns_validate_handle(obj_handle);
+	node = acpi_ns_validate_handle(obj_handle);//验证并转换节点句柄
 	if (!node) {
-		return (AE_BAD_PARAMETER);
+		return (AE_BAD_PARAMETER);//返回无效节点句柄
 	}
 
 	/*
-	 * We only care about regions and objects that are allowed to have
-	 * address space handlers
-	 */
+     	 * 节点类型过滤:
+    	 * 只处理操作区域(ACPI_TYPE_REGION)和根节点
+    	 * 其他类型节点直接跳过
+    	 */
 	if ((node->type != ACPI_TYPE_REGION) && (node != acpi_gbl_root_node)) {
 		return (AE_OK);
 	}
 
 	/* Check for an existing internal object */
 
-	obj_desc = acpi_ns_get_attached_object(node);
+	obj_desc = acpi_ns_get_attached_object(node);//获取节点关联的操作对象
 	if (!obj_desc) {
 
 		/* No object, just exit */
 
-		return (AE_OK);
+		return (AE_OK);//无关联对象，跳过处理
 	}
 
 	/* Object is a Region */
 
-	if (obj_desc->region.space_id != info->space_id) {
+	if (obj_desc->region.space_id != info->space_id) {//检查地址空间匹配性
 
 		/* This region is for a different address space, just ignore it */
 
-		return (AE_OK);
+		return (AE_OK);//不匹配目标地址空间，跳过
 	}
 
-	info->reg_run_count++;
-	status = acpi_ev_execute_reg_method(obj_desc, info->function);
+	info->reg_run_count++;//增加_REG方法执行计数器
+	status = acpi_ev_execute_reg_method(obj_desc, info->function);//实际执行_REG方法
 	return (status);
 }
 

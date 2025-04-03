@@ -160,46 +160,47 @@ acpi_ev_has_default_handler(struct acpi_namespace_node *node,
  *              to any more regions than the one we are trying to install.
  *
  ******************************************************************************/
-
+/* 在命名空间中安装地址空间处理程序的回调函数 */
 static acpi_status
 acpi_ev_install_handler(acpi_handle obj_handle,
 			u32 level, void *context, void **return_value)
 {
-	union acpi_operand_object *handler_obj;
-	union acpi_operand_object *next_handler_obj;
-	union acpi_operand_object *obj_desc;
-	struct acpi_namespace_node *node;
-	acpi_status status;
+	union acpi_operand_object *handler_obj;//用户提供的处理程序对象
+	union acpi_operand_object *next_handler_obj;//用于检查现有处理程序
+	union acpi_operand_object *obj_desc;//节点的内部对象描述符
+	struct acpi_namespace_node *node;//当前命名空间节点
+	acpi_status status;//函数返回状态
 
 	ACPI_FUNCTION_NAME(ev_install_handler);
 
-	handler_obj = (union acpi_operand_object *)context;
+	handler_obj = (union acpi_operand_object *)context;//从上下文中获取处理程序对象
 
 	/* Parameter validation */
 
-	if (!handler_obj) {
+	if (!handler_obj) {//无处理程序对象 → 无需操作
 		return (AE_OK);
 	}
 
 	/* Convert and validate the device handle */
 
-	node = acpi_ns_validate_handle(obj_handle);
+	node = acpi_ns_validate_handle(obj_handle);//将句柄转换为命名空间节点指针
 	if (!node) {
-		return (AE_BAD_PARAMETER);
+		return (AE_BAD_PARAMETER);//无效句柄 → 返回错误
 	}
 
 	/*
 	 * We only care about regions and objects that are allowed to have
 	 * address space handlers
 	 */
-	if ((node->type != ACPI_TYPE_DEVICE) &&
-	    (node->type != ACPI_TYPE_REGION) && (node != acpi_gbl_root_node)) {
-		return (AE_OK);
+	/* 只处理特定类型节点 */
+	if ((node->type != ACPI_TYPE_DEVICE) &&//如果不是设备节点
+	    (node->type != ACPI_TYPE_REGION) && (node != acpi_gbl_root_node)) {// 也不是区域节点和根节点
+		return (AE_OK);// 其他类型直接跳过
 	}
 
 	/* Check for an existing internal object */
-
-	obj_desc = acpi_ns_get_attached_object(node);
+	/* 获取节点的内部对象 */
+	obj_desc = acpi_ns_get_attached_object(node);//获取节点的ACPI对象
 	if (!obj_desc) {
 
 		/* No object, just exit */
@@ -207,18 +208,15 @@ acpi_ev_install_handler(acpi_handle obj_handle,
 		return (AE_OK);
 	}
 
-	/* Devices are handled different than regions */
-
+	/* 处理设备节点 */
 	if (obj_desc->common.type == ACPI_TYPE_DEVICE) {
 
 		/* Check if this Device already has a handler for this address space */
-
+		/* 检查设备是否已有同类型地址空间处理程序 */
 		next_handler_obj =
-		    acpi_ev_find_region_handler(handler_obj->address_space.
-						space_id,
-						obj_desc->common_notify.
-						handler);
-		if (next_handler_obj) {
+		    acpi_ev_find_region_handler(handler_obj->address_space.space_id,//当前处理程序的地址空间类型
+						obj_desc->common_notify.handler);//对象现有的通知处理程序
+		if (next_handler_obj) {//已存在同类型处理程序
 
 			/* Found a handler, is it for the same address space? */
 
@@ -235,7 +233,9 @@ acpi_ev_install_handler(acpi_handle obj_handle,
 			 * that someone has already installed a handler for the branch
 			 * of the namespace from this device on. Just bail out telling
 			 * the walk routine to not traverse this branch. This preserves
-			 * the scoping rule for handlers.
+			 * the scoping rule for handlers.a
+			 * 根据ACPI命名空间规则，设备层级已存在相同地址空间的处理程序，
+			 * 后续子节点无需处理 → 返回AE_CTRL_DEPTH阻止继续遍历该分支
 			 */
 			return (AE_CTRL_DEPTH);
 		}
@@ -244,12 +244,12 @@ acpi_ev_install_handler(acpi_handle obj_handle,
 		 * As long as the device didn't have a handler for this space we
 		 * don't care about it. We just ignore it and proceed.
 		 */
-		return (AE_OK);
+		return (AE_OK);//未找到处理程序 → 直接返回成功，继续遍历
 	}
 
 	/* Object is a Region */
-
-	if (obj_desc->region.space_id != handler_obj->address_space.space_id) {
+	/* 处理区域节点 */
+	if (obj_desc->region.space_id != handler_obj->address_space.space_id) {//区域类型不匹配 → 跳过
 
 		/* This region is for a different address space, just ignore it */
 
@@ -260,13 +260,15 @@ acpi_ev_install_handler(acpi_handle obj_handle,
 	 * Now we have a region and it is for the handler's address space type.
 	 *
 	 * First disconnect region for any previous handler (if any)
+	 *
+	 * 匹配区域 → 断开原有处理程序并连接新处理程序
 	 */
-	acpi_ev_detach_region(obj_desc, FALSE);
+	acpi_ev_detach_region(obj_desc, FALSE);//断开现有关联
 
 	/* Connect the region to the new handler */
 
-	status = acpi_ev_attach_region(handler_obj, obj_desc, FALSE);
-	return (status);
+	status = acpi_ev_attach_region(handler_obj, obj_desc, FALSE);//连接新处理程序
+	return (status);//返回操作结果
 }
 
 /*******************************************************************************

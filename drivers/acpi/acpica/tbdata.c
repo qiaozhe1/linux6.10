@@ -1090,8 +1090,8 @@ void acpi_tb_notify_table(u32 event, void *table)
 {
 	/* Invoke table handler if present */
 
-	if (acpi_gbl_table_handler) {
+	if (acpi_gbl_table_handler) {//检查全局表事件处理程序是否已注册。 acpi_gbl_table_handler 是在AcpiInstallTableHandler中设置的回调函数指针
 		(void)acpi_gbl_table_handler(event, table,
-					     acpi_gbl_table_handler_context);
+					     acpi_gbl_table_handler_context);//调用已注册的处理程序
 	}
 }
