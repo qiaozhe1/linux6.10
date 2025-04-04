@@ -549,25 +549,25 @@ acpi_ev_attach_region(union acpi_operand_object *handler_obj,//要关联的地�
 acpi_status
 acpi_ev_execute_reg_method(union acpi_operand_object *region_obj, u32 function)
 {
-	struct acpi_evaluate_info *info;
-	union acpi_operand_object *args[3];
-	union acpi_operand_object *region_obj2;
+	struct acpi_evaluate_info *info;//ACPI方法评估信息结构体指针
+	union acpi_operand_object *args[3];//方法参数数组（最多3个参数）
+	union acpi_operand_object *region_obj2;//区域对象的二级对象指针
 	const acpi_name *reg_name_ptr =
-	    ACPI_CAST_PTR(acpi_name, METHOD_NAME__REG);
-	struct acpi_namespace_node *method_node;
-	struct acpi_namespace_node *node;
-	acpi_status status;
+	    ACPI_CAST_PTR(acpi_name, METHOD_NAME__REG);//指向方法名"_REG"的指针
+	struct acpi_namespace_node *method_node;//命名空间节点（存放找到的_REG方法）
+	struct acpi_namespace_node *node;//临时命名空间节点指针
+	acpi_status status;//操作状态返回值
 
-	ACPI_FUNCTION_TRACE(ev_execute_reg_method);
+	ACPI_FUNCTION_TRACE(ev_execute_reg_method);//ACPI调试宏，记录函数入口
 
 	if (!acpi_gbl_namespace_initialized ||
-	    region_obj->region.handler == NULL) {
-		return_ACPI_STATUS(AE_OK);
+	    region_obj->region.handler == NULL) {//检查全局命名空间是否初始化或区域对象是否有处理程序
+		return_ACPI_STATUS(AE_OK);//如果未初始化或无处理程序，直接返回成功
 	}
 
-	region_obj2 = acpi_ns_get_secondary_object(region_obj);
+	region_obj2 = acpi_ns_get_secondary_object(region_obj);//获取区域对象的二级对象（用于存储额外信息）
 	if (!region_obj2) {
-		return_ACPI_STATUS(AE_NOT_EXIST);
+		return_ACPI_STATUS(AE_NOT_EXIST);//返回"不存在"错误
 	}
 
 	/*
@@ -575,42 +575,48 @@ acpi_ev_execute_reg_method(union acpi_operand_object *region_obj, u32 function)
 	 * The method should always be updated as this function may be
 	 * invoked after a namespace change.
 	 */
-	node = region_obj->region.node->parent;
+	/*
+	 * 查找与此区域定义关联的任何"_REG"方法。该方法应始终保持更新，因为
+	 * 可能在命名空间更改后调用此函数。
+	 * */
+	node = region_obj->region.node->parent;//获取区域对象的父节点
 	status =
 	    acpi_ns_search_one_scope(*reg_name_ptr, node, ACPI_TYPE_METHOD,
-				     &method_node);
-	if (ACPI_SUCCESS(status)) {
+				     &method_node);//在当前作用域搜索_REG方法
+	if (ACPI_SUCCESS(status)) {//如果成功找到_REG方法
 		/*
 		 * The _REG method is optional and there can be only one per
 		 * region definition. This will be executed when the handler is
 		 * attached or removed.
 		 */
-		region_obj2->extra.method_REG = method_node;
+		/* _REG方法是可选的，每个区域定义只能有一个。当处理程序附加或移除时执行。 */
+		region_obj2->extra.method_REG = method_node;//将找到的方法节点存入二级对象
 	}
-	if (region_obj2->extra.method_REG == NULL) {
-		return_ACPI_STATUS(AE_OK);
+	if (region_obj2->extra.method_REG == NULL) {//如果没有_REG方法
+		return_ACPI_STATUS(AE_OK);//直接返回成功
 	}
 
 	/* _REG(DISCONNECT) should be paired with _REG(CONNECT) */
-
+	/* _REG(DISCONNECT) 应该与 _REG(CONNECT) 成对出现 */
+	//检查连接/断开状态是否匹配（避免重复操作）
 	if ((function == ACPI_REG_CONNECT &&
 	     region_obj->common.flags & AOPOBJ_REG_CONNECTED) ||
 	    (function == ACPI_REG_DISCONNECT &&
 	     !(region_obj->common.flags & AOPOBJ_REG_CONNECTED))) {
-		return_ACPI_STATUS(AE_OK);
+		return_ACPI_STATUS(AE_OK);//如果状态已匹配，直接返回
 	}
 
 	/* Allocate and initialize the evaluation information block */
-
-	info = ACPI_ALLOCATE_ZEROED(sizeof(struct acpi_evaluate_info));
+	/* 分配并初始化评估信息块 */
+	info = ACPI_ALLOCATE_ZEROED(sizeof(struct acpi_evaluate_info));//分配并清零内存
 	if (!info) {
 		return_ACPI_STATUS(AE_NO_MEMORY);
 	}
 
-	info->prefix_node = region_obj2->extra.method_REG;
-	info->relative_pathname = NULL;
-	info->parameters = args;
-	info->flags = ACPI_IGNORE_RETURN_VALUE;
+	info->prefix_node = region_obj2->extra.method_REG;//设置方法节点
+	info->relative_pathname = NULL;//相对路径名为空
+	info->parameters = args;// 设置参数指针
+	info->flags = ACPI_IGNORE_RETURN_VALUE;//忽略返回值标志
 
 	/*
 	 * The _REG method has two arguments:
@@ -621,46 +627,50 @@ acpi_ev_execute_reg_method(union acpi_operand_object *region_obj, u32 function)
 	 * arg1 - Integer:
 	 *  connection status 1 for connecting the handler, 0 for disconnecting
 	 *  the handler (Passed as a parameter)
+	 *  _REG方法有两个参数：
+	 *   arg0 - 整数：操作区域空间ID（与region_obj->Region.space_id相同）
+	 *
+	 *   arg1 - 整数：连接状态 1表示连接处理程序，0表示断开处理程序（通过参数传入）
 	 */
 	args[0] =
-	    acpi_ut_create_integer_object((u64)region_obj->region.space_id);
+	    acpi_ut_create_integer_object((u64)region_obj->region.space_id);//创建空间ID参数
 	if (!args[0]) {
-		status = AE_NO_MEMORY;
+		status = AE_NO_MEMORY;//设置内存不足状态
 		goto cleanup1;
 	}
 
-	args[1] = acpi_ut_create_integer_object((u64)function);
+	args[1] = acpi_ut_create_integer_object((u64)function);//创建功能参数（连接/断开）
 	if (!args[1]) {
-		status = AE_NO_MEMORY;
+		status = AE_NO_MEMORY;//设置内存不足状态
 		goto cleanup2;
 	}
 
-	args[2] = NULL;		/* Terminate list */
+	args[2] = NULL;		//参数列表终止符
 
 	/* Execute the method, no return value */
-
+	/* 执行方法（无返回值） */
 	ACPI_DEBUG_EXEC(acpi_ut_display_init_pathname
 			(ACPI_TYPE_METHOD, info->prefix_node, NULL));
 
-	status = acpi_ns_evaluate(info);
-	acpi_ut_remove_reference(args[1]);
+	status = acpi_ns_evaluate(info);//实际执行_REG方法
+	acpi_ut_remove_reference(args[1]);//减少参数1的引用计数
 
 	if (ACPI_FAILURE(status)) {
 		goto cleanup2;
 	}
 
-	if (function == ACPI_REG_CONNECT) {
-		region_obj->common.flags |= AOPOBJ_REG_CONNECTED;
+	if (function == ACPI_REG_CONNECT) {//根据操作类型更新连接状态标志
+		region_obj->common.flags |= AOPOBJ_REG_CONNECTED;//设置连接标志
 	} else {
-		region_obj->common.flags &= ~AOPOBJ_REG_CONNECTED;
+		region_obj->common.flags &= ~AOPOBJ_REG_CONNECTED;//清除连接标志
 	}
 
 cleanup2:
-	acpi_ut_remove_reference(args[0]);
+	acpi_ut_remove_reference(args[0]);//减少参数0的引用计数
 
 cleanup1:
-	ACPI_FREE(info);
-	return_ACPI_STATUS(status);
+	ACPI_FREE(info);//释放评估信息结构体
+	return_ACPI_STATUS(status);//返回最终状态
 }
 
 /*******************************************************************************
@@ -724,10 +734,6 @@ acpi_ev_execute_reg_methods(struct acpi_namespace_node *node,
 			      acpi_ut_get_region_name(info.space_id)));
 
 	/*
-	 * Run all _REG methods for all Operation Regions for this space ID. This
-	 * is a separate walk in order to handle any interdependencies between
-	 * regions and _REG methods. (i.e. handlers must be installed for all
-	 * regions of this Space ID before we can run any _REG methods)
 	 * 为这个空间ID运行所有操作区域的所有_REG方法。这是一个单独的遍历过程，
 	 * 以便处理各个区域之间的依赖关系以及_REG方法。（即，我们必须先为这个空间
 	 * ID 的所有区域安装处理程序，然后才能运行任何 _REG 方法）
