@@ -188,22 +188,22 @@ union acpi_operand_object *acpi_ut_create_package_object(u32 count)
  * DESCRIPTION: Create an initialized integer object
  *
  ******************************************************************************/
-
+/* 创建一个ACPI整数操作对象 */
 union acpi_operand_object *acpi_ut_create_integer_object(u64 initial_value)
 {
-	union acpi_operand_object *integer_desc;
+	union acpi_operand_object *integer_desc;//要创建的ACPI操作对象指针
 
 	ACPI_FUNCTION_TRACE(ut_create_integer_object);
 
 	/* Create and initialize a new integer object */
 
-	integer_desc = acpi_ut_create_internal_object(ACPI_TYPE_INTEGER);
+	integer_desc = acpi_ut_create_internal_object(ACPI_TYPE_INTEGER);//创建并初始化一个新的整数对象
 	if (!integer_desc) {
 		return_PTR(NULL);
 	}
 
-	integer_desc->integer.value = initial_value;
-	return_PTR(integer_desc);
+	integer_desc->integer.value = initial_value;//将初始值存入对象
+	return_PTR(integer_desc);//返回创建的对象指针
 }
 
 /*******************************************************************************

@@ -619,27 +619,19 @@ acpi_ev_execute_reg_method(union acpi_operand_object *region_obj, u32 function)
 	info->flags = ACPI_IGNORE_RETURN_VALUE;//忽略返回值标志
 
 	/*
-	 * The _REG method has two arguments:
-	 *
-	 * arg0 - Integer:
-	 *  Operation region space ID Same value as region_obj->Region.space_id
-	 *
-	 * arg1 - Integer:
-	 *  connection status 1 for connecting the handler, 0 for disconnecting
-	 *  the handler (Passed as a parameter)
 	 *  _REG方法有两个参数：
 	 *   arg0 - 整数：操作区域空间ID（与region_obj->Region.space_id相同）
 	 *
 	 *   arg1 - 整数：连接状态 1表示连接处理程序，0表示断开处理程序（通过参数传入）
 	 */
 	args[0] =
-	    acpi_ut_create_integer_object((u64)region_obj->region.space_id);//创建空间ID参数
+	    acpi_ut_create_integer_object((u64)region_obj->region.space_id);//创建空间ID参数对象(实际是整数对象)
 	if (!args[0]) {
 		status = AE_NO_MEMORY;//设置内存不足状态
 		goto cleanup1;
 	}
 
-	args[1] = acpi_ut_create_integer_object((u64)function);//创建功能参数（连接/断开）
+	args[1] = acpi_ut_create_integer_object((u64)function);//创建功能参数对象（连接/断开）
 	if (!args[1]) {
 		status = AE_NO_MEMORY;//设置内存不足状态
 		goto cleanup2;

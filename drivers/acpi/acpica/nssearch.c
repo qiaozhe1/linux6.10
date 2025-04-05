@@ -54,23 +54,24 @@ acpi_ns_search_parent_tree(u32 target_name,
  *      little value in improving the search.
  *
  ******************************************************************************/
-
+/* 在指定的命名空间层级（即父节点的子节点链表中）搜索特定名称的节点 */
 acpi_status
-acpi_ns_search_one_scope(u32 target_name,
-			 struct acpi_namespace_node *parent_node,
-			 acpi_object_type type,
-			 struct acpi_namespace_node **return_node)
+acpi_ns_search_one_scope(u32 target_name,//要查找的目标名称（4字符压缩为32位整数）
+			 struct acpi_namespace_node *parent_node,//父命名空间节点（搜索起点）
+			 acpi_object_type type,//期望的对象类型（过滤条件）
+			 struct acpi_namespace_node **return_node)//返回找到的节点指针
 {
-	struct acpi_namespace_node *node;
+	struct acpi_namespace_node *node;//当前遍历的节点指针
 
 	ACPI_FUNCTION_TRACE(ns_search_one_scope);
 
 #ifdef ACPI_DEBUG_OUTPUT
-	if (ACPI_LV_NAMES & acpi_dbg_level) {
+	if (ACPI_LV_NAMES & acpi_dbg_level) {//如果启用了命名空间调试级别
 		char *scope_name;
 
+		/* 获取父节点的规范化路径名（用于调试输出） */
 		scope_name = acpi_ns_get_normalized_pathname(parent_node, TRUE);
-		if (scope_name) {
+		if (scope_name) {//如果成功获取路径名
 			ACPI_DEBUG_PRINT((ACPI_DB_NAMES,
 					  "Searching %s (%p) For [%4.4s] (%s)\n",
 					  scope_name, parent_node,
@@ -86,39 +87,40 @@ acpi_ns_search_one_scope(u32 target_name,
 	 * Search for name at this namespace level, which is to say that we
 	 * must search for the name among the children of this object
 	 */
-	node = parent_node->child;
-	while (node) {
+	/* 在当前命名空间层级搜索名称，即需要在该对象的子节点中查找 */
+	node = parent_node->child;//从父节点的第一个子节点开始遍历
+	while (node) {//遍历同级节点链表
 
 		/* Check for match against the name */
-
-		if (node->name.integer == target_name) {
+		/* 检查名称是否匹配 */
+		if (node->name.integer == target_name) {//比较压缩后的名称整数
 
 			/* Resolve a control method alias if any */
 
 			if (acpi_ns_get_type(node) ==
-			    ACPI_TYPE_LOCAL_METHOD_ALIAS) {
+			    ACPI_TYPE_LOCAL_METHOD_ALIAS) {//如果是控制方法别名，则解析实际对象
 				node =
 				    ACPI_CAST_PTR(struct acpi_namespace_node,
-						  node->object);
+						  node->object);//获取别名指向的实际对象
 			}
 
 			/* Found matching entry */
 
 			ACPI_DEBUG_PRINT((ACPI_DB_NAMES,
 					  "Name [%4.4s] (%s) %p found in scope [%4.4s] %p\n",
-					  ACPI_CAST_PTR(char, &target_name),
-					  acpi_ut_get_type_name(node->type),
+					  ACPI_CAST_PTR(char, &target_name),//显示目标名称
+					  acpi_ut_get_type_name(node->type),//显示节点实际类型
 					  node,
-					  acpi_ut_get_node_name(parent_node),
-					  parent_node));
+					  acpi_ut_get_node_name(parent_node),//父节点名称
+					  parent_node));//父节点地址
 
-			*return_node = node;
+			*return_node = node;//通过输出参数返回找到的节点
 			return_ACPI_STATUS(AE_OK);
 		}
 
 		/* Didn't match name, move on to the next peer object */
 
-		node = node->peer;
+		node = node->peer;//peer指针指向下一个同级节点
 	}
 
 	/* Searched entire namespace level, not found */
@@ -131,7 +133,7 @@ acpi_ns_search_one_scope(u32 target_name,
 			  acpi_ut_get_node_name(parent_node), parent_node,
 			  parent_node->child));
 
-	return_ACPI_STATUS(AE_NOT_FOUND);
+	return_ACPI_STATUS(AE_NOT_FOUND);//返回未找到错误
 }
 
 /*******************************************************************************

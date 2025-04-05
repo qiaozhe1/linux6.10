@@ -74,10 +74,11 @@ struct acpi_object_common {
 	ACPI_OBJECT_COMMON_HEADER;
 };
 
+/* ACPI 整数对象结构体,用于表示AML解释器中的整型数据（64位无符号） */
 struct acpi_object_integer {
-	ACPI_OBJECT_COMMON_HEADER;
-	u8 fill[3];		/* Prevent warning on some compilers */
-	u64 value;
+	ACPI_OBJECT_COMMON_HEADER;//标准ACPI对象头
+	u8 fill[3];//填充字节（用于结构体对齐和编译器警告消除）
+	u64 value;//存储的实际整数值
 };
 
 /*
@@ -372,12 +373,16 @@ typedef enum {
  * Currently: Region and field_unit types
  */
 struct acpi_object_extra {
-	ACPI_OBJECT_COMMON_HEADER;
-	struct acpi_namespace_node *method_REG;	/* _REG method for this region (if any) */
-	struct acpi_namespace_node *scope_node;
-	void *region_context;	/* Region-specific data */
-	u8 *aml_start;
-	u32 aml_length;
+	ACPI_OBJECT_COMMON_HEADER;//标准ACPI对象头（包含type/flags等）
+
+	/* _REG 方法相关 */
+	struct acpi_namespace_node *method_REG;//指向该区域关联的_REG方法的命名空间节点,当操作区域的处理程序连接/断开时执行
+
+	/* 命名空间节点 */
+	struct acpi_namespace_node *scope_node;//该区域所属的命名空间范围节点,用于确定对象的解析上下文
+	void *region_context;//区域处理程序的私有数据指针,内容由具体的区域处理程序定义和使用
+	u8 *aml_start;//AML 代码相关,指向该区域定义在AML中的起始地址,用于动态区域的重解析
+	u32 aml_length;//该区域定义在AML中的代码长度,与aml_start配合使用
 };
 
 /* Additional data that can be attached to namespace nodes */
