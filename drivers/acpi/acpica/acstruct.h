@@ -148,6 +148,7 @@ union acpi_aml_operands {
 /*
  * Structure used to pass object evaluation information and parameters.
  * Purpose is to reduce CPU stack use.
+ * 用于传递对象评估信息和参数的结构。目的是减少CPU栈的使用。
  */
 struct acpi_evaluate_info {
 	/* The first 3 elements are passed by the caller to acpi_ns_evaluate */
