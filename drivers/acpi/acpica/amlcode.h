@@ -32,8 +32,8 @@
 #define AML_DUAL_NAME_PREFIX        (u16) 0x2e
 #define AML_MULTI_NAME_PREFIX       (u16) 0x2f
 #define AML_EXTENDED_PREFIX         (u16) 0x5b
-#define AML_ROOT_PREFIX             (u16) 0x5c
-#define AML_PARENT_PREFIX           (u16) 0x5e
+#define AML_ROOT_PREFIX             (u16) 0x5c//AML编码中的根路径前缀字符（反斜杠'\'）
+#define AML_PARENT_PREFIX           (u16) 0x5e//AML编码中的父路径前缀字符（脱字符'^'）
 #define AML_FIRST_LOCAL_OP          (u16) 0x60	/* Used for Local op # calculations */
 #define AML_LOCAL0                  (u16) 0x60
 #define AML_LOCAL1                  (u16) 0x61

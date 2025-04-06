@@ -613,7 +613,7 @@ acpi_ev_execute_reg_method(union acpi_operand_object *region_obj, u32 function)
 		return_ACPI_STATUS(AE_NO_MEMORY);
 	}
 
-	info->prefix_node = region_obj2->extra.method_REG;//设置方法节点
+	info->prefix_node = region_obj2->extra.method_REG;//设置_REG方法节点
 	info->relative_pathname = NULL;//相对路径名为空
 	info->parameters = args;// 设置参数指针
 	info->flags = ACPI_IGNORE_RETURN_VALUE;//忽略返回值标志

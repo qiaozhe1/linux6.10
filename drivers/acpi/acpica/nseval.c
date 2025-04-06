@@ -114,7 +114,7 @@ acpi_status acpi_ns_evaluate(struct acpi_evaluate_info *info)
 
 	info->param_count = 0;//统计传入参数数量
 	if (info->parameters) {// 如果有参数数组
-		while (info->parameters[info->param_count]) {//遍历直到NULL终止符
+		while (info->parameters[info->param_count]) {//遍历直到NULL终止符,统计参数数量
 			info->param_count++;
 		}
 
@@ -248,15 +248,18 @@ acpi_status acpi_ns_evaluate(struct acpi_evaluate_info *info)
 		 * */
 		acpi_ex_enter_interpreter();//锁定解释器（可能访问op_region）
 
-		/* TBD: resolve_node_to_value has a strange interface, fix */
+		/* TBD: resolve_node_to_value has a strange interface, fix
+		 * 待办：resolve_node_to_value接口设计存在怪异之处，需要改进
+		 * (历史遗留问题，保持兼容性导致)
+		 */
 
 		info->return_object =
-		    ACPI_CAST_PTR(union acpi_operand_object, info->node);//通过节点解析获取值（特殊接口）
+		    ACPI_CAST_PTR(union acpi_operand_object, info->node);//将节点指针临时存储在return_object字段中传递将节点指针临时存储在return_object字段中传递
 
 		status =
 		    acpi_ex_resolve_node_to_value(ACPI_CAST_INDIRECT_PTR
 						  (struct acpi_namespace_node,
-						   &info->return_object), NULL);//无walk_state表示非方法上下文
+						   &info->return_object), NULL);//将命名空间节点解析为实际值对象
 		acpi_ex_exit_interpreter();//释放解释器锁
 
 		if (ACPI_FAILURE(status)) {

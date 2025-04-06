@@ -638,22 +638,34 @@ u32 acpi_ns_opens_scope(acpi_object_type type)
  * MUTEX:       Doesn't locks namespace
  *
  ******************************************************************************/
-
+/**
+ * acpi_ns_get_node_unlocked - 命名空间节点查找核心函数
+ * @prefix_node: 搜索起始节点（NULL表示从根节点开始）
+ * @pathname: 目标节点路径字符串
+ * @flags: 控制搜索行为的标志位
+ * @return_node: 返回找到的节点指针
+ *
+ * 功能说明：
+ * 1. 处理空路径和根节点快捷路径
+ * 2. 将外部路径格式转换为内部表示
+ * 3. 执行命名空间查找
+ * 4. 清理资源并返回状态
+ */
 acpi_status
 acpi_ns_get_node_unlocked(struct acpi_namespace_node *prefix_node,
 			  const char *pathname,
 			  u32 flags, struct acpi_namespace_node **return_node)
 {
-	union acpi_generic_state scope_info;
+	union acpi_generic_state scope_info;//查找作用域信息
 	acpi_status status;
-	char *internal_path;
+	char *internal_path;//内部格式路径字符串
 
 	ACPI_FUNCTION_TRACE_PTR(ns_get_node_unlocked,
-				ACPI_CAST_PTR(char, pathname));
+				ACPI_CAST_PTR(char, pathname));//调试跟踪（记录pathname参数）
 
 	/* Simplest case is a null pathname */
 
-	if (!pathname) {
+	if (!pathname) {//如果是空路径名（直接返回prefix_node或根节点）
 		*return_node = prefix_node;
 		if (!prefix_node) {
 			*return_node = acpi_gbl_root_node;
@@ -663,36 +675,36 @@ acpi_ns_get_node_unlocked(struct acpi_namespace_node *prefix_node,
 	}
 
 	/* Quick check for a reference to the root */
-
-	if (ACPI_IS_ROOT_PREFIX(pathname[0]) && (!pathname[1])) {
-		*return_node = acpi_gbl_root_node;
+	/* 根节点快捷引用（单独处理"\"路径） */
+	if (ACPI_IS_ROOT_PREFIX(pathname[0]) && (!pathname[1])) {// 检测首字符是否为'\'并且确认是单字符路径
+		*return_node = acpi_gbl_root_node;//返回跟节点
 		return_ACPI_STATUS(AE_OK);
 	}
 
 	/* Convert path to internal representation */
 
-	status = acpi_ns_internalize_name(pathname, &internal_path);
+	status = acpi_ns_internalize_name(pathname, &internal_path);//路径格式转换（外部->内部）
 	if (ACPI_FAILURE(status)) {
-		return_ACPI_STATUS(status);
+		return_ACPI_STATUS(status);//转换失败直接返回
 	}
 
 	/* Setup lookup scope (search starting point) */
 
-	scope_info.scope.node = prefix_node;
+	scope_info.scope.node = prefix_node;//初始化搜索起点
 
 	/* Lookup the name in the namespace */
 
 	status = acpi_ns_lookup(&scope_info, internal_path, ACPI_TYPE_ANY,
 				ACPI_IMODE_EXECUTE,
 				(flags | ACPI_NS_DONT_OPEN_SCOPE), NULL,
-				return_node);
-	if (ACPI_FAILURE(status)) {
+				return_node);//执行命名空间查找
+	if (ACPI_FAILURE(status)) {//错误处理（带调试输出）
 		ACPI_DEBUG_PRINT((ACPI_DB_EXEC, "%s, %s\n",
 				  pathname, acpi_format_exception(status)));
 	}
 
-	ACPI_FREE(internal_path);
-	return_ACPI_STATUS(status);
+	ACPI_FREE(internal_path);//释放内部路径缓冲区
+	return_ACPI_STATUS(status);//返回最终状态
 }
 
 /*******************************************************************************
@@ -716,7 +728,18 @@ acpi_ns_get_node_unlocked(struct acpi_namespace_node *prefix_node,
  * MUTEX:       Locks namespace
  *
  ******************************************************************************/
-
+/**
+ * acpi_ns_get_node - 获取指定路径的命名空间节点
+ * @prefix_node: 搜索起始节点（若为NULL则从根节点开始）
+ * @pathname: 目标节点的路径名（绝对或相对路径）
+ * @flags: 控制搜索行为的标志位
+ * @return_node: 返回找到的节点指针
+ *
+ * 功能说明:
+ * 1. 获取命名空间互斥锁保证线程安全
+ * 2. 调用内部函数执行实际搜索
+ * 3. 释放互斥锁并返回状态
+ */
 acpi_status
 acpi_ns_get_node(struct acpi_namespace_node *prefix_node,
 		 const char *pathname,
@@ -726,14 +749,24 @@ acpi_ns_get_node(struct acpi_namespace_node *prefix_node,
 
 	ACPI_FUNCTION_TRACE_PTR(ns_get_node, ACPI_CAST_PTR(char, pathname));
 
-	status = acpi_ut_acquire_mutex(ACPI_MTX_NAMESPACE);
+	status = acpi_ut_acquire_mutex(ACPI_MTX_NAMESPACE);// 获取命名空间互斥锁（防止并发修改命名空间）
 	if (ACPI_FAILURE(status)) {
 		return_ACPI_STATUS(status);
 	}
 
+	/*
+    	 * 核心操作：执行实际搜索
+    	 * 参数说明：
+    	 * - prefix_node: 相对路径的解析起点
+    	 * - pathname: 待解析的路径字符串
+    	 * - flags: 控制搜索行为的标志组合，例如：
+    	 *   * ACPI_NS_NO_UPSEARCH - 禁止向上搜索
+    	 *   * ACPI_NS_DONT_OPEN_SCOPE - 不打开新作用域
+    	 *   * ACPI_NS_ERROR_IF_FOUND - 已存在时报错
+    	 */
 	status = acpi_ns_get_node_unlocked(prefix_node, pathname,
-					   flags, return_node);
+					   flags, return_node);//执行实际搜索
 
-	(void)acpi_ut_release_mutex(ACPI_MTX_NAMESPACE);
-	return_ACPI_STATUS(status);
+	(void)acpi_ut_release_mutex(ACPI_MTX_NAMESPACE);//释放命名空间互斥锁（必须与获取锁配对）
+	return_ACPI_STATUS(status);//返回状态码
 }

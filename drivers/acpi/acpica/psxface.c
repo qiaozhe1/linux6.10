@@ -84,23 +84,23 @@ acpi_debug_trace(const char *name, u32 debug_level, u32 debug_layer, u32 flags)
 acpi_status acpi_ps_execute_method(struct acpi_evaluate_info *info)
 {
 	acpi_status status;
-	union acpi_parse_object *op;
-	struct acpi_walk_state *walk_state;
+	union acpi_parse_object *op;//AML解析树节点
+	struct acpi_walk_state *walk_state;//解释器执行状态机
 
 	ACPI_FUNCTION_TRACE(ps_execute_method);
 
 	/* Quick validation of DSDT header */
 
-	acpi_tb_check_dsdt_header();
+	acpi_tb_check_dsdt_header();//快速验证DSDT头（系统描述表核心结构）,确保系统表未损坏
 
 	/* Validate the Info and method Node */
 
-	if (!info || !info->node) {
+	if (!info || !info->node) {//输入参数验证
 		return_ACPI_STATUS(AE_NULL_ENTRY);
 	}
 
 	/* Init for new method, wait on concurrency semaphore */
-
+	/* 初始化新方法，等待并发信号量 */
 	status =
 	    acpi_ds_begin_method_execution(info->node, info->obj_desc, NULL);
 	if (ACPI_FAILURE(status)) {
@@ -110,7 +110,7 @@ acpi_status acpi_ps_execute_method(struct acpi_evaluate_info *info)
 	/*
 	 * The caller "owns" the parameters, so give each one an extra reference
 	 */
-	acpi_ps_update_parameter_list(info, REF_INCREMENT);
+	acpi_ps_update_parameter_list(info, REF_INCREMENT);//增加参数引用计数（防止执行中被释放）
 
 	/*
 	 * Execute the method. Performs parse simultaneously
@@ -121,15 +121,15 @@ acpi_status acpi_ps_execute_method(struct acpi_evaluate_info *info)
 
 	/* Create and init a Root Node */
 
-	op = acpi_ps_create_scope_op(info->obj_desc->method.aml_start);
+	op = acpi_ps_create_scope_op(info->obj_desc->method.aml_start);//创建根解析节点（从AML起始地址）
 	if (!op) {
 		status = AE_NO_MEMORY;
 		goto cleanup;
 	}
 
 	/* Create and initialize a new walk state */
-
-	info->pass_number = ACPI_IMODE_EXECUTE;
+	/* 创建方法执行状态机 */
+	info->pass_number = ACPI_IMODE_EXECUTE;//设置为执行模式
 	walk_state =
 	    acpi_ds_create_walk_state(info->obj_desc->method.owner_id, NULL,
 				      NULL, NULL);
@@ -138,6 +138,7 @@ acpi_status acpi_ps_execute_method(struct acpi_evaluate_info *info)
 		goto cleanup;
 	}
 
+	/* 初始化AML解释器状态 */
 	status = acpi_ds_init_aml_walk(walk_state, op, info->node,
 				       info->obj_desc->method.aml_start,
 				       info->obj_desc->method.aml_length, info,
@@ -147,37 +148,38 @@ acpi_status acpi_ps_execute_method(struct acpi_evaluate_info *info)
 		goto cleanup;
 	}
 
-	walk_state->method_pathname = info->full_pathname;
-	walk_state->method_is_nested = FALSE;
+	walk_state->method_pathname = info->full_pathname;//设置方法路径名用于调试和错误报告
+	walk_state->method_is_nested = FALSE;//标记当前方法为非嵌套调用
 
-	if (info->obj_desc->method.info_flags & ACPI_METHOD_MODULE_LEVEL) {
-		walk_state->parse_flags |= ACPI_PARSE_MODULE_LEVEL;
+	if (info->obj_desc->method.info_flags & ACPI_METHOD_MODULE_LEVEL) {//检查是否为模块级代码（在ACPI表加载时执行的代码）
+		walk_state->parse_flags |= ACPI_PARSE_MODULE_LEVEL;//设置模块级解析标志
 	}
 
 	/* Invoke an internal method if necessary */
 
-	if (info->obj_desc->method.info_flags & ACPI_METHOD_INTERNAL_ONLY) {
+	if (info->obj_desc->method.info_flags & ACPI_METHOD_INTERNAL_ONLY) {//如果是内部方法直接调用分支（非AML方法）
 		status =
-		    info->obj_desc->method.dispatch.implementation(walk_state);
-		info->return_object = walk_state->return_desc;
+		    info->obj_desc->method.dispatch.implementation(walk_state);//调用内置C函数实现
+		info->return_object = walk_state->return_desc;//获取返回值
 
 		/* Cleanup states */
 
-		acpi_ds_scope_stack_clear(walk_state);
-		acpi_ps_cleanup_scope(&walk_state->parser_state);
+		acpi_ds_scope_stack_clear(walk_state);//清空作用域栈
+		acpi_ps_cleanup_scope(&walk_state->parser_state);//清理解析器状态
 		acpi_ds_terminate_control_method(walk_state->method_desc,
-						 walk_state);
-		acpi_ds_delete_walk_state(walk_state);
+						 walk_state);//终止方法执行
+		acpi_ds_delete_walk_state(walk_state);//释放状态机内存
 		goto cleanup;
 	}
 
 	/*
 	 * Start method evaluation with an implicit return of zero.
 	 * This is done for Windows compatibility.
+	 * Windows兼容性处理：默认隐式返回0，某些AML代码可能没有显式Return语句
 	 */
 	if (acpi_gbl_enable_interpreter_slack) {
 		walk_state->implicit_return_obj =
-		    acpi_ut_create_integer_object((u64) 0);
+		    acpi_ut_create_integer_object((u64) 0);//创建值为0的整数对象作为默认返回值
 		if (!walk_state->implicit_return_obj) {
 			status = AE_NO_MEMORY;
 			acpi_ds_delete_walk_state(walk_state);
@@ -187,36 +189,38 @@ acpi_status acpi_ps_execute_method(struct acpi_evaluate_info *info)
 
 	/* Parse the AML */
 
-	status = acpi_ps_parse_aml(walk_state);
+	status = acpi_ps_parse_aml(walk_state);//核心AML解析/执行入口
 
 	/* walk_state was deleted by parse_aml */
 
 cleanup:
-	acpi_ps_delete_parse_tree(op);
+	acpi_ps_delete_parse_tree(op);//释放解析树（OP树）
 
 	/* Take away the extra reference that we gave the parameters above */
 
-	acpi_ps_update_parameter_list(info, REF_DECREMENT);
+	acpi_ps_update_parameter_list(info, REF_DECREMENT);//平衡参数引用计数（与入口处的REF_INCREMENT对应）
 
 	/* Exit now if error above */
 
-	if (ACPI_FAILURE(status)) {
+	if (ACPI_FAILURE(status)) {//错误处理：直接返回状态码
 		return_ACPI_STATUS(status);
 	}
 
 	/*
 	 * If the method has returned an object, signal this to the caller with
 	 * a control exception code
+	 * 返回值处理：
+	 * 如果有返回对象，使用特殊状态码AE_CTRL_RETURN_VALUE标记
 	 */
 	if (info->return_object) {
 		ACPI_DEBUG_PRINT((ACPI_DB_PARSE, "Method returned ObjDesc=%p\n",
 				  info->return_object));
 		ACPI_DUMP_STACK_ENTRY(info->return_object);
 
-		status = AE_CTRL_RETURN_VALUE;
+		status = AE_CTRL_RETURN_VALUE;//特殊状态码表示有返回值
 	}
 
-	return_ACPI_STATUS(status);
+	return_ACPI_STATUS(status);//最终状态返回
 }
 
 /*******************************************************************************

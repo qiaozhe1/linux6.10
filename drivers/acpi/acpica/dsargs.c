@@ -282,38 +282,45 @@ acpi_status acpi_ds_get_buffer_arguments(union acpi_operand_object *obj_desc)
  *              the late evaluation of these attributes.
  *
  ******************************************************************************/
-
+/* 获取并初始化Package对象的参数列表 */
 acpi_status acpi_ds_get_package_arguments(union acpi_operand_object *obj_desc)
 {
-	struct acpi_namespace_node *node;
-	acpi_status status;
+	struct acpi_namespace_node *node;//关联的命名空间节点指针
+	acpi_status status;//操作状态返回值
 
 	ACPI_FUNCTION_TRACE_PTR(ds_get_package_arguments, obj_desc);
 
-	if (obj_desc->common.flags & AOPOBJ_DATA_VALID) {
-		return_ACPI_STATUS(AE_OK);
+	if (obj_desc->common.flags & AOPOBJ_DATA_VALID) {//检查数据有效性标志（避免重复初始化）
+		return_ACPI_STATUS(AE_OK);//已初始化直接返回成功
 	}
 
 	/* Get the Package node */
 
-	node = obj_desc->package.node;
-	if (!node) {
+	node = obj_desc->package.node;//获取Package对象关联的命名空间节点
+	if (!node) {//验证节点指针有效性
 		ACPI_ERROR((AE_INFO,
 			    "No pointer back to namespace node in package %p",
 			    obj_desc));
-		return_ACPI_STATUS(AE_AML_INTERNAL);
+		return_ACPI_STATUS(AE_AML_INTERNAL);//返回AML内部错误
 	}
 
 	ACPI_DEBUG_PRINT((ACPI_DB_EXEC, "Package Argument Init, AML Ptr: %p\n",
-			  obj_desc->package.aml_start));
+			  obj_desc->package.aml_start));//调试输出：显示Package参数初始化的AML起始地址
 
 	/* Execute the AML code for the term_arg arguments */
 
+	/*
+	 * 执行Package参数初始化：
+	 * 参数1：scope_node - 当前命名空间节点（解析上下文）
+	 * 参数2：arg_node   - 参数节点（此处复用当前节点）
+	 * 参数3：aml_length - Package参数AML代码长度
+	 * 参数4：aml_start  - Package参数AML代码起始位置
+	 * */
 	status = acpi_ds_execute_arguments(node, node,
 					   obj_desc->package.aml_length,
 					   obj_desc->package.aml_start);
 
-	return_ACPI_STATUS(status);
+	return_ACPI_STATUS(status);//返回执行状态
 }
 
 /*******************************************************************************

@@ -248,7 +248,35 @@ acpi_ns_search_parent_tree(u32 target_name,
  *              In other modes, search and add if not found.
  *
  ******************************************************************************/
-
+/**
+ * acpi_ns_search_and_enter - 在指定命名空间层级搜索并可能创建新节点
+ * @target_name: 要查找/创建的4字节ACPI名称（未打包格式）
+ * @walk_state: 当前walk状态对象（包含解析上下文）
+ * @node: 搜索起点的命名空间节点
+ * @interpreter_mode: 解释器模式（AM_NO_MODE或AM_TABLE_LOAD）
+ * @type: 要创建的对象类型（如果未找到）
+ * @flags: 控制标志位（见下文）
+ * @return_node: 返回找到/创建的节点指针
+ *
+ * 标志位选项：
+ *   ACPI_NS_ERROR_IF_FOUND    - 如果节点已存在则返回错误
+ *   ACPI_NS_OVERRIDE_IF_FOUND - 允许覆盖现有节点
+ *   ACPI_NS_SEARCH_PARENT    - 在父级中继续搜索
+ *   ACPI_NS_DONT_OPEN_SCOPE  - 不打开新作用域
+ *   ACPI_NS_NO_PEER_SEARCH   - 不搜索同级节点
+ *   ACPI_NS_PREFIX_IS_SCOPE  - 输入前缀包含作用域
+ *
+ * 返回值：
+ *  AE_OK            - 成功找到/创建节点
+ *  AE_BAD_PARAMETER - 无效参数
+ *  AE_ALREADY_EXISTS- 节点已存在且设置了ERROR_IF_FOUND
+ *  AE_NO_MEMORY     - 内存分配失败
+ *  AE_NOT_FOUND     - 未找到节点且未创建新节点
+ *
+ * 上下文：
+ *  - 必须持有ACPI_MTX_NAMESPACE互斥锁
+ *  - 可能在表加载或运行时调用
+ */
 acpi_status
 acpi_ns_search_and_enter(u32 target_name,
 			 struct acpi_walk_state *walk_state,
@@ -258,13 +286,13 @@ acpi_ns_search_and_enter(u32 target_name,
 			 u32 flags, struct acpi_namespace_node **return_node)
 {
 	acpi_status status;
-	struct acpi_namespace_node *new_node;
+	struct acpi_namespace_node *new_node;//新创建的节点指针
 
 	ACPI_FUNCTION_TRACE(ns_search_and_enter);
 
 	/* Parameter validation */
 
-	if (!node || !target_name || !return_node) {
+	if (!node || !target_name || !return_node) {//参数验证
 		ACPI_ERROR((AE_INFO,
 			    "Null parameter: Node %p Name 0x%X ReturnNode %p",
 			    node, target_name, return_node));
@@ -280,18 +308,25 @@ acpi_ns_search_and_enter(u32 target_name,
 	 * this problem, and we want to be able to enable ACPI support for them,
 	 * even though there are a few bad names.
 	 */
-	acpi_ut_repair_name(ACPI_CAST_PTR(char, &target_name));
+	/*
+	 * 名称必须由有效的ACPI字符组成。如果需要我们会修复名称，因为我们不希望因此
+	 * 中止，但希望所有命名空间名称都可打印。这种情况下输出警告信息是合适的。
+	 *
+	 * 出现此问题是因为实际存在这种情况的机器，我们希望为它们启用ACPI支持，尽管
+	 * 存在一些错误名称
+	 * */
+	acpi_ut_repair_name(ACPI_CAST_PTR(char, &target_name));//修复非法ACPI名称
 
-	/* Try to find the name in the namespace level specified by the caller */
-
-	*return_node = ACPI_ENTRY_NOT_FOUND;
-	status = acpi_ns_search_one_scope(target_name, node, type, return_node);
-	if (status != AE_NOT_FOUND) {
+	/* 首先尝试在调用者指定的命名空间层级查找名称 */
+	*return_node = ACPI_ENTRY_NOT_FOUND;//初始化返回节点为"未找到"
+	status = acpi_ns_search_one_scope(target_name, node, type, return_node);//在当前作用域中搜索目标名称
+	if (status != AE_NOT_FOUND) {//检查搜索结果是否为"未找到"之外的状态
 		/*
 		 * If we found it AND the request specifies that a find is an error,
 		 * return the error
+		 * 如果找到节点 且 调用者指定"找到即报错"，则返回相应错误
 		 */
-		if (status == AE_OK) {
+		if (status == AE_OK) {//如果成功在命名空间找到该节点
 
 			/* The node was found in the namespace */
 
@@ -299,6 +334,8 @@ acpi_ns_search_and_enter(u32 target_name,
 			 * If the namespace override feature is enabled for this node,
 			 * delete any existing attached sub-object and make the node
 			 * look like a new node that is owned by the override table.
+			 * 如果为此节点启用了命名空间覆盖功能（ACPI_NS_OVERRIDE_IF_FOUND），
+			 * 请删除任何现有的附加子对象，并使该节点看起来像一个被覆盖表拥有的新节点。
 			 */
 			if (flags & ACPI_NS_OVERRIDE_IF_FOUND) {
 				ACPI_DEBUG_PRINT((ACPI_DB_NAMES,
@@ -309,33 +346,34 @@ acpi_ns_search_and_enter(u32 target_name,
 						  (*return_node)->type,
 						  walk_state->owner_id));
 
-				acpi_ns_delete_children(*return_node);
-				if (acpi_gbl_runtime_namespace_override) {
-					acpi_ut_remove_reference((*return_node)->object);
-					(*return_node)->object = NULL;
+				acpi_ns_delete_children(*return_node);//删除该节点下的所有子节点
+				if (acpi_gbl_runtime_namespace_override) {//检查是否为运行时命名空间覆盖
+					acpi_ut_remove_reference((*return_node)->object);//移除原对象的引用计数
+					(*return_node)->object = NULL;//清空对象指针
 					(*return_node)->owner_id =
-					    walk_state->owner_id;
-				} else {
+					    walk_state->owner_id;//更新节点所有者ID
+				} else {//非运行时情况：直接移除整个节点
 					acpi_ns_remove_node(*return_node);
-					*return_node = ACPI_ENTRY_NOT_FOUND;
+					*return_node = ACPI_ENTRY_NOT_FOUND;//将返回节点标记为未找到
 				}
 			}
 
 			/* Return an error if we don't expect to find the object */
 
-			else if (flags & ACPI_NS_ERROR_IF_FOUND) {
+			else if (flags & ACPI_NS_ERROR_IF_FOUND) {//如果设置了ERROR_IF_FOUND标志，返回"已存在"错误
 				status = AE_ALREADY_EXISTS;
 			}
 		}
 #ifdef ACPI_ASL_COMPILER
+		/* 仅ACPI编译器环境下：处理外部标记的特殊情况 */
 		if (*return_node && (*return_node)->type == ACPI_TYPE_ANY) {
-			(*return_node)->flags |= ANOBJ_IS_EXTERNAL;
+			(*return_node)->flags |= ANOBJ_IS_EXTERNAL;//为ACPI_TYPE_ANY类型节点添加外部标记
 		}
 #endif
 
 		/* Either found it or there was an error: finished either way */
 
-		return_ACPI_STATUS(status);
+		return_ACPI_STATUS(status);//无论找到节点还是出现错误，此时都可以直接返回状态
 	}
 
 	/*
@@ -345,23 +383,28 @@ acpi_ns_search_and_enter(u32 target_name,
 	 * search when the namespace is actually being loaded. We want to perform
 	 * the search when namespace references are being resolved (load pass 2)
 	 * and during the execution phase.
+	 * 未找到名称时的处理逻辑：
+	 * 如果我们不在加载命名空间的第一阶段（名称录入阶段），则搜索父节点树（必要时一直搜索到根节点）。
+	 * 我们不想在真正加载命名空间时执行父级搜索， 而是希望在解析命名空间引用时（加载第二阶段）
+	 * 和执行阶段执行这种搜索。
 	 */
-	if ((interpreter_mode != ACPI_IMODE_LOAD_PASS1) &&
-	    (flags & ACPI_NS_SEARCH_PARENT)) {
+	if ((interpreter_mode != ACPI_IMODE_LOAD_PASS1) &&//不是加载第一阶段
+	    (flags & ACPI_NS_SEARCH_PARENT)) {//且允许搜索父节点
 		/*
 		 * Not found at this level - search parent tree according to the
 		 * ACPI specification
+		 * 当前层级未找到 - 根据ACPI规范搜索父节点树
 		 */
 		status =
 		    acpi_ns_search_parent_tree(target_name, node, type,
-					       return_node);
+					       return_node);//搜索父节点树
 		if (ACPI_SUCCESS(status)) {
-			return_ACPI_STATUS(status);
+			return_ACPI_STATUS(status);//如果在父级中找到，直接返回
 		}
 	}
 
 	/* In execute mode, just search, never add names. Exit now */
-
+	/* 执行模式下的特殊处理：仅执行搜索操作，绝不添加新名称，立即退出 */
 	if (interpreter_mode == ACPI_IMODE_EXECUTE) {
 		ACPI_DEBUG_PRINT((ACPI_DB_NAMES,
 				  "%4.4s Not found in %p [Not adding]\n",
@@ -372,27 +415,27 @@ acpi_ns_search_and_enter(u32 target_name,
 
 	/* Create the new named object */
 
-	new_node = acpi_ns_create_node(target_name);
+	new_node = acpi_ns_create_node(target_name);//创建新的命名对象，分配新节点内存
 	if (!new_node) {
 		return_ACPI_STATUS(AE_NO_MEMORY);
 	}
 #ifdef ACPI_ASL_COMPILER
 
 	/* Node is an object defined by an External() statement */
-
-	if (flags & ACPI_NS_EXTERNAL ||
-	    (walk_state && walk_state->opcode == AML_SCOPE_OP)) {
-		new_node->flags |= ANOBJ_IS_EXTERNAL;
+	/* ACPI编译器专用处理：标记由External()语句定义的外部对象 */
+	if (flags & ACPI_NS_EXTERNAL ||//如果是显式外部标记
+	    (walk_state && walk_state->opcode == AML_SCOPE_OP)) {//或SCOPE操作
+		new_node->flags |= ANOBJ_IS_EXTERNAL;//设置外部标志位
 	}
 #endif
-
+	/* 处理临时节点标记 */
 	if (flags & ACPI_NS_TEMPORARY) {
-		new_node->flags |= ANOBJ_TEMPORARY;
+		new_node->flags |= ANOBJ_TEMPORARY;//设置临时节点标志
 	}
 
 	/* Install the new object into the parent's list of children */
-
+	/* 将新节点安装到父节点的子节点列表中 */
 	acpi_ns_install_node(walk_state, node, new_node, type);
-	*return_node = new_node;
-	return_ACPI_STATUS(AE_OK);
+	*return_node = new_node;//通过参数返回新节点
+	return_ACPI_STATUS(AE_OK);//返回成功状态
 }
