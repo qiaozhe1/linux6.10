@@ -704,33 +704,30 @@ acpi_ds_terminate_control_method(union acpi_operand_object *method_desc,
 
 	/* method_desc is required, walk_state is optional */
 
-	if (!method_desc) {
+	if (!method_desc) {//参数有效性检查：方法描述符为空则直接返回
 		return_VOID;
 	}
 
-	if (walk_state) {
+	if (walk_state) {//如果存在执行状态机对象
 
 		/* Delete all arguments and locals */
 
-		acpi_ds_method_data_delete_all(walk_state);
+		acpi_ds_method_data_delete_all(walk_state);//释放方法局部变量和参数对象
 
 		/*
-		 * Delete any namespace objects created anywhere within the
-		 * namespace by the execution of this method. Unless:
-		 * 1) This method is a module-level executable code method, in which
-		 *    case we want make the objects permanent.
-		 * 2) There are other threads executing the method, in which case we
-		 *    will wait until the last thread has completed.
+		 *  删除该方法执行期间在命名空间中创建的所有对象，除非：
+		 *  1) 方法是模块级方法（如DSDT中顶层方法），需要保留对象
+		 *  2) 存在其他线程正在执行该方法，需等待所有线程完成
 		 */
-		if (!(method_desc->method.info_flags & ACPI_METHOD_MODULE_LEVEL)
-		    && (method_desc->method.thread_count == 1)) {
+		if (!(method_desc->method.info_flags & ACPI_METHOD_MODULE_LEVEL)//如果是非模块级方法
+		    && (method_desc->method.thread_count == 1)) {//并且当前线程是最后一个执行线程
 
 			/* Delete any direct children of (created by) this method */
-
-			(void)acpi_ex_exit_interpreter();
+			/* 删除由这个方法创建的任何直接子元素 */
+			(void)acpi_ex_exit_interpreter();// 退出解释器（释放锁）
 			acpi_ns_delete_namespace_subtree(walk_state->
-							 method_node);
-			(void)acpi_ex_enter_interpreter();
+							 method_node);//删除以方法节点为根的子树
+			(void)acpi_ex_enter_interpreter();// 重新获取解释器锁
 
 			/*
 			 * Delete any objects that were created by this method
@@ -738,59 +735,62 @@ acpi_ds_terminate_control_method(union acpi_operand_object *method_desc,
 			 * Use of the ACPI_METHOD_MODIFIED_NAMESPACE optimizes the
 			 * deletion such that we don't have to perform an entire
 			 * namespace walk for every control method execution.
+			 * 删除方法在命名空间其他位置创建的对象（如果有的话）
+			 * 使用ACPI_METHOD_MODIFIED_NAMESPACE标志优化：无需全命名空间遍历
 			 */
 			if (method_desc->method.
 			    info_flags & ACPI_METHOD_MODIFIED_NAMESPACE) {
-				(void)acpi_ex_exit_interpreter();
+				(void)acpi_ex_exit_interpreter();//退出解释器
 				acpi_ns_delete_namespace_by_owner(method_desc->
 								  method.
-								  owner_id);
-				(void)acpi_ex_enter_interpreter();
+								  owner_id);//按所有者ID删除对象
+				(void)acpi_ex_enter_interpreter();//重新获取锁
 				method_desc->method.info_flags &=
-				    ~ACPI_METHOD_MODIFIED_NAMESPACE;
+				    ~ACPI_METHOD_MODIFIED_NAMESPACE;//清除标志
 			}
 		}
 
 		/*
 		 * If method is serialized, release the mutex and restore the
 		 * current sync level for this thread
+		 * 如果方法是序列化的，释放互斥锁并恢复线程同步级别
 		 */
-		if (method_desc->method.mutex) {
+		if (method_desc->method.mutex) {//方法有互斥锁
 
 			/* Acquisition Depth handles recursive calls */
 
-			method_desc->method.mutex->mutex.acquisition_depth--;
-			if (!method_desc->method.mutex->mutex.acquisition_depth) {
+			method_desc->method.mutex->mutex.acquisition_depth--;//递减获取深度
+			if (!method_desc->method.mutex->mutex.acquisition_depth) {//获取深度为0时
 				walk_state->thread->current_sync_level =
 				    method_desc->method.mutex->mutex.
-				    original_sync_level;
+				    original_sync_level;//恢复原始同步级别
 
 				acpi_os_release_mutex(method_desc->method.
-						      mutex->mutex.os_mutex);
-				method_desc->method.mutex->mutex.thread_id = 0;
+						      mutex->mutex.os_mutex);//释放互斥锁
+				method_desc->method.mutex->mutex.thread_id = 0;//清除线程ID
 			}
 		}
 	}
 
 	/* Decrement the thread count on the method */
-
+	/* 递减方法的线程计数 */
 	if (method_desc->method.thread_count) {
-		method_desc->method.thread_count--;
+		method_desc->method.thread_count--;//减少执行线程计数
 	} else {
-		ACPI_ERROR((AE_INFO, "Invalid zero thread count in method"));
+		ACPI_ERROR((AE_INFO, "Invalid zero thread count in method"));// 无效计数错误
 	}
 
 	/* Are there any other threads currently executing this method? */
-
-	if (method_desc->method.thread_count) {
+	/* 检查是否还有其他线程正在执行该方法 */
+	if (method_desc->method.thread_count) {//如果存在其他线程
 		/*
 		 * Additional threads. Do not release the owner_id in this case,
 		 * we immediately reuse it for the next thread executing this method
 		 */
 		ACPI_DEBUG_PRINT((ACPI_DB_DISPATCH,
 				  "*** Completed execution of one thread, %u threads remaining\n",
-				  method_desc->method.thread_count));
-	} else {
+				  method_desc->method.thread_count));//调试输出（显示剩余线程数）
+	} else {//如果当前线程是最后一个
 		/* This is the only executing thread for this method */
 
 		/*
@@ -804,12 +804,12 @@ acpi_ds_terminate_control_method(union acpi_operand_object *method_desc,
 		 * before marking the method as serialized.
 		 */
 		if (method_desc->method.
-		    info_flags & ACPI_METHOD_SERIALIZED_PENDING) {
+		    info_flags & ACPI_METHOD_SERIALIZED_PENDING) {//存在待定序列化标记
 			if (walk_state) {
 				ACPI_INFO(("Marking method %4.4s as Serialized "
 					   "because of AE_ALREADY_EXISTS error",
 					   walk_state->method_node->name.
-					   ascii));
+					   ascii));// 记录方法标记为序列化
 			}
 
 			/*
@@ -824,25 +824,25 @@ acpi_ds_terminate_control_method(union acpi_operand_object *method_desc,
 			 * thread exits here.
 			 */
 			method_desc->method.info_flags &=
-			    ~ACPI_METHOD_SERIALIZED_PENDING;
+			    ~ACPI_METHOD_SERIALIZED_PENDING;//清除待定标记
 
 			method_desc->method.info_flags |=
 			    (ACPI_METHOD_SERIALIZED |
-			     ACPI_METHOD_IGNORE_SYNC_LEVEL);
-			method_desc->method.sync_level = 0;
+			     ACPI_METHOD_IGNORE_SYNC_LEVEL);//设置为永久序列化
+			method_desc->method.sync_level = 0;//同步级别设为0
 		}
 
 		/* No more threads, we can free the owner_id */
 
 		if (!
 		    (method_desc->method.
-		     info_flags & ACPI_METHOD_MODULE_LEVEL)) {
-			acpi_ut_release_owner_id(&method_desc->method.owner_id);
+		     info_flags & ACPI_METHOD_MODULE_LEVEL)) {//如果是非模块级方法
+			acpi_ut_release_owner_id(&method_desc->method.owner_id);//释放所有者ID资源
 		}
 	}
 
 	acpi_ex_stop_trace_method((struct acpi_namespace_node *)method_desc->
-				  method.node, method_desc, walk_state);
+				  method.node, method_desc, walk_state);//停止方法执行跟踪
 
 	return_VOID;
 }

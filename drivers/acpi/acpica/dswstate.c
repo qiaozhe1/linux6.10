@@ -672,57 +672,57 @@ acpi_ds_init_aml_walk(struct acpi_walk_state *walk_state,
  *
  ******************************************************************************/
 
-void acpi_ds_delete_walk_state(struct acpi_walk_state *walk_state)
+void acpi_ds_delete_walk_state(struct acpi_walk_state *walk_state)// 释放walk_state对象及其关联资源
 {
 	union acpi_generic_state *state;
 
 	ACPI_FUNCTION_TRACE_PTR(ds_delete_walk_state, walk_state);
 
-	if (!walk_state) {
+	if (!walk_state) {//参数有效性检查：walk_state为空则直接返回
 		return_VOID;
 	}
 
-	if (walk_state->descriptor_type != ACPI_DESC_TYPE_WALK) {
+	if (walk_state->descriptor_type != ACPI_DESC_TYPE_WALK) {//验证对象类型是否为walk_state类型
 		ACPI_ERROR((AE_INFO, "%p is not a valid walk state",
 			    walk_state));
-		return_VOID;
+		return_VOID;//类型检查失败直接返回，避免后续操作无效对象
 	}
 
 	/* There should not be any open scopes */
 
-	if (walk_state->parser_state.scope) {
+	if (walk_state->parser_state.scope) {//检查并清理解析器状态中的作用域栈
 		ACPI_ERROR((AE_INFO, "%p walk still has a scope list",
 			    walk_state));
-		acpi_ps_cleanup_scope(&walk_state->parser_state);
+		acpi_ps_cleanup_scope(&walk_state->parser_state);//调用函数清空作用域栈
 	}
 
 	/* Always must free any linked control states */
 
-	while (walk_state->control_state) {
-		state = walk_state->control_state;
-		walk_state->control_state = state->common.next;
+	while (walk_state->control_state) {//遍历控制状态链表,释放控制状态链表（保存控制流信息）
+		state = walk_state->control_state;//获取当前节点指针
+		walk_state->control_state = state->common.next;//更新链表头到下一个节点
 
-		acpi_ut_delete_generic_state(state);
+		acpi_ut_delete_generic_state(state);//释放当前节点内存
 	}
 
 	/* Always must free any linked parse states */
 
-	while (walk_state->scope_info) {
-		state = walk_state->scope_info;
-		walk_state->scope_info = state->common.next;
+	while (walk_state->scope_info) {//遍历作用域信息链表,释放作用域信息链表（保存作用域栈状态）
+		state = walk_state->scope_info;//获取当前节点指针
+		walk_state->scope_info = state->common.next;//更新链表头到下一个节点
 
-		acpi_ut_delete_generic_state(state);
+		acpi_ut_delete_generic_state(state);//释放当前节点内存
 	}
 
 	/* Always must free any stacked result states */
 
-	while (walk_state->results) {
-		state = walk_state->results;
-		walk_state->results = state->common.next;
+	while (walk_state->results) {//遍历结果状态链表, 释放结果状态链表（保存操作数栈结果）
+		state = walk_state->results;//获取当前节点指针
+		walk_state->results = state->common.next;//更新链表头到下一个节点
 
-		acpi_ut_delete_generic_state(state);
+		acpi_ut_delete_generic_state(state);//释放当前节点内存
 	}
 
-	ACPI_FREE(walk_state);
+	ACPI_FREE(walk_state);//释放walk_state对象本身内存（调用系统内存释放函数）
 	return_VOID;
 }

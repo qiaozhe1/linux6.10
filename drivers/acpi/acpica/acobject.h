@@ -151,21 +151,21 @@ struct acpi_object_region {
 };
 
 struct acpi_object_method {
-	ACPI_OBJECT_COMMON_HEADER;
-	u8 info_flags;
-	u8 param_count;
-	u8 sync_level;
-	union acpi_operand_object *mutex;
-	union acpi_operand_object *node;
-	u8 *aml_start;
+	ACPI_OBJECT_COMMON_HEADER;//基础对象头（类型、引用计数等）
+	u8 info_flags;//方法标志位集合
+	u8 param_count;//方法需要的参数数量
+	u8 sync_level;//同步级别（0-7），表示方法执行所需的最小同步级别
+	union acpi_operand_object *mutex;//互斥锁对象
+	union acpi_operand_object *node;//命名空间节点（方法在命名空间中的位置）
+	u8 *aml_start;//指向方法AML代码的起始地址（方法执行时的指令流入口）
 	union {
-		acpi_internal_method implementation;
-		union acpi_operand_object *handler;
+		acpi_internal_method implementation;//内置方法实现函数指针
+		union acpi_operand_object *handler;//外部方法处理程序对象（如用户注册的回调）
 	} dispatch;
 
-	u32 aml_length;
-	acpi_owner_id owner_id;
-	u8 thread_count;
+	u32 aml_length;//AML代码长度（用于确定方法指令流的结束位置）
+	acpi_owner_id owner_id;//所有权ID（用于跟踪方法创建的命名空间对象）
+	u8 thread_count;//当前执行该方法的线程数（用于多线程同步）
 };
 
 /* Flags for info_flags field above */
@@ -418,8 +418,8 @@ union acpi_operand_object {
 	struct acpi_object_buffer buffer;//缓冲区对象(二进制数据)
 	struct acpi_object_package package;//包对象(对象数组)
 	struct acpi_object_event event;//事件同步对象 
-	struct acpi_object_method method;//互斥体对象
-	struct acpi_object_mutex mutex;//控制方法对象(AML字节码) 
+	struct acpi_object_method method;//控制方法对象(AML字节码)
+	struct acpi_object_mutex mutex;//互斥体对象
 	struct acpi_object_region region;//操作地址空间区域对象(寄存器空间映射)
 	struct acpi_object_notify_common common_notify;//地址空间处理程序对象
 	struct acpi_object_device device;//设备对象

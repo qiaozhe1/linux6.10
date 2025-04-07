@@ -210,22 +210,22 @@ acpi_ps_pop_scope(struct acpi_parse_state *parser_state,
  *
  ******************************************************************************/
 
-void acpi_ps_cleanup_scope(struct acpi_parse_state *parser_state)
+void acpi_ps_cleanup_scope(struct acpi_parse_state *parser_state)//清理解析器状态中的作用域栈
 {
-	union acpi_generic_state *scope;
+	union acpi_generic_state *scope;//临时变量，保存弹出的栈元素指针
 
 	ACPI_FUNCTION_TRACE_PTR(ps_cleanup_scope, parser_state);
 
-	if (!parser_state) {
+	if (!parser_state) {// 参数有效性检查（解析器状态为空）
 		return_VOID;
 	}
 
 	/* Delete anything on the scope stack */
 
-	while (parser_state->scope) {
-		scope = acpi_ut_pop_generic_state(&parser_state->scope);
-		acpi_ut_delete_generic_state(scope);
+	while (parser_state->scope) {//循环处理栈中的每个元素，直到栈为空
+		scope = acpi_ut_pop_generic_state(&parser_state->scope);//弹出栈顶元素并获取指针
+		acpi_ut_delete_generic_state(scope);//释放该栈元素的内存
 	}
 
-	return_VOID;
+	return_VOID;//正常结束函数
 }

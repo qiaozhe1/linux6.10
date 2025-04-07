@@ -249,19 +249,19 @@ static struct prm_handler_info *find_prm_handler(const guid_t *guid)
  * @value  : it is an in/out parameter. It points to the PRM message buffer.
  * @handler_context: not used
  */
-static acpi_status acpi_platformrt_space_handler(u32 function,
+static acpi_status acpi_platformrt_space_handler(u32 function,//处理ACPI平台运行时空间的回调函数，用于与PRM（Platform Runtime Management）交互
 						 acpi_physical_address addr,
 						 u32 bits, acpi_integer *value,
 						 void *handler_context,
 						 void *region_context)
 {
-	struct prm_buffer *buffer = ACPI_CAST_PTR(struct prm_buffer, value);
-	struct prm_handler_info *handler;
-	struct prm_module_info *module;
-	efi_status_t status;
-	struct prm_context_buffer context;
+	struct prm_buffer *buffer = ACPI_CAST_PTR(struct prm_buffer, value);//将value指针转换为prm_buffer结构体指针
+	struct prm_handler_info *handler;//定义PRM处理程序信息指针
+	struct prm_module_info *module;//定义PRM模块信息指针
+	efi_status_t status;//定义EFI状态码变量
+	struct prm_context_buffer context;//定义PRM上下文缓冲区结构体
 
-	if (!efi_enabled(EFI_RUNTIME_SERVICES)) {
+	if (!efi_enabled(EFI_RUNTIME_SERVICES)) {//如果EFI运行时服务不可用
 		pr_err_ratelimited("PRM: EFI runtime services no longer available\n");
 		return AE_NO_HANDLER;
 	}
@@ -270,67 +270,67 @@ static acpi_status acpi_platformrt_space_handler(u32 function,
 	 * The returned acpi_status will always be AE_OK. Error values will be
 	 * saved in the first byte of the PRM message buffer to be used by ASL.
 	 */
-	switch (buffer->prm_cmd) {
-	case PRM_CMD_RUN_SERVICE:
+	switch (buffer->prm_cmd) {//根据PRM命令类型执行不同分支
+	case PRM_CMD_RUN_SERVICE://如果是执行服务命令
 
-		handler = find_prm_handler(&buffer->handler_guid);
-		module = find_prm_module(&buffer->handler_guid);
-		if (!handler || !module)
-			goto invalid_guid;
+		handler = find_prm_handler(&buffer->handler_guid);//查找对应的PRM处理程序
+		module = find_prm_module(&buffer->handler_guid);// 查找对应的PRM模块信息
+		if (!handler || !module)//如果处理程序或模块信息不存在
+			goto invalid_guid;//跳转到无效GUID处理标签
 
-		ACPI_COPY_NAMESEG(context.signature, "PRMC");
-		context.revision = 0x0;
-		context.reserved = 0x0;
-		context.identifier = handler->guid;
-		context.static_data_buffer = handler->static_data_buffer_addr;
-		context.mmio_ranges = module->mmio_info;
+		ACPI_COPY_NAMESEG(context.signature, "PRMC");//将"PRMC"签名写入上下文结构体
+		context.revision = 0x0;//设置上下文版本为0
+		context.reserved = 0x0;//设置保留字段为0
+		context.identifier = handler->guid;//设置处理程序唯一标识符
+		context.static_data_buffer = handler->static_data_buffer_addr;//设置静态数据缓冲区地址
+		context.mmio_ranges = module->mmio_info;//设置MMIO区域信息
 
 		status = efi_call_acpi_prm_handler(handler->handler_addr,
 						   handler->acpi_param_buffer_addr,
-						   &context);
-		if (status == EFI_SUCCESS) {
-			buffer->prm_status = PRM_HANDLER_SUCCESS;
-		} else {
-			buffer->prm_status = PRM_HANDLER_ERROR;
-			buffer->efi_status = status;
+						   &context);// 调用EFI运行时处理程序
+		if (status == EFI_SUCCESS) {//如果EFI调用成功
+			buffer->prm_status = PRM_HANDLER_SUCCESS;//设置成功状态码
+		} else {// 如果EFI调用失败
+			buffer->prm_status = PRM_HANDLER_ERROR;//设置错误状态码
+			buffer->efi_status = status;//保存原始EFI错误码
 		}
+		break;// 退出当前case分支
+
+	case PRM_CMD_START_TRANSACTION://如果是开始事务命令
+
+		module = find_prm_module(&buffer->handler_guid);//查找对应的PRM模块信息
+		if (!module)//如果模块信息不存在
+			goto invalid_guid;//跳转到无效GUID处理标签
+
+		if (module->updatable)//如果模块处于可更新状态
+			module->updatable = false;//锁定模块（设置为不可更新）
+		else// 如果模块已被锁定
+			buffer->prm_status = UPDATE_LOCK_ALREADY_HELD;// 设置锁已持有错误码
 		break;
 
-	case PRM_CMD_START_TRANSACTION:
+	case PRM_CMD_END_TRANSACTION://如果是结束事务命令
 
-		module = find_prm_module(&buffer->handler_guid);
+		module = find_prm_module(&buffer->handler_guid);//查找对应的PRM模块信息
 		if (!module)
-			goto invalid_guid;
+			goto invalid_guid;//如果模块信息不存在,跳转到无效GUID处理标签
 
-		if (module->updatable)
-			module->updatable = false;
-		else
-			buffer->prm_status = UPDATE_LOCK_ALREADY_HELD;
+		if (module->updatable)//如果模块未被锁定
+			buffer->prm_status = UPDATE_UNLOCK_WITHOUT_LOCK;//设置未加锁解锁错误码
+		else// 如果模块已被锁定
+			module->updatable = true;//解锁模块（设置为可更新）
 		break;
 
-	case PRM_CMD_END_TRANSACTION:
+	default://如果是未知命令
 
-		module = find_prm_module(&buffer->handler_guid);
-		if (!module)
-			goto invalid_guid;
-
-		if (module->updatable)
-			buffer->prm_status = UPDATE_UNLOCK_WITHOUT_LOCK;
-		else
-			module->updatable = true;
-		break;
-
-	default:
-
-		buffer->prm_status = INVALID_PRM_COMMAND;
+		buffer->prm_status = INVALID_PRM_COMMAND;// 设置无效命令错误码
 		break;
 	}
 
-	return AE_OK;
+	return AE_OK;//所有错误状态通过缓冲区返回，函数始终返回AE_OK
 
-invalid_guid:
-	buffer->prm_status = PRM_HANDLER_GUID_NOT_FOUND;
-	return AE_OK;
+invalid_guid://无效GUID处理标签
+	buffer->prm_status = PRM_HANDLER_GUID_NOT_FOUND;//设置GUID未找到错误码
+	return AE_OK;//继续返回AE_OK但设置错误状态码
 }
 /**
  * init_prmt - 初始化平台运行时机制(PRMT)模块

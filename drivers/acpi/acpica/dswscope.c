@@ -26,25 +26,25 @@ ACPI_MODULE_NAME("dswscope")
  *              root scope object (which remains at the stack top.)
  *
  ***************************************************************************/
-void acpi_ds_scope_stack_clear(struct acpi_walk_state *walk_state)
+void acpi_ds_scope_stack_clear(struct acpi_walk_state *walk_state)//清空walk_state对象的作用域栈
 {
-	union acpi_generic_state *scope_info;
+	union acpi_generic_state *scope_info;//临时变量，用于保存当前弹出的栈元素指针
 
 	ACPI_FUNCTION_NAME(ds_scope_stack_clear);
 
-	while (walk_state->scope_info) {
+	while (walk_state->scope_info) {//循环处理栈中所有元素，直到栈为空
 
 		/* Pop a scope off the stack */
 
-		scope_info = walk_state->scope_info;
-		walk_state->scope_info = scope_info->scope.next;
+		scope_info = walk_state->scope_info;// 获取当前栈顶指针
+		walk_state->scope_info = scope_info->scope.next;// 更新栈顶指针到下一个元素
 
 		ACPI_DEBUG_PRINT((ACPI_DB_EXEC,
 				  "Popped object type (%s)\n",
 				  acpi_ut_get_type_name(scope_info->common.
 							value)));
 
-		acpi_ut_delete_generic_state(scope_info);
+		acpi_ut_delete_generic_state(scope_info);//释放通用状态对象内存
 	}
 }
 

@@ -80,12 +80,12 @@ acpi_debug_trace(const char *name, u32 debug_level, u32 debug_layer, u32 flags)
  * DESCRIPTION: Execute a control method
  *
  ******************************************************************************/
-
+/* 执行ACPI控制方法的主函数入口 */
 acpi_status acpi_ps_execute_method(struct acpi_evaluate_info *info)
 {
 	acpi_status status;
-	union acpi_parse_object *op;//AML解析树节点
-	struct acpi_walk_state *walk_state;//解释器执行状态机
+	union acpi_parse_object *op;//AML解析树根节点（存储解析后的操作树）
+	struct acpi_walk_state *walk_state;//解释器执行状态机（保存执行上下文）
 
 	ACPI_FUNCTION_TRACE(ps_execute_method);
 
@@ -95,22 +95,22 @@ acpi_status acpi_ps_execute_method(struct acpi_evaluate_info *info)
 
 	/* Validate the Info and method Node */
 
-	if (!info || !info->node) {//输入参数验证
-		return_ACPI_STATUS(AE_NULL_ENTRY);
+	if (!info || !info->node) {//如果输入参数info或命名空间节点无效
+		return_ACPI_STATUS(AE_NULL_ENTRY);//返回空入口错误
 	}
 
 	/* Init for new method, wait on concurrency semaphore */
 	/* 初始化新方法，等待并发信号量 */
 	status =
-	    acpi_ds_begin_method_execution(info->node, info->obj_desc, NULL);
+	    acpi_ds_begin_method_execution(info->node, info->obj_desc, NULL);//初始化方法执行状态
 	if (ACPI_FAILURE(status)) {
-		return_ACPI_STATUS(status);
+		return_ACPI_STATUS(status);//初始化失败，直接返回错误码
 	}
 
 	/*
 	 * The caller "owns" the parameters, so give each one an extra reference
 	 */
-	acpi_ps_update_parameter_list(info, REF_INCREMENT);//增加参数引用计数（防止执行中被释放）
+	acpi_ps_update_parameter_list(info, REF_INCREMENT);//增加参数引用计数（防止执行期间参数被释放）。REF_INCREMENT表示增加引用
 
 	/*
 	 * Execute the method. Performs parse simultaneously
@@ -121,9 +121,9 @@ acpi_status acpi_ps_execute_method(struct acpi_evaluate_info *info)
 
 	/* Create and init a Root Node */
 
-	op = acpi_ps_create_scope_op(info->obj_desc->method.aml_start);//创建根解析节点（从AML起始地址）
+	op = acpi_ps_create_scope_op(info->obj_desc->method.aml_start);//创建并初始化AML解析树根节点
 	if (!op) {
-		status = AE_NO_MEMORY;
+		status = AE_NO_MEMORY;//内存分配失败，返回内存不足错误
 		goto cleanup;
 	}
 
@@ -132,19 +132,19 @@ acpi_status acpi_ps_execute_method(struct acpi_evaluate_info *info)
 	info->pass_number = ACPI_IMODE_EXECUTE;//设置为执行模式
 	walk_state =
 	    acpi_ds_create_walk_state(info->obj_desc->method.owner_id, NULL,
-				      NULL, NULL);
+				      NULL, NULL);//创建walk_state对象
 	if (!walk_state) {
-		status = AE_NO_MEMORY;
+		status = AE_NO_MEMORY;//内存分配失败，内存不足错误
 		goto cleanup;
 	}
 
-	/* 初始化AML解释器状态 */
+	/* 初始化AML解释器执行环境 */
 	status = acpi_ds_init_aml_walk(walk_state, op, info->node,
 				       info->obj_desc->method.aml_start,
 				       info->obj_desc->method.aml_length, info,
-				       info->pass_number);
+				       info->pass_number);//配置解释器执行上下文
 	if (ACPI_FAILURE(status)) {
-		acpi_ds_delete_walk_state(walk_state);
+		acpi_ds_delete_walk_state(walk_state);//初始化失败，释放walk_state资源
 		goto cleanup;
 	}
 
@@ -157,39 +157,39 @@ acpi_status acpi_ps_execute_method(struct acpi_evaluate_info *info)
 
 	/* Invoke an internal method if necessary */
 
-	if (info->obj_desc->method.info_flags & ACPI_METHOD_INTERNAL_ONLY) {//如果是内部方法直接调用分支（非AML方法）
+	if (info->obj_desc->method.info_flags & ACPI_METHOD_INTERNAL_ONLY) {//检查方法是否为内部C函数实现（非AML代码）
 		status =
-		    info->obj_desc->method.dispatch.implementation(walk_state);//调用内置C函数实现
-		info->return_object = walk_state->return_desc;//获取返回值
+		    info->obj_desc->method.dispatch.implementation(walk_state);//调用内置C函数实现（如\_GPE等核心方法）
+		info->return_object = walk_state->return_desc;//获取方法返回值（存储在walk_state的return_desc字段）
 
 		/* Cleanup states */
 
-		acpi_ds_scope_stack_clear(walk_state);//清空作用域栈
-		acpi_ps_cleanup_scope(&walk_state->parser_state);//清理解析器状态
+		acpi_ds_scope_stack_clear(walk_state);//清空方法执行过程中堆栈的作用域信息（如Scope()块）
+		acpi_ps_cleanup_scope(&walk_state->parser_state);//清理解析器状态（如当前解析位置、操作数栈）
 		acpi_ds_terminate_control_method(walk_state->method_desc,
-						 walk_state);//终止方法执行
-		acpi_ds_delete_walk_state(walk_state);//释放状态机内存
-		goto cleanup;
+						 walk_state);//终止方法执行（释放局部变量等资源）
+		acpi_ds_delete_walk_state(walk_state);// 释放walk_state对象占用的内存
+		goto cleanup;//跳转到统一清理流程
 	}
 
 	/*
 	 * Start method evaluation with an implicit return of zero.
 	 * This is done for Windows compatibility.
-	 * Windows兼容性处理：默认隐式返回0，某些AML代码可能没有显式Return语句
+	 * Windows兼容性处理：AML代码若未显式Return，则默认返回0（Windows系统要求）
 	 */
-	if (acpi_gbl_enable_interpreter_slack) {
+	if (acpi_gbl_enable_interpreter_slack) {// 全局开关启用兼容性模式
 		walk_state->implicit_return_obj =
 		    acpi_ut_create_integer_object((u64) 0);//创建值为0的整数对象作为默认返回值
-		if (!walk_state->implicit_return_obj) {
-			status = AE_NO_MEMORY;
-			acpi_ds_delete_walk_state(walk_state);
-			goto cleanup;
+		if (!walk_state->implicit_return_obj) { //如果内存分配失败
+			status = AE_NO_MEMORY;//返回内存不足错误
+			acpi_ds_delete_walk_state(walk_state);//释放walk_state资源
+			goto cleanup;// 跳转到清理流程
 		}
 	}
 
 	/* Parse the AML */
 
-	status = acpi_ps_parse_aml(walk_state);//核心AML解析/执行入口
+	status = acpi_ps_parse_aml(walk_state);// 核心函数：解析并执行AML代码流（如执行Store、If等操作）
 
 	/* walk_state was deleted by parse_aml */
 

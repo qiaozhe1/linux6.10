@@ -636,13 +636,15 @@ struct acpi_pscope_state {
 /*
  * Thread state - one per thread across multiple walk states. Multiple walk
  * states are created when there are nested control methods executing.
+ * ACPI线程状态结构体，用于跟踪线程在执行AML控制方法时的同步状态、执行上下文
+ * 和资源持有情况。是ACPI解释器实现多线程安全和资源管理的核心数据结构
  */
 struct acpi_thread_state {
-	ACPI_STATE_COMMON;
-	u8 current_sync_level;	/* Mutex Sync (nested acquire) level */
-	struct acpi_walk_state *walk_state_list;	/* Head of list of walk_states for this thread */
-	union acpi_operand_object *acquired_mutex_list;	/* List of all currently acquired mutexes */
-	acpi_thread_id thread_id;	/* Running thread ID */
+	ACPI_STATE_COMMON;//包含通用状态字段（如嵌套级别、异常处理等）
+	u8 current_sync_level;//当前线程的同步级别（用于跟踪互斥锁的嵌套获取层级）。作用：记录当前线程持有的同步资源深度，如递归获取互斥锁时的计数
+	struct acpi_walk_state *walk_state_list;//该线程所有AML方法执行状态的链表头指针。作用：保存该线程正在执行的多个控制方法（如_ASI、_OSC）的执行上下文
+	union acpi_operand_object *acquired_mutex_list;//当前线程持有的所有互斥锁对象列表
+	acpi_thread_id thread_id;//线程唯一标识符（由操作系统提供）。作用：标识当前线程的ID，用于多线程环境中的资源归属判断
 };
 
 /*

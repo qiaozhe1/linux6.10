@@ -405,7 +405,7 @@ acpi_ps_next_parse_state(struct acpi_walk_state *walk_state,
  *
  ******************************************************************************/
 
-acpi_status acpi_ps_parse_aml(struct acpi_walk_state *walk_state)
+acpi_status acpi_ps_parse_aml(struct acpi_walk_state *walk_state)//解析并执行AML代码流
 {
 	acpi_status status;
 	struct acpi_thread_state *thread;//新线程状态指针

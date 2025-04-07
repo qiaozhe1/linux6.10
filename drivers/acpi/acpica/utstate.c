@@ -81,20 +81,20 @@ union acpi_generic_state *acpi_ut_pop_generic_state(union acpi_generic_state
  *
  ******************************************************************************/
 
-union acpi_generic_state *acpi_ut_create_generic_state(void)
+union acpi_generic_state *acpi_ut_create_generic_state(void)//创建并初始化ACPI通用状态对象。
 {
-	union acpi_generic_state *state;
+	union acpi_generic_state *state;// 通用状态对象指针
 
 	ACPI_FUNCTION_ENTRY();
 
-	state = acpi_os_acquire_object(acpi_gbl_state_cache);
-	if (state) {
+	state = acpi_os_acquire_object(acpi_gbl_state_cache);// 从缓存中获取或分配新对象
+	if (state) {//成功获取到对象
 
 		/* Initialize */
-		state->common.descriptor_type = ACPI_DESC_TYPE_STATE;
+		state->common.descriptor_type = ACPI_DESC_TYPE_STATE;//设置为通用状态类型
 	}
 
-	return (state);
+	return (state);//返回对象指针（成功时为非NULL，失败时为NULL）
 }
 
 /*******************************************************************************
@@ -110,32 +110,32 @@ union acpi_generic_state *acpi_ut_create_generic_state(void)
  *
  ******************************************************************************/
 
-struct acpi_thread_state *acpi_ut_create_thread_state(void)
+struct acpi_thread_state *acpi_ut_create_thread_state(void)//创建ACPI线程状态对象，用于跟踪线程在执行AML方法时的同步状态和资源持有情况。
 {
-	union acpi_generic_state *state;
+	union acpi_generic_state *state;//通用状态对象指针（用于存储线程状态）
 
 	ACPI_FUNCTION_ENTRY();
 
 	/* Create the generic state object */
-
-	state = acpi_ut_create_generic_state();
-	if (!state) {
+	/* 创建通用状态对象 */
+	state = acpi_ut_create_generic_state();//分配并初始化通用状态对象内存
+	if (!state) {//内存分配失败,返回NULL表示创建失败
 		return (NULL);
 	}
 
 	/* Init fields specific to the update struct */
-
-	state->common.descriptor_type = ACPI_DESC_TYPE_STATE_THREAD;
-	state->thread.thread_id = acpi_os_get_thread_id();
+	/* 初始化线程状态专用字段 */
+	state->common.descriptor_type = ACPI_DESC_TYPE_STATE_THREAD;//设置对象类型为线程状态
+	state->thread.thread_id = acpi_os_get_thread_id();// 获取当前线程的唯一ID（由操作系统提供）
 
 	/* Check for invalid thread ID - zero is very bad, it will break things */
 
-	if (!state->thread.thread_id) {
+	if (!state->thread.thread_id) {//如果线程ID为0（无效）
 		ACPI_ERROR((AE_INFO, "Invalid zero ID from AcpiOsGetThreadId"));
-		state->thread.thread_id = (acpi_thread_id) 1;
+		state->thread.thread_id = (acpi_thread_id) 1;// 强制设置为有效值1（防止后续操作失败）
 	}
 
-	return ((struct acpi_thread_state *)state);
+	return ((struct acpi_thread_state *)state);// 返回转换后的线程状态对象指针
 }
 
 /*******************************************************************************

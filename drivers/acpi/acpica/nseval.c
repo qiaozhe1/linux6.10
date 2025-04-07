@@ -161,41 +161,41 @@ acpi_status acpi_ns_evaluate(struct acpi_evaluate_info *info)
 	 * 2) 控制方法对象 —— 执行它
 	 * 3) 非方法对象 —— 直接返回其当前值
 	 */
-	switch (acpi_ns_get_type(info->node)) {
-	case ACPI_TYPE_ANY:
-	case ACPI_TYPE_DEVICE://仅表示设备容器
-	case ACPI_TYPE_EVENT:
-	case ACPI_TYPE_MUTEX://同步原语
-	case ACPI_TYPE_REGION://硬件访问入口，非数据容器
-	case ACPI_TYPE_THERMAL:
-	case ACPI_TYPE_LOCAL_SCOPE://命名空间组织单元
+	switch (acpi_ns_get_type(info->node)) {//根据命名空间节点类型选择处理逻辑
+	case ACPI_TYPE_ANY:// 通配类型（通常表示未指定类型）
+	case ACPI_TYPE_DEVICE://设备容器类型（不存储可直接获取的数据）
+	case ACPI_TYPE_EVENT://事件对象类型（仅表示事件存在）
+	case ACPI_TYPE_MUTEX://互斥锁对象类型（仅表示同步原语）
+	case ACPI_TYPE_REGION://地址空间区域类型（需通过处理程序访问硬件）
+	case ACPI_TYPE_THERMAL://热管理对象类型（不直接存储可读数据）
+	case ACPI_TYPE_LOCAL_SCOPE:// 命名空间作用域容器（不存储数据）
 		/*
 		 * 1) Disallow evaluation of these object types. For these,
 		 *    object evaluation is undefined.
-		 *  场景1：禁止评估这些对象类型,因为这些类型本质上不存储可评估数据
+		 *  场景1：禁止评估这些对象类型,这些类型本质是容器或同步原语，不直接存储可获取的数据
 		 */
 		ACPI_ERROR((AE_INFO,
 			    "%s: This object type [%s] "
 			    "never contains data and cannot be evaluated",
 			    info->full_pathname,
-			    acpi_ut_get_type_name(info->node->type)));
+			    acpi_ut_get_type_name(info->node->type)));//
 
 		status = AE_TYPE;//返回类型错误
 		goto cleanup;//跳转到清理流程
 
-	case ACPI_TYPE_METHOD:
+	case ACPI_TYPE_METHOD://AML控制方法类型
 		/*
-		 *  2) 控制方法 - 执行它
+		 *  控制方法需要执行AML代码,需要确保解释器线程安全
 		 */
 
 		/* Verify that there is a method object associated with this node */
 
-		if (!info->obj_desc) {//检查方法对象是否存在
+		if (!info->obj_desc) {//如果方法对象不存在
 			ACPI_ERROR((AE_INFO,
 				    "%s: Method has no attached sub-object",
-				    info->full_pathname));
-			status = AE_NULL_OBJECT;//空对象错误
-			goto cleanup;
+				    info->full_pathname));//记录方法对象缺失错误
+			status = AE_NULL_OBJECT;//返回空对象错误
+			goto cleanup;// 跳转到清理流程
 		}
 
 		ACPI_DEBUG_PRINT((ACPI_DB_EXEC,//调试输出方法执行信息
@@ -214,13 +214,13 @@ acpi_status acpi_ns_evaluate(struct acpi_evaluate_info *info)
 		 */
 		/* 锁定解释器后执行AML方法 */
 		acpi_ex_enter_interpreter();//获取解释器锁
-		status = acpi_ps_execute_method(info);//核心方法执行函数
+		status = acpi_ps_execute_method(info);//执行AML方法（核心解析执行逻辑）
 		acpi_ex_exit_interpreter();//释放解释器锁
 		break;
 
-	default:
+	default://其他普通对象类型（如整数、缓冲、字符串等）
 		/*
-		 * 3) 普通对象值获取
+		 * 3) 需要解析节点到实际值对象：处理字段/索引字段等特殊对象类型
 		 */
 
 		/*
@@ -254,7 +254,7 @@ acpi_status acpi_ns_evaluate(struct acpi_evaluate_info *info)
 		 */
 
 		info->return_object =
-		    ACPI_CAST_PTR(union acpi_operand_object, info->node);//将节点指针临时存储在return_object字段中传递将节点指针临时存储在return_object字段中传递
+		    ACPI_CAST_PTR(union acpi_operand_object, info->node);//将节点指针临时存储在return_object字段中
 
 		status =
 		    acpi_ex_resolve_node_to_value(ACPI_CAST_INDIRECT_PTR
