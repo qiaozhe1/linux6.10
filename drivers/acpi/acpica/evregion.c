@@ -547,7 +547,7 @@ acpi_ev_attach_region(union acpi_operand_object *handler_obj,//要关联的地�
  ******************************************************************************/
 
 acpi_status
-acpi_ev_execute_reg_method(union acpi_operand_object *region_obj, u32 function)
+acpi_ev_execute_reg_method(union acpi_operand_object *region_obj, u32 function)//为选定区域执行_REG方法
 {
 	struct acpi_evaluate_info *info;//ACPI方法评估信息结构体指针
 	union acpi_operand_object *args[3];//方法参数数组（最多3个参数）
@@ -828,7 +828,7 @@ acpi_ev_reg_run(acpi_handle obj_handle,
 
 	/* Object is a Region */
 
-	if (obj_desc->region.space_id != info->space_id) {//检查地址空间匹配性
+	if (obj_desc->region.space_id != info->space_id) {//如果地址空间不匹配
 
 		/* This region is for a different address space, just ignore it */
 

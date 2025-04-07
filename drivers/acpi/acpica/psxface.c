@@ -121,14 +121,14 @@ acpi_status acpi_ps_execute_method(struct acpi_evaluate_info *info)
 
 	/* Create and init a Root Node */
 
-	op = acpi_ps_create_scope_op(info->obj_desc->method.aml_start);//创建并初始化AML解析树根节点
+	op = acpi_ps_create_scope_op(info->obj_desc->method.aml_start);//创建并初始化AML解析根节点
 	if (!op) {
 		status = AE_NO_MEMORY;//内存分配失败，返回内存不足错误
 		goto cleanup;
 	}
 
 	/* Create and initialize a new walk state */
-	/* 创建方法执行状态机 */
+	/* 创建并初始化一个新的方法执行状态机 */
 	info->pass_number = ACPI_IMODE_EXECUTE;//设置为执行模式
 	walk_state =
 	    acpi_ds_create_walk_state(info->obj_desc->method.owner_id, NULL,
@@ -155,8 +155,7 @@ acpi_status acpi_ps_execute_method(struct acpi_evaluate_info *info)
 		walk_state->parse_flags |= ACPI_PARSE_MODULE_LEVEL;//设置模块级解析标志
 	}
 
-	/* Invoke an internal method if necessary */
-
+	/* 如有必要，调用一个内部c方法 */
 	if (info->obj_desc->method.info_flags & ACPI_METHOD_INTERNAL_ONLY) {//检查方法是否为内部C函数实现（非AML代码）
 		status =
 		    info->obj_desc->method.dispatch.implementation(walk_state);//调用内置C函数实现（如\_GPE等核心方法）

@@ -46,6 +46,7 @@ static void pcc_rx_callback(struct mbox_client *cl, void *m)
 	complete(&data->done);
 }
 
+/* 初始化PCC通道的硬件资源并设置上下文 */
 static acpi_status
 acpi_pcc_address_space_setup(acpi_handle region_handle, u32 function,
 			     void *handler_context,  void **region_context)
@@ -139,15 +140,17 @@ acpi_pcc_address_space_handler(u32 function, acpi_physical_address addr,
 	return AE_OK;
 }
 
+/* 向ACPI框架注册PCC通信通道的地址空间处理程序 */
 void __init acpi_init_pcc(void)
 {
 	acpi_status status;
+	/* 向ACPI框架注册PCC通信通道的地址空间处理程序 */
+	status = acpi_install_address_space_handler(ACPI_ROOT_OBJECT,//表示ACPI命名空间的根对象,表示处理程序将绑定到根对象下的所有OperationRegion类型为Platform Communication的区域。
+						    ACPI_ADR_SPACE_PLATFORM_COMM,//地址空间类型标识符，对应ACPI规范定义的平台通信空间（PCC）
+						    &acpi_pcc_address_space_handler,//地址空间操作函数指针，处理对PCC空间的读/写请求（如访问PCC寄存器）
+						    &acpi_pcc_address_space_setup,//初始化函数指针，在安装时调用以设置PCC上下文（如分配资源、验证硬件）
+						    &pcc_ctx);//用户提供的上下文指针，传递给处理函数和初始化函数，用于存储PCC的私有数据（如寄存器基址、状态等）。
 
-	status = acpi_install_address_space_handler(ACPI_ROOT_OBJECT,
-						    ACPI_ADR_SPACE_PLATFORM_COMM,
-						    &acpi_pcc_address_space_handler,
-						    &acpi_pcc_address_space_setup,
-						    &pcc_ctx);
-	if (ACPI_FAILURE(status))
+	if (ACPI_FAILURE(status))//如果安装失败（如ACPI框架未支持PCC或资源不足），输出告警信息
 		pr_alert("OperationRegion handler could not be installed\n");
 }
