@@ -69,7 +69,7 @@ acpi_status acpi_ut_create_caches(void)
 	    acpi_os_create_cache("Acpi-Namespace",
 				 sizeof(struct acpi_namespace_node),
 				 ACPI_MAX_NAMESPACE_CACHE_DEPTH,
-				 &acpi_gbl_namespace_cache);
+				 &acpi_gbl_namespace_cache);//创建命名空间节点缓存
 	if (ACPI_FAILURE(status)) {
 		return (status);
 	}
@@ -77,7 +77,7 @@ acpi_status acpi_ut_create_caches(void)
 	status =
 	    acpi_os_create_cache("Acpi-State", sizeof(union acpi_generic_state),
 				 ACPI_MAX_STATE_CACHE_DEPTH,
-				 &acpi_gbl_state_cache);
+				 &acpi_gbl_state_cache);//创建状态对象缓存
 	if (ACPI_FAILURE(status)) {
 		return (status);
 	}
@@ -86,7 +86,7 @@ acpi_status acpi_ut_create_caches(void)
 	    acpi_os_create_cache("Acpi-Parse",
 				 sizeof(struct acpi_parse_obj_common),
 				 ACPI_MAX_PARSE_CACHE_DEPTH,
-				 &acpi_gbl_ps_node_cache);
+				 &acpi_gbl_ps_node_cache);//创建解析树节点缓存
 	if (ACPI_FAILURE(status)) {
 		return (status);
 	}
@@ -95,7 +95,7 @@ acpi_status acpi_ut_create_caches(void)
 	    acpi_os_create_cache("Acpi-ParseExt",
 				 sizeof(struct acpi_parse_obj_named),
 				 ACPI_MAX_EXTPARSE_CACHE_DEPTH,
-				 &acpi_gbl_ps_node_ext_cache);
+				 &acpi_gbl_ps_node_ext_cache);//创建扩展解析树节点缓存
 	if (ACPI_FAILURE(status)) {
 		return (status);
 	}
@@ -104,11 +104,11 @@ acpi_status acpi_ut_create_caches(void)
 	    acpi_os_create_cache("Acpi-Operand",
 				 sizeof(union acpi_operand_object),
 				 ACPI_MAX_OBJECT_CACHE_DEPTH,
-				 &acpi_gbl_operand_cache);
+				 &acpi_gbl_operand_cache);//创建操作数对象缓存
 	if (ACPI_FAILURE(status)) {
 		return (status);
 	}
-#ifdef ACPI_ASL_COMPILER
+#ifdef ACPI_ASL_COMPILER//ASL编译器相关缓存（仅当启用编译器支持时）：
 	/*
 	 * For use with the ASL-/ASL+ option. This cache keeps track of regular
 	 * 0xA9 0x01 comments.
@@ -117,7 +117,7 @@ acpi_status acpi_ut_create_caches(void)
 	    acpi_os_create_cache("Acpi-Comment",
 				 sizeof(struct acpi_comment_node),
 				 ACPI_MAX_COMMENT_CACHE_DEPTH,
-				 &acpi_gbl_reg_comment_cache);
+				 &acpi_gbl_reg_comment_cache);//创建注释节点缓存
 	if (ACPI_FAILURE(status)) {
 		return (status);
 	}
@@ -130,7 +130,7 @@ acpi_status acpi_ut_create_caches(void)
 	    acpi_os_create_cache("Acpi-Comment-Addr",
 				 sizeof(struct acpi_comment_addr_node),
 				 ACPI_MAX_COMMENT_CACHE_DEPTH,
-				 &acpi_gbl_comment_addr_cache);
+				 &acpi_gbl_comment_addr_cache);//注释地址缓存
 	if (ACPI_FAILURE(status)) {
 		return (status);
 	}
@@ -141,17 +141,17 @@ acpi_status acpi_ut_create_caches(void)
 	status =
 	    acpi_os_create_cache("Acpi-File", sizeof(struct acpi_file_node),
 				 ACPI_MAX_COMMENT_CACHE_DEPTH,
-				 &acpi_gbl_file_cache);
+				 &acpi_gbl_file_cache);//创建文件节点缓存（用于ASL文件处理）
 	if (ACPI_FAILURE(status)) {
 		return (status);
 	}
 #endif
 
-#ifdef ACPI_DBG_TRACK_ALLOCATIONS
+#ifdef ACPI_DBG_TRACK_ALLOCATIONS//调试内存分配追踪（仅当启用调试选项时）：
 
 	/* Memory allocation lists */
 
-	status = acpi_ut_create_list("Acpi-Global", 0, &acpi_gbl_global_list);
+	status = acpi_ut_create_list("Acpi-Global", 0, &acpi_gbl_global_list);//创建全局内存分配跟踪列表
 	if (ACPI_FAILURE(status)) {
 		return (status);
 	}
@@ -159,7 +159,7 @@ acpi_status acpi_ut_create_caches(void)
 	status =
 	    acpi_ut_create_list("Acpi-Namespace",
 				sizeof(struct acpi_namespace_node),
-				&acpi_gbl_ns_node_list);
+				&acpi_gbl_ns_node_list);//创建命名空间节点内存分配跟踪列表
 	if (ACPI_FAILURE(status)) {
 		return (status);
 	}

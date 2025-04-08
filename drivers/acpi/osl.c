@@ -522,24 +522,27 @@ __setup("acpi_rev_override", acpi_rev_override_setup);
 static char acpi_os_name[ACPI_MAX_OVERRIDE_LEN];
 
 acpi_status
-acpi_os_predefined_override(const struct acpi_predefined_names *init_val,
+acpi_os_predefined_override(const struct acpi_predefined_names *init_val,//操作系统层预定义对象值重写接口
 			    acpi_string *new_val)
 {
-	if (!init_val || !new_val)
+	if (!init_val || !new_val)//参数合法性检查
 		return AE_BAD_PARAMETER;
 
-	*new_val = NULL;
-	if (!memcmp(init_val->name, "_OS_", 4) && strlen(acpi_os_name)) {
+	*new_val = NULL;//默认不进行任何重写
+	
+	/* 重写_OS对象（操作系统名称） */
+	if (!memcmp(init_val->name, "_OS_", 4) && strlen(acpi_os_name)) {//如果检测到当前对象是'_OS'并且已配置自定义操作系统名称
 		pr_info("Overriding _OS definition to '%s'\n", acpi_os_name);
-		*new_val = acpi_os_name;
+		*new_val = acpi_os_name;//指向自定义操作系统名字符串
 	}
 
-	if (!memcmp(init_val->name, "_REV", 4) && acpi_rev_override) {
+	/* 重写_REV对象（ACPI版本号） */
+	if (!memcmp(init_val->name, "_REV", 4) && acpi_rev_override) {//如果检测到当前对象是'_REV'并且启用了版本号重写
 		pr_info("Overriding _REV return value to 5\n");
-		*new_val = (char *)5;
+		*new_val = (char *)5;//强制返回ACPI 5.0版本号
 	}
 
-	return AE_OK;
+	return AE_OK;//固定返回成功（实际错误通过new_val=NULL处理）
 }
 
 static irqreturn_t acpi_irq(int irq, void *dev_id)
@@ -1634,28 +1637,30 @@ static int __init acpi_disable_return_repair(char *s)
 
 __setup("acpica_no_return_repair", acpi_disable_return_repair);
 
-acpi_status __init acpi_os_initialize(void)
+acpi_status __init acpi_os_initialize(void)//初始化操作系统层ACPI硬件访问基础，映射关键寄存器
 {
-	acpi_os_map_generic_address(&acpi_gbl_FADT.xpm1a_event_block);
-	acpi_os_map_generic_address(&acpi_gbl_FADT.xpm1b_event_block);
+	/* 映射PM1事件寄存器块 */
+	acpi_os_map_generic_address(&acpi_gbl_FADT.xpm1a_event_block);//映射PM1a事件寄存器
+	acpi_os_map_generic_address(&acpi_gbl_FADT.xpm1b_event_block);//映射PM1b事件寄存器（如果存在）
 
+	/* 映射通用事件寄存器块（GPE） */
 	acpi_gbl_xgpe0_block_logical_address =
-		(unsigned long)acpi_os_map_generic_address(&acpi_gbl_FADT.xgpe0_block);
+		(unsigned long)acpi_os_map_generic_address(&acpi_gbl_FADT.xgpe0_block);//存储GPE0块映射后的逻辑地址
 	acpi_gbl_xgpe1_block_logical_address =
-		(unsigned long)acpi_os_map_generic_address(&acpi_gbl_FADT.xgpe1_block);
+		(unsigned long)acpi_os_map_generic_address(&acpi_gbl_FADT.xgpe1_block);//存储GPE1块映射后的逻辑地址
 
-	if (acpi_gbl_FADT.flags & ACPI_FADT_RESET_REGISTER) {
+	if (acpi_gbl_FADT.flags & ACPI_FADT_RESET_REGISTER) {//如果FADT声明支持硬件复位寄存器
 		/*
 		 * Use acpi_os_map_generic_address to pre-map the reset
 		 * register if it's in system memory.
 		 */
 		void *rv;
 
-		rv = acpi_os_map_generic_address(&acpi_gbl_FADT.reset_register);
+		rv = acpi_os_map_generic_address(&acpi_gbl_FADT.reset_register);//根据地址空间类型映射
 		pr_debug("%s: Reset register mapping %s\n", __func__,
 			 rv ? "successful" : "failed");
 	}
-	acpi_os_initialized = true;
+	acpi_os_initialized = true;//标记操作系统层ACPI初始化完成
 
 	return AE_OK;
 }

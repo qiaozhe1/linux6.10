@@ -29,7 +29,7 @@ static void acpi_ut_delete_mutex(acpi_mutex_handle mutex_id);
  *
  ******************************************************************************/
 
-acpi_status acpi_ut_mutex_initialize(void)
+acpi_status acpi_ut_mutex_initialize(void)//初始化ACPI核心互斥锁系统，创建所有同步原语
 {
 	u32 i;
 	acpi_status status;
@@ -37,46 +37,46 @@ acpi_status acpi_ut_mutex_initialize(void)
 	ACPI_FUNCTION_TRACE(ut_mutex_initialize);
 
 	/* Create each of the predefined mutex objects */
-
-	for (i = 0; i < ACPI_NUM_MUTEX; i++) {
-		status = acpi_ut_create_mutex(i);
+	/* 阶段1：创建预定义互斥锁 */
+	for (i = 0; i < ACPI_NUM_MUTEX; i++) {//遍历所有预定义锁类型 
+		status = acpi_ut_create_mutex(i);//创建指定类型的互斥锁
 		if (ACPI_FAILURE(status)) {
 			return_ACPI_STATUS(status);
 		}
 	}
 
 	/* Create the spinlocks for use at interrupt level or for speed */
-
-	status = acpi_os_create_lock (&acpi_gbl_gpe_lock);
+	/*阶段2：创建核心自旋锁 */
+	status = acpi_os_create_lock (&acpi_gbl_gpe_lock);//GPE事件处理锁 
 	if (ACPI_FAILURE (status)) {
 		return_ACPI_STATUS (status);
 	}
 
-	status = acpi_os_create_raw_lock(&acpi_gbl_hardware_lock);
+	status = acpi_os_create_raw_lock(&acpi_gbl_hardware_lock);//硬件访问原始锁
 	if (ACPI_FAILURE (status)) {
 		return_ACPI_STATUS (status);
 	}
 
-	status = acpi_os_create_lock(&acpi_gbl_reference_count_lock);
+	status = acpi_os_create_lock(&acpi_gbl_reference_count_lock);//引用计数保护锁
 	if (ACPI_FAILURE(status)) {
 		return_ACPI_STATUS(status);
 	}
 
 	/* Mutex for _OSI support */
-
-	status = acpi_os_create_mutex(&acpi_gbl_osi_mutex);
+	/* 阶段3：创建OSI支持互斥锁 */
+	status = acpi_os_create_mutex(&acpi_gbl_osi_mutex);//_OSI方法互斥锁
 	if (ACPI_FAILURE(status)) {
 		return_ACPI_STATUS(status);
 	}
 
 	/* Create the reader/writer lock for namespace access */
-
-	status = acpi_ut_create_rw_lock(&acpi_gbl_namespace_rw_lock);
+	/* 阶段4：创建命名空间读写锁 */
+	status = acpi_ut_create_rw_lock(&acpi_gbl_namespace_rw_lock);//命名空间访问锁
 	if (ACPI_FAILURE(status)) {
 		return_ACPI_STATUS(status);
 	}
 
-	return_ACPI_STATUS(status);
+	return_ACPI_STATUS(status);//所有同步对象创建成功
 }
 
 /*******************************************************************************

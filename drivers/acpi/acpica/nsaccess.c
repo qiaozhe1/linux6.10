@@ -31,18 +31,19 @@ ACPI_MODULE_NAME("nsaccess")
  * MUTEX:       Locks namespace for entire execution
  *
  ******************************************************************************/
-acpi_status acpi_ns_root_initialize(void)
+acpi_status acpi_ns_root_initialize(void)//初始化ACPI命名空间根节点并构建预定义对象
 {
 	acpi_status status;
-	const struct acpi_predefined_names *init_val = NULL;
-	struct acpi_namespace_node *new_node;
-	struct acpi_namespace_node *prev_node = NULL;
-	union acpi_operand_object *obj_desc;
-	acpi_string val = NULL;
+	const struct acpi_predefined_names *init_val = NULL;//预定义名称表 
+	struct acpi_namespace_node *new_node;//临时节点
+	struct acpi_namespace_node *prev_node = NULL;//前驱节点指针
+	union acpi_operand_object *obj_desc;//对象描述符
+	acpi_string val = NULL;//字符串值
 
 	ACPI_FUNCTION_TRACE(ns_root_initialize);
 
-	status = acpi_ut_acquire_mutex(ACPI_MTX_NAMESPACE);
+	/* 阶段1：获取命名空间互斥锁 */
+	status = acpi_ut_acquire_mutex(ACPI_MTX_NAMESPACE);//锁定命名空间操作
 	if (ACPI_FAILURE(status)) {
 		return_ACPI_STATUS(status);
 	}
@@ -51,8 +52,8 @@ acpi_status acpi_ns_root_initialize(void)
 	 * The global root ptr is initially NULL, so a non-NULL value indicates
 	 * that acpi_ns_root_initialize() has already been called; just return.
 	 */
-	if (acpi_gbl_root_node) {
-		status = AE_OK;
+	if (acpi_gbl_root_node) {//如果全局根节点已存在
+		status = AE_OK;//标记成功
 		goto unlock_and_exit;
 	}
 
@@ -60,7 +61,7 @@ acpi_status acpi_ns_root_initialize(void)
 	 * Tell the rest of the subsystem that the root is initialized
 	 * (This is OK because the namespace is locked)
 	 */
-	acpi_gbl_root_node = &acpi_gbl_root_node_struct;
+	acpi_gbl_root_node = &acpi_gbl_root_node_struct;//关联全局根节点结构体
 
 	/* Enter the predefined names in the name table */
 
@@ -81,15 +82,17 @@ acpi_status acpi_ns_root_initialize(void)
 	 *    0  _OS_ String       00203488 00 Len 14 "Microsoft Windows NT"
 	 *    0  _GL_ Mutex        00203580 00 Object 002035F0
 	 *    0  _OSI Method       00203678 00 Args 1 Len 0000 Aml 00000000
+	 *
+	 *    构建ACPI预定义命名空间节点并初始化对象值
 	 */
-	for (init_val = acpi_gbl_pre_defined_names; init_val->name; init_val++) {
+	for (init_val = acpi_gbl_pre_defined_names; init_val->name; init_val++) {//遍历全局预定义名称表,创建对应的命名空间节点并初始化对象
 		status = AE_OK;
 
 		/* _OSI is optional for now, will be permanent later */
 
-		if (!strcmp(init_val->name, "_OSI")
-		    && !acpi_gbl_create_osi_method) {
-			continue;
+		if (!strcmp(init_val->name, "_OSI")//如果当前是_OSI方法(操作系统支持的ACPI接口方法)
+		    && !acpi_gbl_create_osi_method) {//且全局开关未启用创建_OSI
+			continue;//跳过该节点
 		}
 
 		/*
@@ -99,38 +102,39 @@ acpi_status acpi_ns_root_initialize(void)
 		 * just create and link the new node(s) here.
 		 */
 		new_node =
-		    acpi_ns_create_node(*ACPI_CAST_PTR(u32, init_val->name));
+		    acpi_ns_create_node(*ACPI_CAST_PTR(u32, init_val->name));//创建命名空间节点
 		if (!new_node) {
 			status = AE_NO_MEMORY;
 			goto unlock_and_exit;
 		}
 
-		new_node->descriptor_type = ACPI_DESC_TYPE_NAMED;
-		new_node->type = init_val->type;
+		new_node->descriptor_type = ACPI_DESC_TYPE_NAMED;//标记为命名节点
+		new_node->type = init_val->type;//设置节点类型
 
-		if (!prev_node) {
-			acpi_gbl_root_node_struct.child = new_node;
+		if (!prev_node) {//如果是首个节点
+			acpi_gbl_root_node_struct.child = new_node;//首节点作为根的子节点
 		} else {
-			prev_node->peer = new_node;
+			prev_node->peer = new_node;//后续节点作为前驱的同级节点
 		}
 
-		new_node->parent = &acpi_gbl_root_node_struct;
-		prev_node = new_node;
+		new_node->parent = &acpi_gbl_root_node_struct;//统一父节点指向根
+		prev_node = new_node;//更新前驱节点指针为当前节点
 
 		/*
 		 * Name entered successfully. If entry in pre_defined_names[] specifies
 		 * an initial value, create the initial value.
+		 * 名称输入成功。如果pre_defined_names[]中的条目指定了初始值，则创建初始值。
 		 */
 		if (init_val->val) {
-			status = acpi_os_predefined_override(init_val, &val);
+			status = acpi_os_predefined_override(init_val, &val);//允许OS重写某些对象的默认值(只对操作系统名称和acpi版本号重写)
 			if (ACPI_FAILURE(status)) {
 				ACPI_ERROR((AE_INFO,
 					    "Could not override predefined %s",
 					    init_val->name));
 			}
 
-			if (!val) {
-				val = init_val->val;
+			if (!val) {//如果没有重写
+				val = init_val->val;//继续使用默认值
 			}
 
 			/*
@@ -138,7 +142,7 @@ acpi_status acpi_ns_root_initialize(void)
 			 * descriptor for it.
 			 */
 			obj_desc =
-			    acpi_ut_create_internal_object(init_val->type);
+			    acpi_ut_create_internal_object(init_val->type);//根据类型创建对象
 			if (!obj_desc) {
 				status = AE_NO_MEMORY;
 				goto unlock_and_exit;
@@ -149,82 +153,82 @@ acpi_status acpi_ns_root_initialize(void)
 			 * internal representation. Only types actually
 			 * used for initial values are implemented here.
 			 */
-			switch (init_val->type) {
-			case ACPI_TYPE_METHOD:
+			switch (init_val->type) {//类型相关初始化
+			case ACPI_TYPE_METHOD://ACPI方法对象
 
 				obj_desc->method.param_count =
-				    (u8) ACPI_TO_INTEGER(val);
-				obj_desc->common.flags |= AOPOBJ_DATA_VALID;
+				    (u8) ACPI_TO_INTEGER(val);//设置参数个数
+				obj_desc->common.flags |= AOPOBJ_DATA_VALID;//标记数据有效
 
-#if defined (ACPI_ASL_COMPILER)
+#if defined (ACPI_ASL_COMPILER)//iASL编译器环境
 
 				/* Save the parameter count for the iASL compiler */
 
-				new_node->value = obj_desc->method.param_count;
-#else
+				new_node->value = obj_desc->method.param_count;//存储参数计数
+#else//运行时环境
 				/* Mark this as a very SPECIAL method (_OSI) */
-
+				/*  将此标记为非常特殊的方法（_OSI） */
 				obj_desc->method.info_flags =
-				    ACPI_METHOD_INTERNAL_ONLY;
+				    ACPI_METHOD_INTERNAL_ONLY;//标记为内部专用方法
 				obj_desc->method.dispatch.implementation =
-				    acpi_ut_osi_implementation;
+				    acpi_ut_osi_implementation;//绑定实现函数
 #endif
 				break;
 
-			case ACPI_TYPE_INTEGER:
+			case ACPI_TYPE_INTEGER://整型对象
 
-				obj_desc->integer.value = ACPI_TO_INTEGER(val);
+				obj_desc->integer.value = ACPI_TO_INTEGER(val);//直接赋值整数值
 				break;
 
-			case ACPI_TYPE_STRING:
+			case ACPI_TYPE_STRING://字符串对象
 
 				/* Build an object around the static string */
 
-				obj_desc->string.length = (u32)strlen(val);
-				obj_desc->string.pointer = val;
-				obj_desc->common.flags |= AOPOBJ_STATIC_POINTER;
+				obj_desc->string.length = (u32)strlen(val);//计算字符串长度
+				obj_desc->string.pointer = val;//指向静态字符串
+				obj_desc->common.flags |= AOPOBJ_STATIC_POINTER;//标记静态指针（无需释放）
 				break;
 
-			case ACPI_TYPE_MUTEX:
+			case ACPI_TYPE_MUTEX://互斥锁对象
 
-				obj_desc->mutex.node = new_node;
+				obj_desc->mutex.node = new_node;//关联命名节点
 				obj_desc->mutex.sync_level =
-				    (u8) (ACPI_TO_INTEGER(val) - 1);
+				    (u8) (ACPI_TO_INTEGER(val) - 1);//设置同步层级
 
 				/* Create a mutex */
-
+				
 				status =
 				    acpi_os_create_mutex(&obj_desc->mutex.
-							 os_mutex);
+							 os_mutex);//创建OS层互斥锁
 				if (ACPI_FAILURE(status)) {
-					acpi_ut_remove_reference(obj_desc);
+					acpi_ut_remove_reference(obj_desc);//清理对象引用
 					goto unlock_and_exit;
 				}
 
 				/* Special case for ACPI Global Lock */
 
 				if (strcmp(init_val->name, "_GL_") == 0) {
-					acpi_gbl_global_lock_mutex = obj_desc;
+					acpi_gbl_global_lock_mutex = obj_desc;//注册全局锁对象
 
 					/* Create additional counting semaphore for global lock */
 
 					status =
 					    acpi_os_create_semaphore(1, 0,
-								     &acpi_gbl_global_lock_semaphore);
+								     &acpi_gbl_global_lock_semaphore);//创建全局锁计数信号量
 					if (ACPI_FAILURE(status)) {
 						acpi_ut_remove_reference
-						    (obj_desc);
+						    (obj_desc);//失败时清理
 						goto unlock_and_exit;
 					}
 				}
 				break;
 
-			default:
+			default://不支持的初始化类型
 
 				ACPI_ERROR((AE_INFO,
 					    "Unsupported initial type value 0x%X",
 					    init_val->type));
-				acpi_ut_remove_reference(obj_desc);
+				acpi_ut_remove_reference(obj_desc);//删除对象
 				obj_desc = NULL;
 				continue;
 			}
@@ -232,25 +236,25 @@ acpi_status acpi_ns_root_initialize(void)
 			/* Store pointer to value descriptor in the Node */
 
 			status = acpi_ns_attach_object(new_node, obj_desc,
-						       obj_desc->common.type);
+						       obj_desc->common.type);//将对象绑定到节点
 
 			/* Remove local reference to the object */
 
-			acpi_ut_remove_reference(obj_desc);
+			acpi_ut_remove_reference(obj_desc);//清理对象引用计数 
 		}
 	}
 
 unlock_and_exit:
-	(void)acpi_ut_release_mutex(ACPI_MTX_NAMESPACE);
+	(void)acpi_ut_release_mutex(ACPI_MTX_NAMESPACE);//确保锁释放
 
 	/* Save a handle to "_GPE", it is always present */
 
-	if (ACPI_SUCCESS(status)) {
+	if (ACPI_SUCCESS(status)) {//如果所有初始化步骤均成功
 		status = acpi_ns_get_node(NULL, "\\_GPE", ACPI_NS_NO_UPSEARCH,
-					  &acpi_gbl_fadt_gpe_device);
+					  &acpi_gbl_fadt_gpe_device);//获取_GPE节点(通用电源事件作用域),从根节点开始搜索
 	}
 
-	return_ACPI_STATUS(status);
+	return_ACPI_STATUS(status);//返回综合状态码
 }
 
 /*******************************************************************************

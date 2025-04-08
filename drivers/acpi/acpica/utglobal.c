@@ -67,27 +67,80 @@ const char acpi_gbl_upper_hex_digits[] = "0123456789ABCDEF";
  *    This still allows notifies, but does not confuse host code that
  *    searches for valid thermal_zone objects.
  */
+/*
+ * 定义ACPI预定义名称数组:
+ * 每个条目包含名称、类型和初始值指针
+ * 用于注册ACPI命名空间中的预定义对象（如系统基板、电源事件等）
+ * */
 const struct acpi_predefined_names acpi_gbl_pre_defined_names[] = {
+	/*
+	 * 预定义名称"_GPE"：
+	 * 类型：ACPI_TYPE_LOCAL_SCOPE（局部作用域对象）
+	 * 用途：定义通用电源事件（General Purpose Events）的作用域
+	 * NULL表示无初始值（需通过ACPI表或方法初始化）
+	 * */
 	{"_GPE", ACPI_TYPE_LOCAL_SCOPE, NULL},
+	/*
+	 * 预定义名称"_PR_"：
+	 * 类型：ACPI_TYPE_LOCAL_SCOPE
+	 * 用途：电源资源作用域（Power Resources Scope）
+	 * */
 	{"_PR_", ACPI_TYPE_LOCAL_SCOPE, NULL},
+	/*
+	 * 预定义名称"_SB_"：
+	 * 类型：ACPI_TYPE_DEVICE（设备对象）
+	 * 用途：系统基（System Board）设备节点 → 命名空间根下的第一个设备
+	 * 所有硬件设备（如CPU、PCI设备）均挂载在此节点下
+	 * */
 	{"_SB_", ACPI_TYPE_DEVICE, NULL},
+	/*
+	 * 预定义名称"_SI_"：
+	 * 类型：ACPI_TYPE_LOCAL_SCOPE
+	 * 用途：系统指示器作用域（System Indicators Scope）
+	 * */
 	{"_SI_", ACPI_TYPE_LOCAL_SCOPE, NULL},
+	/*
+	 * 预定义名称"_TZ_"：
+	 * 类型：ACPI_TYPE_DEVICE
+	 * 用途：热区（Thermal Zone）设备 → 用于温度管理
+	 * */
 	{"_TZ_", ACPI_TYPE_DEVICE, NULL},
 	/*
 	 * March, 2015:
-	 * The _REV object is in the process of being deprecated, because
-	 * other ACPI implementations permanently return 2. Thus, it
-	 * has little or no value. Return 2 for compatibility with
-	 * other ACPI implementations.
+	 * _REV对象正在被弃用，因为其他ACPI实现永久返回2。因此，该对象的值
+	 * 对兼容性帮助不大。为保持与其他ACPI实现一致，返回2。
+	 *
+	 * 预定义名称"_REV"：
+	 * 类型：ACPI_TYPE_INTEGER（整数对象）
+	 * 初始值：强制设为2 → 表示ACPI规范版本（尽管已弃用）
+	 * ACPI_CAST_PTR(char, 2)：将整数2转换为char指针类型（符合数组字段要求）
 	 */
 	{"_REV", ACPI_TYPE_INTEGER, ACPI_CAST_PTR(char, 2)},
+	/*
+	 * 预定义名称"_OS_"：
+	 * 类型：ACPI_TYPE_STRING（字符串对象）
+	 * 初始值：指向内核定义的操作系统名称（如"Microsoft Windows 2000"）
+	 * 用途：用于ACPI设备检测操作系统类型（如_OSI方法）
+	 * */
 	{"_OS_", ACPI_TYPE_STRING, ACPI_OS_NAME},
+	/*
+	 * 预定义名称"_GL_"：
+	 * 类型：ACPI_TYPE_MUTEX（互斥锁对象）
+	 * 初始值：1 → 表示互斥锁的最大共享层次（1表示独占模式）
+	 * 用途：用于同步对共享资源的访问（如热键事件）
+	 * */
 	{"_GL_", ACPI_TYPE_MUTEX, ACPI_CAST_PTR(char, 1)},
+	/*
+	 * 预定义名称"_OSI"：
+	 * 类型：ACPI_TYPE_METHOD（方法对象）
+	 * 初始值：1 → 表示方法参数计数（_OSI方法需一个字符串参数，如操作系统名称）
+	 * 用途：操作系统接口方法 → 用于检测操作系统支持的ACPI特性（如Linux/Windows支持）
+	 * */
 	{"_OSI", ACPI_TYPE_METHOD, ACPI_CAST_PTR(char, 1)},
 
 	/* Table terminator */
 
-	{NULL, ACPI_TYPE_ANY, NULL}
+	{NULL, ACPI_TYPE_ANY, NULL}//数组终止符
 };
 
 #if (!ACPI_REDUCED_HARDWARE)
