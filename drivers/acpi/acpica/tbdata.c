@@ -492,7 +492,7 @@ acpi_tb_check_duplication(struct acpi_table_desc *table_desc, u32 *table_index)
  *****************************************************************************/
 
 acpi_status
-acpi_tb_verify_temp_table(struct acpi_table_desc *table_desc,
+acpi_tb_verify_temp_table(struct acpi_table_desc *table_desc,//验证临时ACPI表，执行签名匹配、校验和验证及重复性检查
 			  char *signature, u32 *table_index)
 {
 	acpi_status status = AE_OK;
@@ -501,30 +501,31 @@ acpi_tb_verify_temp_table(struct acpi_table_desc *table_desc,
 
 	/* Validate the table */
 
-	status = acpi_tb_validate_temp_table(table_desc);
-	if (ACPI_FAILURE(status)) {
-		return_ACPI_STATUS(AE_NO_MEMORY);
+	status = acpi_tb_validate_temp_table(table_desc);//验证表头完整性
+	if (ACPI_FAILURE(status)) {//如果基础验证失败（如空指针/无效长度）
+		return_ACPI_STATUS(AE_NO_MEMORY);//返回内存错误状态
 	}
 
 	/* If a particular signature is expected (DSDT/FACS), it must match */
 
-	if (signature &&
-	    !ACPI_COMPARE_NAMESEG(&table_desc->signature, signature)) {
+	if (signature &&//如果调用方指定了预期签名
+	    !ACPI_COMPARE_NAMESEG(&table_desc->signature, signature)) {//且与当前表签名不匹配
 		ACPI_BIOS_ERROR((AE_INFO,
 				 "Invalid signature 0x%X for ACPI table, expected [%s]",
 				 table_desc->signature.integer, signature));
-		status = AE_BAD_SIGNATURE;
-		goto invalidate_and_exit;
+		status = AE_BAD_SIGNATURE;//设置错误码为签名不匹配
+		goto invalidate_and_exit;//跳转到清理流程
 	}
 
-	if (acpi_gbl_enable_table_validation) {
+	/* 完整验证流程 */
+	if (acpi_gbl_enable_table_validation) {//如果全局表验证功能已启用
 
 		/* Verify the checksum */
-
+		/* 校验和验证 */
 		status =
 		    acpi_ut_verify_checksum(table_desc->pointer,
 					    table_desc->length);
-		if (ACPI_FAILURE(status)) {
+		if (ACPI_FAILURE(status)) {//如果校验和验证失败
 			ACPI_EXCEPTION((AE_INFO, AE_NO_MEMORY,
 					"%4.4s 0x%8.8X%8.8X"
 					" Attempted table install failed",
@@ -535,16 +536,16 @@ acpi_tb_verify_temp_table(struct acpi_table_desc *table_desc,
 					ACPI_FORMAT_UINT64(table_desc->
 							   address)));
 
-			goto invalidate_and_exit;
+			goto invalidate_and_exit;//跳转清理流程
 		}
 
 		/* Avoid duplications */
 
-		if (table_index) {
+		if (table_index) {//如果调用方要求检测重复表
 			status =
-			    acpi_tb_check_duplication(table_desc, table_index);
-			if (ACPI_FAILURE(status)) {
-				if (status != AE_CTRL_TERMINATE) {
+			    acpi_tb_check_duplication(table_desc, table_index);//执行重复性检查
+			if (ACPI_FAILURE(status)) {//如果存在重复表
+				if (status != AE_CTRL_TERMINATE) {//如果错误类型不是终止控制流
 					ACPI_EXCEPTION((AE_INFO, status,
 							"%4.4s 0x%8.8X%8.8X"
 							" Table is already loaded",
@@ -557,18 +558,18 @@ acpi_tb_verify_temp_table(struct acpi_table_desc *table_desc,
 							(table_desc->address)));
 				}
 
-				goto invalidate_and_exit;
+				goto invalidate_and_exit;//跳转清理流程
 			}
 		}
 
-		table_desc->flags |= ACPI_TABLE_IS_VERIFIED;
+		table_desc->flags |= ACPI_TABLE_IS_VERIFIED;//标记表已验证通过
 	}
 
-	return_ACPI_STATUS(status);
+	return_ACPI_STATUS(status);//返回最终状态
 
 invalidate_and_exit:
-	acpi_tb_invalidate_table(table_desc);
-	return_ACPI_STATUS(status);
+	acpi_tb_invalidate_table(table_desc);//标记表为无效（清除指针+重置标志）
+	return_ACPI_STATUS(status);//携带错误码返回
 }
 
 /*******************************************************************************
@@ -583,64 +584,65 @@ invalidate_and_exit:
  *
  ******************************************************************************/
 
-acpi_status acpi_tb_resize_root_table_list(void)
+acpi_status acpi_tb_resize_root_table_list(void)//动态调整ACPI根表列表的内存容量
 {
-	struct acpi_table_desc *tables;
-	u32 table_count;
-	u32 current_table_count, max_table_count;
-	u32 i;
+	struct acpi_table_desc *tables;//新表数组指针
+	u32 table_count;//当前表数量基准值
+	u32 current_table_count, max_table_count;//current-有效表计数，max-新数组容量
+	u32 i;//循环计数器
 
 	ACPI_FUNCTION_TRACE(tb_resize_root_table_list);
 
 	/* allow_resize flag is a parameter to acpi_initialize_tables */
 
-	if (!(acpi_gbl_root_table_list.flags & ACPI_ROOT_ALLOW_RESIZE)) {
+	if (!(acpi_gbl_root_table_list.flags & ACPI_ROOT_ALLOW_RESIZE)) {//如果未允许调整大小
 		ACPI_ERROR((AE_INFO,
 			    "Resize of Root Table Array is not allowed"));
-		return_ACPI_STATUS(AE_SUPPORT);
+		return_ACPI_STATUS(AE_SUPPORT);//返回不支持错误
 	}
 
 	/* Increase the Table Array size */
 
-	if (acpi_gbl_root_table_list.flags & ACPI_ROOT_ORIGIN_ALLOCATED) {
-		table_count = acpi_gbl_root_table_list.max_table_count;
-	} else {
-		table_count = acpi_gbl_root_table_list.current_table_count;
+	if (acpi_gbl_root_table_list.flags & ACPI_ROOT_ORIGIN_ALLOCATED) {//如果之前是动态分配
+		table_count = acpi_gbl_root_table_list.max_table_count;//使用最大表数作为基准
+	} else {//否则（静态初始化情况）
+		table_count = acpi_gbl_root_table_list.current_table_count;//使用当前实际表数
 	}
 
-	max_table_count = table_count + ACPI_ROOT_TABLE_SIZE_INCREMENT;
+	/* 计算新容量并分配内存 */
+	max_table_count = table_count + ACPI_ROOT_TABLE_SIZE_INCREMENT;//扩容策略：增加固定步长
 	tables = ACPI_ALLOCATE_ZEROED(((acpi_size)max_table_count) *
-				      sizeof(struct acpi_table_desc));
-	if (!tables) {
+				      sizeof(struct acpi_table_desc));//分配并清零内存
+	if (!tables) {//如果内存分配失败
 		ACPI_ERROR((AE_INFO,
 			    "Could not allocate new root table array"));
-		return_ACPI_STATUS(AE_NO_MEMORY);
+		return_ACPI_STATUS(AE_NO_MEMORY);//返回内存不足错误
 	}
 
 	/* Copy and free the previous table array */
 
-	current_table_count = 0;
-	if (acpi_gbl_root_table_list.tables) {
-		for (i = 0; i < table_count; i++) {
-			if (acpi_gbl_root_table_list.tables[i].address) {
+	current_table_count = 0;//初始化有效表计数器
+	if (acpi_gbl_root_table_list.tables) {//如果旧表数组存在
+		for (i = 0; i < table_count; i++) {//循环处理每个旧表条目
+			if (acpi_gbl_root_table_list.tables[i].address) {//如果表地址有效
 				memcpy(tables + current_table_count,
 				       acpi_gbl_root_table_list.tables + i,
-				       sizeof(struct acpi_table_desc));
-				current_table_count++;
+				       sizeof(struct acpi_table_desc));//拷贝旧表数据到新表
+				current_table_count++;//有效表计数递增
 			}
 		}
 
-		if (acpi_gbl_root_table_list.flags & ACPI_ROOT_ORIGIN_ALLOCATED) {
-			ACPI_FREE(acpi_gbl_root_table_list.tables);
+		if (acpi_gbl_root_table_list.flags & ACPI_ROOT_ORIGIN_ALLOCATED) {//如果旧内存是动态分配
+			ACPI_FREE(acpi_gbl_root_table_list.tables);//释放旧数组内存
 		}
 	}
 
-	acpi_gbl_root_table_list.tables = tables;
-	acpi_gbl_root_table_list.max_table_count = max_table_count;
-	acpi_gbl_root_table_list.current_table_count = current_table_count;
-	acpi_gbl_root_table_list.flags |= ACPI_ROOT_ORIGIN_ALLOCATED;
+	acpi_gbl_root_table_list.tables = tables;//指向新分配的内存
+	acpi_gbl_root_table_list.max_table_count = max_table_count;//更新最大容量
+	acpi_gbl_root_table_list.current_table_count = current_table_count;//更新有效表数量
+	acpi_gbl_root_table_list.flags |= ACPI_ROOT_ORIGIN_ALLOCATED;//设置动态分配标志位
 
-	return_ACPI_STATUS(AE_OK);
+	return_ACPI_STATUS(AE_OK);//返回成功状态
 }
 
 /*******************************************************************************

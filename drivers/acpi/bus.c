@@ -1227,20 +1227,21 @@ static int __init acpi_bus_init_irq(void)
  * Doing this before switching the EFI runtime services to virtual mode allows
  * the EfiBootServices memory to be freed slightly earlier on boot.
  */
+/* 执行ACPI子系统早期初始化，包括表重定位、解释器初始化及硬件相关配置 */
 void __init acpi_early_init(void)
 {
 	acpi_status status;
 
-	if (acpi_disabled)
+	if (acpi_disabled)//如果ACPI功能被禁用,直接跳过
 		return;
 
-	pr_info("Core revision %08x\n", ACPI_CA_VERSION);
+	pr_info("Core revision %08x\n", ACPI_CA_VERSION);//打印ACPI组件版本信息
 
 	/* enable workarounds, unless strict ACPI spec. compliance */
-	if (!acpi_strict)
-		acpi_gbl_enable_interpreter_slack = TRUE;
+	if (!acpi_strict)//如果未启用严格ACPI规范合规模式
+		acpi_gbl_enable_interpreter_slack = TRUE;//启用解释器宽松模式（允许非标准AML解析）
 
-	acpi_permanent_mmap = true;
+	acpi_permanent_mmap = true;//永久内存映射模式使能（提高表访问效率）
 
 #ifdef CONFIG_X86
 	/*
@@ -1250,43 +1251,43 @@ void __init acpi_early_init(void)
 	 * would not be OK because only x86 initializes dmi early enough.
 	 * Thankfully only x86 systems need such quirks for now.
 	 */
-	dmi_check_system(dsdt_dmi_table);
+	dmi_check_system(dsdt_dmi_table);//执行DMI系统匹配检查
 #endif
 
-	status = acpi_reallocate_root_table();
-	if (ACPI_FAILURE(status)) {
+	status = acpi_reallocate_root_table();//重新分配ACPI根系统描述表（RSDT/XSDT）
+	if (ACPI_FAILURE(status)) {//如果表重分配失败
 		pr_err("Unable to reallocate ACPI tables\n");
-		goto error0;
+		goto error0;//跳转到错误处理流程 
 	}
 
-	status = acpi_initialize_subsystem();
-	if (ACPI_FAILURE(status)) {
+	status = acpi_initialize_subsystem();//初始化ACPI核心子系统
+	if (ACPI_FAILURE(status)) {//如果子系统初始化失败
 		pr_err("Unable to initialize the ACPI Interpreter\n");
-		goto error0;
+		goto error0;//跳转错误处理
 	}
 
 #ifdef CONFIG_X86
-	if (!acpi_ioapic) {
-		/* compatible (0) means level (3) */
-		if (!(acpi_sci_flags & ACPI_MADT_TRIGGER_MASK)) {
-			acpi_sci_flags &= ~ACPI_MADT_TRIGGER_MASK;
-			acpi_sci_flags |= ACPI_MADT_TRIGGER_LEVEL;
+	if (!acpi_ioapic) {//如果未使用IOAPIC中断控制器
+		/* compatible (0) means level (3)配置PIC模式下的SCI中断触发类型 */
+		if (!(acpi_sci_flags & ACPI_MADT_TRIGGER_MASK)) {//如果未设置触发模式
+			acpi_sci_flags &= ~ACPI_MADT_TRIGGER_MASK;//清空原有触发模式
+			acpi_sci_flags |= ACPI_MADT_TRIGGER_LEVEL;//设置为电平触发模式
 		}
-		/* Set PIC-mode SCI trigger type */
+		/* Set PIC-mode SCI trigger type 应用PIC模式的中断触发配置 */
 		acpi_pic_sci_set_trigger(acpi_gbl_FADT.sci_interrupt,
-					 (acpi_sci_flags & ACPI_MADT_TRIGGER_MASK) >> 2);
+					 (acpi_sci_flags & ACPI_MADT_TRIGGER_MASK) >> 2);//从FADT获取SCI中断号
 	} else {
 		/*
 		 * now that acpi_gbl_FADT is initialized,
 		 * update it with result from INT_SRC_OVR parsing
 		 */
-		acpi_gbl_FADT.sci_interrupt = acpi_sci_override_gsi;
+		acpi_gbl_FADT.sci_interrupt = acpi_sci_override_gsi;//应用中断源覆盖值
 	}
 #endif
 	return;
 
  error0:
-	disable_acpi();
+	disable_acpi();//禁用ACPI子系统
 }
 
 /**

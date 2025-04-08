@@ -130,7 +130,7 @@ ACPI_EXPORT_SYMBOL_INIT(acpi_initialize_tables)
  *              kernel.
  *
  ******************************************************************************/
-acpi_status ACPI_INIT_FUNCTION acpi_reallocate_root_table(void)
+acpi_status ACPI_INIT_FUNCTION acpi_reallocate_root_table(void)//重新分配ACPI根系统描述表，处理表验证及内存管理
 {
 	acpi_status status;
 	struct acpi_table_desc *table_desc;
@@ -145,11 +145,11 @@ acpi_status ACPI_INIT_FUNCTION acpi_reallocate_root_table(void)
 	 * for the table array in the call to acpi_initialize_tables().
 	 */
 	if ((acpi_gbl_root_table_list.flags & ACPI_ROOT_ORIGIN_ALLOCATED) &&
-	    acpi_gbl_enable_table_validation) {
-		return_ACPI_STATUS(AE_SUPPORT);
+	    acpi_gbl_enable_table_validation) {//如果表内存已分配且启用验证
+		return_ACPI_STATUS(AE_SUPPORT);//返回不支持状态
 	}
 
-	(void)acpi_ut_acquire_mutex(ACPI_MTX_TABLES);
+	(void)acpi_ut_acquire_mutex(ACPI_MTX_TABLES);//获取表格互斥锁
 
 	/*
 	 * Ensure OS early boot logic, which is required by some hosts. If the
@@ -157,41 +157,42 @@ acpi_status ACPI_INIT_FUNCTION acpi_reallocate_root_table(void)
 	 * issue by invoking acpi_put_table() for the reported table during the
 	 * early stage.
 	 */
-	for (i = 0; i < acpi_gbl_root_table_list.current_table_count; ++i) {
-		table_desc = &acpi_gbl_root_table_list.tables[i];
-		if (table_desc->pointer) {
+	/* 早期启动阶段表格状态检查,确保所有表在初始化阶段正确失效 */
+	for (i = 0; i < acpi_gbl_root_table_list.current_table_count; ++i) {//遍历根表列表 
+		table_desc = &acpi_gbl_root_table_list.tables[i];//获取第i个表描述符
+		if (table_desc->pointer) {//如果表指针未失效,表指针未置空
 			ACPI_ERROR((AE_INFO,
 				    "Table [%4.4s] is not invalidated during early boot stage",
-				    table_desc->signature.ascii));
+				    table_desc->signature.ascii));//记录ACPI错误日志
 		}
 	}
 
-	if (!acpi_gbl_enable_table_validation) {
+	if (!acpi_gbl_enable_table_validation) {//如果全局表验证未启用
 		/*
 		 * Now it's safe to do full table validation. We can do deferred
 		 * table initialization here once the flag is set.
 		 */
-		acpi_gbl_enable_table_validation = TRUE;
+		acpi_gbl_enable_table_validation = TRUE;//启用完整表验证
 		for (i = 0; i < acpi_gbl_root_table_list.current_table_count;
-		     ++i) {
-			table_desc = &acpi_gbl_root_table_list.tables[i];
-			if (!(table_desc->flags & ACPI_TABLE_IS_VERIFIED)) {
+		     ++i) {//二次遍历表格,验证表格
+			table_desc = &acpi_gbl_root_table_list.tables[i];//获取当前表描述符
+			if (!(table_desc->flags & ACPI_TABLE_IS_VERIFIED)) {//如果未通过验证
 				status =
 				    acpi_tb_verify_temp_table(table_desc, NULL,
-							      &j);
-				if (ACPI_FAILURE(status)) {
-					acpi_tb_uninstall_table(table_desc);
+							      &j);//执行临时表验证(签名/长度/校验和)
+				if (ACPI_FAILURE(status)) {//如果验证失败 
+					acpi_tb_uninstall_table(table_desc);//卸载无效表格
 				}
 			}
 		}
 	}
 
-	acpi_gbl_root_table_list.flags |= ACPI_ROOT_ALLOW_RESIZE;
-	status = acpi_tb_resize_root_table_list();
-	acpi_gbl_root_table_list.flags |= ACPI_ROOT_ORIGIN_ALLOCATED;
+	acpi_gbl_root_table_list.flags |= ACPI_ROOT_ALLOW_RESIZE;//允许调整表列表大小（表列表动态扩容）
+	status = acpi_tb_resize_root_table_list();//执行实际内存重分配
+	acpi_gbl_root_table_list.flags |= ACPI_ROOT_ORIGIN_ALLOCATED;//标记内存为已分配
 
-	(void)acpi_ut_release_mutex(ACPI_MTX_TABLES);
-	return_ACPI_STATUS(status);
+	(void)acpi_ut_release_mutex(ACPI_MTX_TABLES);//释放表格互斥锁
+	return_ACPI_STATUS(status);//返回最终操作状态
 }
 
 ACPI_EXPORT_SYMBOL_INIT(acpi_reallocate_root_table)

@@ -184,70 +184,71 @@ acpi_ns_attach_object(struct acpi_namespace_node *node,
  *              Otherwise, the field is simply cleared.
  *
  ******************************************************************************/
-
+/* 解除ACPI命名空间节点与关联对象的绑定，处理对象引用计数和资源释放 */
 void acpi_ns_detach_object(struct acpi_namespace_node *node)
 {
-	union acpi_operand_object *obj_desc;
+	union acpi_operand_object *obj_desc;//定义操作对象联合体指针
 
 	ACPI_FUNCTION_TRACE(ns_detach_object);
 
-	obj_desc = node->object;
+	obj_desc = node->object;//获取当前节点绑定的操作对象
 
-	if (!obj_desc || (obj_desc->common.type == ACPI_TYPE_LOCAL_DATA)) {
+	if (!obj_desc || (obj_desc->common.type == ACPI_TYPE_LOCAL_DATA)) {//如果对象不存在或对象是本地数据类型，直接返回
 		return_VOID;
 	}
 
-	if (node->flags & ANOBJ_ALLOCATED_BUFFER) {
+	/* 处理动态分配的AML缓冲区  */
+	if (node->flags & ANOBJ_ALLOCATED_BUFFER) {//如果节点标记了已分配缓冲区
 
 		/* Free the dynamic aml buffer */
 
-		if (obj_desc->common.type == ACPI_TYPE_METHOD) {
-			ACPI_FREE(obj_desc->method.aml_start);
+		if (obj_desc->common.type == ACPI_TYPE_METHOD) {//如果对象是方法类型
+			ACPI_FREE(obj_desc->method.aml_start);//释放方法对象的AML字节码内存
 		}
 	}
 
-	if (obj_desc->common.type == ACPI_TYPE_REGION) {
-		acpi_ut_remove_address_range(obj_desc->region.space_id, node);
+	if (obj_desc->common.type == ACPI_TYPE_REGION) {//如果对象是地址空间区域类型
+		acpi_ut_remove_address_range(obj_desc->region.space_id, node);//从全局列表中移除该地址区域注册
 	}
 
 	/* Clear the Node entry in all cases */
 
-	node->object = NULL;
-	if (ACPI_GET_DESCRIPTOR_TYPE(obj_desc) == ACPI_DESC_TYPE_OPERAND) {
+	node->object = NULL;//清空节点对象指针
+	if (ACPI_GET_DESCRIPTOR_TYPE(obj_desc) == ACPI_DESC_TYPE_OPERAND) {//如果是有效操作对象
 
 		/* Unlink object from front of possible object list */
 
-		node->object = obj_desc->common.next_object;
+		node->object = obj_desc->common.next_object;//将节点指向对象链表的下一个对象
 
 		/* Handle possible 2-descriptor object */
 
-		if (node->object &&
-		    (node->object->common.type != ACPI_TYPE_LOCAL_DATA)) {
-			node->object = node->object->common.next_object;
+		if (node->object &&//如果存在下一个对象
+		    (node->object->common.type != ACPI_TYPE_LOCAL_DATA)) {//且不是本地数据对象
+			node->object = node->object->common.next_object;// 继续移动到下一个有效对象
 		}
 
 		/*
 		 * Detach the object from any data objects (which are still held by
 		 * the namespace node)
 		 */
-		if (obj_desc->common.next_object &&
-		    ((obj_desc->common.next_object)->common.type ==
+		if (obj_desc->common.next_object &&//如果存在后续对象
+		    ((obj_desc->common.next_object)->common.type ==//且是本地数据对象
 		     ACPI_TYPE_LOCAL_DATA)) {
-			obj_desc->common.next_object = NULL;
+			obj_desc->common.next_object = NULL;//清空链接以断开数据对象
 		}
 	}
 
 	/* Reset the node type to untyped */
 
-	node->type = ACPI_TYPE_ANY;
+	node->type = ACPI_TYPE_ANY;//将节点类型重置为未定义类型
 
 	ACPI_DEBUG_PRINT((ACPI_DB_NAMES, "Node %p [%4.4s] Object %p\n",
 			  node, acpi_ut_get_node_name(node), obj_desc));
 
 	/* Remove one reference on the object (and all subobjects) */
 
-	acpi_ut_remove_reference(obj_desc);
-	return_VOID;
+	acpi_ut_remove_reference(obj_desc);//减少对象引用计数（当计数为0时自动释放）
+	return_VOID;//函数返回宏
 }
 
 /*******************************************************************************

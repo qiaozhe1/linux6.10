@@ -706,7 +706,7 @@ void acpi_ut_add_reference(union acpi_operand_object *object)
  * DESCRIPTION: Decrement the reference count of an ACPI internal object
  *
  ******************************************************************************/
-
+/* 安全减少ACPI操作对象的引用计数，当计数归零时触发对象释放 */
 void acpi_ut_remove_reference(union acpi_operand_object *object)
 {
 
@@ -717,14 +717,14 @@ void acpi_ut_remove_reference(union acpi_operand_object *object)
 	 * each caller from having to check. Also, ignore NS nodes.
 	 */
 	if (!object ||
-	    (ACPI_GET_DESCRIPTOR_TYPE(object) == ACPI_DESC_TYPE_NAMED)) {
-		return;
+	    (ACPI_GET_DESCRIPTOR_TYPE(object) == ACPI_DESC_TYPE_NAMED)) {//如果对象指针为空或 对象描述符类型为命名空间节点类型
+		return;//直接返回不处理
 	}
 
 	/* Ensure that we have a valid object */
 
-	if (!acpi_ut_valid_internal_object(object)) {
-		return;
+	if (!acpi_ut_valid_internal_object(object)) {//如果对象结构验证失败（非法地址或损坏对象）
+		return;//直接返回，防止非法内存访问
 	}
 
 	ACPI_DEBUG_PRINT_RAW((ACPI_DB_ALLOCATIONS,
@@ -737,6 +737,6 @@ void acpi_ut_remove_reference(union acpi_operand_object *object)
 	 * if the reference count becomes 0. (Must also decrement the ref count
 	 * of all subobjects!)
 	 */
-	(void)acpi_ut_update_object_reference(object, REF_DECREMENT);
+	(void)acpi_ut_update_object_reference(object, REF_DECREMENT);//递减引用计数并递归处理所有子对象，当引用计数归零时自动触发对象释放（REF_DECREMENT表示递减操作）
 	return;
 }

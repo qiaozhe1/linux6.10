@@ -34,27 +34,28 @@ void ae_do_object_overrides(void);
  *              called, so any early initialization belongs here.
  *
  ******************************************************************************/
-
+/* 初始化ACPI子系统核心组件 */
 acpi_status ACPI_INIT_FUNCTION acpi_initialize_subsystem(void)
 {
 	acpi_status status;
 
 	ACPI_FUNCTION_TRACE(acpi_initialize_subsystem);
 
-	acpi_gbl_startup_flags = ACPI_SUBSYSTEM_INITIALIZE;
-	ACPI_DEBUG_EXEC(acpi_ut_init_stack_ptr_trace());
+	/* 阶段1：设置子系统启动标志  */
+	acpi_gbl_startup_flags = ACPI_SUBSYSTEM_INITIALIZE;//标记初始化阶段开始
+	ACPI_DEBUG_EXEC(acpi_ut_init_stack_ptr_trace());//调试模式时初始化堆栈跟踪
 
 	/* Initialize the OS-Dependent layer */
-
-	status = acpi_os_initialize();
-	if (ACPI_FAILURE(status)) {
+	/* 阶段2：操作系统依赖层初始化 */
+	status = acpi_os_initialize();//初始化OS抽象层（硬件相关操作）
+	if (ACPI_FAILURE(status)) {//如果操作系统层初始化失败
 		ACPI_EXCEPTION((AE_INFO, status, "During OSL initialization"));
-		return_ACPI_STATUS(status);
+		return_ACPI_STATUS(status);//返回错误码
 	}
 
 	/* Initialize all globals used by the subsystem */
-
-	status = acpi_ut_init_globals();
+	/* 阶段3：全局变量初始化 */
+	status = acpi_ut_init_globals();//初始化ACPI全局数据结构
 	if (ACPI_FAILURE(status)) {
 		ACPI_EXCEPTION((AE_INFO, status,
 				"During initialization of globals"));
@@ -62,8 +63,8 @@ acpi_status ACPI_INIT_FUNCTION acpi_initialize_subsystem(void)
 	}
 
 	/* Create the default mutex objects */
-
-	status = acpi_ut_mutex_initialize();
+	/* 阶段4：互斥锁系统初始化 */
+	status = acpi_ut_mutex_initialize();//创建核心互斥锁对象
 	if (ACPI_FAILURE(status)) {
 		ACPI_EXCEPTION((AE_INFO, status,
 				"During Global Mutex creation"));
@@ -74,7 +75,8 @@ acpi_status ACPI_INIT_FUNCTION acpi_initialize_subsystem(void)
 	 * Initialize the namespace manager and
 	 * the root of the namespace tree
 	 */
-	status = acpi_ns_root_initialize();
+	/* 阶段5：命名空间初始化 */
+	status = acpi_ns_root_initialize();//创建命名空间根节点
 	if (ACPI_FAILURE(status)) {
 		ACPI_EXCEPTION((AE_INFO, status,
 				"During Namespace initialization"));
@@ -82,15 +84,15 @@ acpi_status ACPI_INIT_FUNCTION acpi_initialize_subsystem(void)
 	}
 
 	/* Initialize the global OSI interfaces list with the static names */
-
-	status = acpi_ut_initialize_interfaces();
+	/* 阶段6：OSI接口初始化 */
+	status = acpi_ut_initialize_interfaces();//加载预设OS兼容接口 
 	if (ACPI_FAILURE(status)) {
 		ACPI_EXCEPTION((AE_INFO, status,
 				"During OSI interfaces initialization"));
 		return_ACPI_STATUS(status);
 	}
 
-	return_ACPI_STATUS(AE_OK);
+	return_ACPI_STATUS(AE_OK);//所有阶段成功完成
 }
 
 ACPI_EXPORT_SYMBOL_INIT(acpi_initialize_subsystem)
