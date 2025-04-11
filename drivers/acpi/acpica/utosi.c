@@ -106,28 +106,28 @@ static struct acpi_interface_info acpi_default_supported_interfaces[] = {
  *
  ******************************************************************************/
 
-acpi_status acpi_ut_initialize_interfaces(void)
+acpi_status acpi_ut_initialize_interfaces(void)//初始化ACPI预定义操作系统接口(OSI)列表
 {
 	acpi_status status;
 	u32 i;
 
-	status = acpi_os_acquire_mutex(acpi_gbl_osi_mutex, ACPI_WAIT_FOREVER);
+	status = acpi_os_acquire_mutex(acpi_gbl_osi_mutex, ACPI_WAIT_FOREVER);//获取OSI全局互斥锁（防止并发初始化）
 	if (ACPI_FAILURE(status)) {
 		return (status);
 	}
 
-	acpi_gbl_supported_interfaces = acpi_default_supported_interfaces;
+	acpi_gbl_supported_interfaces = acpi_default_supported_interfaces;// 将全局支持接口指针指向静态默认列表
 
 	/* Link the static list of supported interfaces */
 
 	for (i = 0;
 	     i < (ACPI_ARRAY_LENGTH(acpi_default_supported_interfaces) - 1);
-	     i++) {
+	     i++) {//构建静态接口链表（将数组转换为链表结构）
 		acpi_default_supported_interfaces[i].next =
-		    &acpi_default_supported_interfaces[(acpi_size)i + 1];
+		    &acpi_default_supported_interfaces[(acpi_size)i + 1];//设置当前节点的next指针指向下一个数组元素 
 	}
 
-	acpi_os_release_mutex(acpi_gbl_osi_mutex);
+	acpi_os_release_mutex(acpi_gbl_osi_mutex);//释放OSI全局互斥锁
 	return (AE_OK);
 }
 
@@ -194,19 +194,19 @@ acpi_status acpi_ut_interface_terminate(void)
  *
  ******************************************************************************/
 
-acpi_status acpi_ut_install_interface(acpi_string interface_name)
+acpi_status acpi_ut_install_interface(acpi_string interface_name)//安装新的ACPI接口到全局支持列表
 {
 	struct acpi_interface_info *interface_info;
 
 	/* Allocate info block and space for the name string */
 
 	interface_info =
-	    ACPI_ALLOCATE_ZEROED(sizeof(struct acpi_interface_info));
+	    ACPI_ALLOCATE_ZEROED(sizeof(struct acpi_interface_info));//分配接口信息结构内存并清零
 	if (!interface_info) {
 		return (AE_NO_MEMORY);
 	}
 
-	interface_info->name = ACPI_ALLOCATE_ZEROED(strlen(interface_name) + 1);
+	interface_info->name = ACPI_ALLOCATE_ZEROED(strlen(interface_name) + 1);//分配接口名称字符串内存并清零
 	if (!interface_info->name) {
 		ACPI_FREE(interface_info);
 		return (AE_NO_MEMORY);
@@ -214,11 +214,11 @@ acpi_status acpi_ut_install_interface(acpi_string interface_name)
 
 	/* Initialize new info and insert at the head of the global list */
 
-	strcpy(interface_info->name, interface_name);
-	interface_info->flags = ACPI_OSI_DYNAMIC;
-	interface_info->next = acpi_gbl_supported_interfaces;
+	strcpy(interface_info->name, interface_name);//复制接口名称
+	interface_info->flags = ACPI_OSI_DYNAMIC;//标记为动态安装
+	interface_info->next = acpi_gbl_supported_interfaces;//指向当前链表头
 
-	acpi_gbl_supported_interfaces = interface_info;
+	acpi_gbl_supported_interfaces = interface_info;//新节点成为全局链表头
 	return (AE_OK);
 }
 
@@ -235,54 +235,56 @@ acpi_status acpi_ut_install_interface(acpi_string interface_name)
  *
  ******************************************************************************/
 
-acpi_status acpi_ut_remove_interface(acpi_string interface_name)
+acpi_status acpi_ut_remove_interface(acpi_string interface_name)//从全局支持列表中移除指定的ACPI接口
 {
 	struct acpi_interface_info *previous_interface;
 	struct acpi_interface_info *next_interface;
 
-	previous_interface = next_interface = acpi_gbl_supported_interfaces;
+	previous_interface = next_interface = acpi_gbl_supported_interfaces;//初始化指针，从链表头开始遍历
 	while (next_interface) {
-		if (!strcmp(interface_name, next_interface->name)) {
+		if (!strcmp(interface_name, next_interface->name)) {//如果 找到匹配的接口名称
 			/*
 			 * Found: name is in either the static list
 			 * or was added at runtime
 			 */
-			if (next_interface->flags & ACPI_OSI_DYNAMIC) {
+			if (next_interface->flags & ACPI_OSI_DYNAMIC) {//情况1：如果是动态安装的接口(ACPI_OSI_DYNAMIC标志置位)
 
 				/* Interface was added dynamically, remove and free it */
 
-				if (previous_interface == next_interface) {
+				if (previous_interface == next_interface) {//如果是链表头节点
 					acpi_gbl_supported_interfaces =
 					    next_interface->next;
-				} else {
+				} else {//普通中间节点
 					previous_interface->next =
 					    next_interface->next;
 				}
 
+				/* 释放内存 */
 				ACPI_FREE(next_interface->name);
 				ACPI_FREE(next_interface);
-			} else {
+			} else {//情况2：如果是静态列表中的接口
 				/*
 				 * Interface is in static list. If marked invalid, then
 				 * it does not actually exist. Else, mark it invalid.
 				 */
-				if (next_interface->flags & ACPI_OSI_INVALID) {
+				if (next_interface->flags & ACPI_OSI_INVALID) {//如果 已经标记为无效
 					return (AE_NOT_EXIST);
 				}
 
-				next_interface->flags |= ACPI_OSI_INVALID;
+				next_interface->flags |= ACPI_OSI_INVALID;//否则 标记为无效
 			}
 
 			return (AE_OK);
 		}
-
+		
+		/* 移动到下一个节点 */
 		previous_interface = next_interface;
 		next_interface = next_interface->next;
 	}
 
 	/* Interface was not found */
 
-	return (AE_NOT_EXIST);
+	return (AE_NOT_EXIST);//接口未找到
 }
 
 /*******************************************************************************
@@ -300,29 +302,29 @@ acpi_status acpi_ut_remove_interface(acpi_string interface_name)
  *
  ******************************************************************************/
 
-acpi_status acpi_ut_update_interfaces(u8 action)
+acpi_status acpi_ut_update_interfaces(u8 action)//批量更新ACPI接口状态
 {
-	struct acpi_interface_info *next_interface;
+	struct acpi_interface_info *next_interface;//当前遍历的接口节点
 
-	next_interface = acpi_gbl_supported_interfaces;
+	next_interface = acpi_gbl_supported_interfaces;//从全局链表头开始遍历
 	while (next_interface) {
 		if (((next_interface->flags & ACPI_OSI_FEATURE) &&
-		     (action & ACPI_FEATURE_STRINGS)) ||
+		     (action & ACPI_FEATURE_STRINGS)) ||//特性接口且操作指定特性
 		    (!(next_interface->flags & ACPI_OSI_FEATURE) &&
-		     (action & ACPI_VENDOR_STRINGS))) {
-			if (action & ACPI_DISABLE_INTERFACES) {
+		     (action & ACPI_VENDOR_STRINGS))) {//或者厂商接口且操作指定厂商
+			if (action & ACPI_DISABLE_INTERFACES) {//根据操作设置接口有效性
 
 				/* Mark the interfaces as invalid */
 
-				next_interface->flags |= ACPI_OSI_INVALID;
+				next_interface->flags |= ACPI_OSI_INVALID;//标记接口为无效
 			} else {
 				/* Mark the interfaces as valid */
 
-				next_interface->flags &= ~ACPI_OSI_INVALID;
+				next_interface->flags &= ~ACPI_OSI_INVALID;//清除无效标记
 			}
 		}
 
-		next_interface = next_interface->next;
+		next_interface = next_interface->next;//移动到下一个节点
 	}
 
 	return (AE_OK);
@@ -341,20 +343,20 @@ acpi_status acpi_ut_update_interfaces(u8 action)
  *
  ******************************************************************************/
 
-struct acpi_interface_info *acpi_ut_get_interface(acpi_string interface_name)
+struct acpi_interface_info *acpi_ut_get_interface(acpi_string interface_name)//获取指定名称的ACPI接口信息结构
 {
-	struct acpi_interface_info *next_interface;
+	struct acpi_interface_info *next_interface;// 当前遍历的接口节点指针
 
-	next_interface = acpi_gbl_supported_interfaces;
+	next_interface = acpi_gbl_supported_interfaces;//从全局接口链表头开始遍历
 	while (next_interface) {
-		if (!strcmp(interface_name, next_interface->name)) {
-			return (next_interface);
+		if (!strcmp(interface_name, next_interface->name)) {//如果当前节点名称与查询名称匹配
+			return (next_interface);//返回找到的节点指针
 		}
 
-		next_interface = next_interface->next;
+		next_interface = next_interface->next;//移动到链表下一个节点
 	}
 
-	return (NULL);
+	return (NULL);//返回NULL表示未找到
 }
 
 /*******************************************************************************

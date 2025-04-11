@@ -1665,15 +1665,15 @@ acpi_status __init acpi_os_initialize(void)//初始化操作系统层ACPI硬件�
 	return AE_OK;
 }
 
-acpi_status __init acpi_os_initialize1(void)
+acpi_status __init acpi_os_initialize1(void)// ACPI操作系统服务层初始化（阶段1）
 {
-	kacpid_wq = alloc_workqueue("kacpid", 0, 1);
-	kacpi_notify_wq = alloc_workqueue("kacpi_notify", 0, 0);
-	kacpi_hotplug_wq = alloc_ordered_workqueue("kacpi_hotplug", 0);
+	kacpid_wq = alloc_workqueue("kacpid", 0, 1);//创建ACPI事件处理工作队列,单线程工作队列（max_active=1）,用于处理AML异步执行事件（如Notify操作）
+	kacpi_notify_wq = alloc_workqueue("kacpi_notify", 0, 0);//创建ACPI通知处理工作队列,多线程工作队列（默认并发）,处理设备热插拔/电源状态通知
+	kacpi_hotplug_wq = alloc_ordered_workqueue("kacpi_hotplug", 0);//创建ACPI热插拔有序工作队列,严格顺序执行的工作队列,保证设备添加/删除操作的顺序性
 	BUG_ON(!kacpid_wq);
 	BUG_ON(!kacpi_notify_wq);
 	BUG_ON(!kacpi_hotplug_wq);
-	acpi_osi_init();
+	acpi_osi_init();//初始化操作系统接口(_OSI)支持列表,建立默认_OSI能力字符串（如"Linux"、"Windows"等）
 	return AE_OK;
 }
 

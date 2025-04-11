@@ -255,43 +255,43 @@ ACPI_EXPORT_SYMBOL(acpi_purge_cached_objects)
  * DESCRIPTION: Install an _OSI interface to the global list
  *
  ****************************************************************************/
-acpi_status acpi_install_interface(acpi_string interface_name)
+acpi_status acpi_install_interface(acpi_string interface_name)//安装ACPI操作系统接口(OSI)字符串到全局支持列表
 {
 	acpi_status status;
-	struct acpi_interface_info *interface_info;
+	struct acpi_interface_info *interface_info;//接口信息指针
 
 	/* Parameter validation */
 
-	if (!interface_name || (strlen(interface_name) == 0)) {
+	if (!interface_name || (strlen(interface_name) == 0)) {//检查空指针或空字符串
 		return (AE_BAD_PARAMETER);
 	}
 
-	status = acpi_os_acquire_mutex(acpi_gbl_osi_mutex, ACPI_WAIT_FOREVER);
+	status = acpi_os_acquire_mutex(acpi_gbl_osi_mutex, ACPI_WAIT_FOREVER);//获取OSI列表互斥锁（防止并发修改）
 	if (ACPI_FAILURE(status)) {
 		return (status);
 	}
 
 	/* Check if the interface name is already in the global list */
 
-	interface_info = acpi_ut_get_interface(interface_name);
-	if (interface_info) {
+	interface_info = acpi_ut_get_interface(interface_name);//检查接口是否已存在于全局列表,遍历全局列表查找
+	if (interface_info) {//如果找到已存在的接口
 		/*
 		 * The interface already exists in the list. This is OK if the
 		 * interface has been marked invalid -- just clear the bit.
 		 */
-		if (interface_info->flags & ACPI_OSI_INVALID) {
-			interface_info->flags &= ~ACPI_OSI_INVALID;
+		if (interface_info->flags & ACPI_OSI_INVALID) {//已存在但标记为无效的接口
+			interface_info->flags &= ~ACPI_OSI_INVALID;//清除标志位
 			status = AE_OK;
 		} else {
-			status = AE_ALREADY_EXISTS;
+			status = AE_ALREADY_EXISTS;//返回已存在错误
 		}
 	} else {
-		/* New interface name, install into the global list */
+		/* New interface name, install into the global list*/
 
-		status = acpi_ut_install_interface(interface_name);
+		status = acpi_ut_install_interface(interface_name);//将接口名称安装到全局列表
 	}
 
-	acpi_os_release_mutex(acpi_gbl_osi_mutex);
+	acpi_os_release_mutex(acpi_gbl_osi_mutex);//释放OSI列表互斥锁
 	return (status);
 }
 
@@ -345,22 +345,22 @@ ACPI_EXPORT_SYMBOL(acpi_remove_interface)
  *              _OSI. A NULL handler simply removes any existing handler.
  *
  ****************************************************************************/
-acpi_status acpi_install_interface_handler(acpi_interface_handler handler)
+acpi_status acpi_install_interface_handler(acpi_interface_handler handler)//安装ACPI接口处理程序
 {
 	acpi_status status;
 
-	status = acpi_os_acquire_mutex(acpi_gbl_osi_mutex, ACPI_WAIT_FOREVER);
+	status = acpi_os_acquire_mutex(acpi_gbl_osi_mutex, ACPI_WAIT_FOREVER);//获取OSI互斥锁
 	if (ACPI_FAILURE(status)) {
 		return (status);
 	}
 
-	if (handler && acpi_gbl_interface_handler) {
-		status = AE_ALREADY_EXISTS;
+	if (handler && acpi_gbl_interface_handler) {//如果传入非空handler且已存在处理程序
+		status = AE_ALREADY_EXISTS;// 设置"已存在"错误码
 	} else {
-		acpi_gbl_interface_handler = handler;
+		acpi_gbl_interface_handler = handler;//更新全局处理程序
 	}
 
-	acpi_os_release_mutex(acpi_gbl_osi_mutex);
+	acpi_os_release_mutex(acpi_gbl_osi_mutex);//释放互斥锁
 	return (status);
 }
 

@@ -39,23 +39,26 @@ static struct acpi_osi_config {
 
 static struct acpi_osi_config osi_config;
 static struct acpi_osi_entry
+/* ACPI _OSI 接口初始化设置表 */
 osi_setup_entries[OSI_STRING_ENTRIES_MAX] __initdata = {
-	{"Module Device", true},
-	{"Processor Device", true},
-	{"3.0 _SCP Extensions", true},
-	{"Processor Aggregator Device", true},
+	{"Module Device", true},//存在模块设备则启用此接口
+	{"Processor Device", true},//需要处理器设备支持则启用
+	{"3.0 _SCP Extensions", true},//需要_SCP扩展功能则启用
+	{"Processor Aggregator Device", true},//支持处理器聚合则启用
 };
 
-static u32 acpi_osi_handler(acpi_string interface, u32 supported)
+static u32 acpi_osi_handler(acpi_string interface, u32 supported)//处理ACPI _OSI操作系统接口查询
 {
-	if (!strcmp("Linux", interface)) {
+	if (!strcmp("Linux", interface)) {//如果 查询的接口是"Linux"
+		/* 打印一次性通知消息(FW_BUG表示可能是固件问题) */
 		pr_notice_once(FW_BUG
 			"BIOS _OSI(Linux) query %s%s\n",
 			osi_config.linux_enable ? "honored" : "ignored",
 			osi_config.linux_cmdline ? " via cmdline" :
 			osi_config.linux_dmi ? " via DMI" : "");
 	}
-	if (!strcmp("Darwin", interface)) {
+	if (!strcmp("Darwin", interface)) {//如果 查询的接口是"Darwin" 
+		/* 打印Darwin查询通知(无FW_BUG标记) */
 		pr_notice_once(
 			"BIOS _OSI(Darwin) query %s%s\n",
 			osi_config.darwin_enable ? "honored" : "ignored",
@@ -189,15 +192,15 @@ static void __init acpi_osi_setup_linux(bool enable)
  * string starting with '!' disables that string
  * otherwise string is added to list, augmenting built-in strings
  */
-static void __init acpi_osi_setup_late(void)
+static void __init acpi_osi_setup_late(void)//初始化后期ACPI _OSI接口设置
 {
-	struct acpi_osi_entry *osi;
-	char *str;
-	int i;
-	acpi_status status;
+	struct acpi_osi_entry *osi;//指向OSI接口条目的指针
+	char *str;//存储接口名称字符串
+	int i;//循环计数器
+	acpi_status status;//存储ACPI操作状态
 
-	if (osi_config.default_disabling) {
-		status = acpi_update_interfaces(osi_config.default_disabling);
+	if (osi_config.default_disabling) {//如果配置了默认禁用接口标志
+		status = acpi_update_interfaces(osi_config.default_disabling);//尝试更新ACPI接口设置
 		if (ACPI_SUCCESS(status))
 			pr_info("Disabled all _OSI OS vendors%s\n",
 				osi_config.default_disabling ==
@@ -205,17 +208,17 @@ static void __init acpi_osi_setup_late(void)
 				" and feature groups" : "");
 	}
 
-	for (i = 0; i < OSI_STRING_ENTRIES_MAX; i++) {
-		osi = &osi_setup_entries[i];
-		str = osi->string;
-		if (*str == '\0')
-			break;
-		if (osi->enable) {
-			status = acpi_install_interface(str);
+	for (i = 0; i < OSI_STRING_ENTRIES_MAX; i++) {//遍历所有预定义的OSI接口条目
+		osi = &osi_setup_entries[i];//获取当前条目
+		str = osi->string;//获取接口名称
+		if (*str == '\0')//如果遇到空字符串(条目结束标记)
+			break;//终止循环
+		if (osi->enable) {//如果当前接口配置为启用
+			status = acpi_install_interface(str);//尝试安装该接口
 			if (ACPI_SUCCESS(status))
 				pr_info("Added _OSI(%s)\n", str);
-		} else {
-			status = acpi_remove_interface(str);
+		} else {//接口配置为禁用
+			status = acpi_remove_interface(str);//尝试移除该接口
 			if (ACPI_SUCCESS(status))
 				pr_info("Deleted _OSI(%s)\n", str);
 		}
@@ -480,10 +483,10 @@ int __init early_acpi_osi_init(void)
 	return 0;
 }
 
-int __init acpi_osi_init(void)
+int __init acpi_osi_init(void)//初始化ACPI操作系统接口(OSI)支持
 {
-	acpi_install_interface_handler(acpi_osi_handler);
-	acpi_osi_setup_late();
+	acpi_install_interface_handler(acpi_osi_handler);//安装OSI接口处理程序
+	acpi_osi_setup_late();//执行后期OSI设置(处理启动参数等)
 
 	return 0;
 }

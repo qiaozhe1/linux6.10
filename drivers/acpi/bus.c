@@ -1331,12 +1331,12 @@ static acpi_status acpi_bus_table_handler(u32 event, void *table, void *context)
 
 static int __init acpi_bus_init(void)
 {
-	int result;
-	acpi_status status;
+	int result;//用于存储函数返回状态（0成功，负数为错误码）
+	acpi_status status;//ACPI操作状态（AE_OK等）
 
-	acpi_os_initialize1();
+	acpi_os_initialize1();//阶段1初始化：设置OS服务层（内存管理/中断等基础功能）,启用/禁用服务接口
 
-	status = acpi_load_tables();
+	status = acpi_load_tables();//加载ACPI系统描述表（RSDT/XSDT/FADT等）
 	if (ACPI_FAILURE(status)) {
 		pr_err("Unable to load the System Description Tables\n");
 		goto error1;
@@ -1351,16 +1351,20 @@ static int __init acpi_bus_init(void)
 	 *
 	 * Do that before calling acpi_initialize_objects() which may trigger EC
 	 * address space accesses.
+	 * 提前探测ECDT（Embedded Controller Description Table）：
+	 * - ACPI 2.0+要求EC驱动在命名空间枚举前就绪
+	 * - 通过ECDT获取EC控制器的硬件参数
+	 * - 避免后续acpi_initialize_objects()触发EC操作时无驱动支持
 	 */
 	acpi_ec_ecdt_probe();
 
-	status = acpi_enable_subsystem(ACPI_NO_ACPI_ENABLE);
+	status = acpi_enable_subsystem(ACPI_NO_ACPI_ENABLE);//启用ACPI子系统（不执行ACPI_ENABLE命令）
 	if (ACPI_FAILURE(status)) {
 		pr_err("Unable to start the ACPI Interpreter\n");
 		goto error1;
 	}
 
-	status = acpi_initialize_objects(ACPI_FULL_INITIALIZATION);
+	status = acpi_initialize_objects(ACPI_FULL_INITIALIZATION);//完全初始化ACPI命名空间对象 
 	if (ACPI_FAILURE(status)) {
 		pr_err("Unable to initialize ACPI objects\n");
 		goto error1;
@@ -1369,33 +1373,46 @@ static int __init acpi_bus_init(void)
 	/*
 	 * _OSC method may exist in module level code,
 	 * so it must be run after ACPI_FULL_INITIALIZATION
+	 * 执行_OSC（Operating System Capabilities）协商：
+	 * - 必须在完全初始化后调用（依赖模块级代码已执行）
+	 * - 平台控制：协商电源管理/热控制等特性所有权
+	 * - USB控制：协商USB3电源管理控制权
 	 */
-	acpi_bus_osc_negotiate_platform_control();
-	acpi_bus_osc_negotiate_usb_control();
+	acpi_bus_osc_negotiate_platform_control();//平台控制
+	acpi_bus_osc_negotiate_usb_control();//USB控制
 
 	/*
 	 * _PDC control method may load dynamic SSDT tables,
 	 * and we need to install the table handler before that.
+	 * 安装ACPI表处理程序：
+	 * - 用于处理动态加载的SSDT表
+	 * - 必须在_PDC方法可能触发的表加载前注册
 	 */
 	status = acpi_install_table_handler(acpi_bus_table_handler, NULL);
 
-	acpi_sysfs_init();
+	acpi_sysfs_init();//初始化ACPI sysfs接口（/sys/firmware/acpi/）
 
-	acpi_early_processor_control_setup();
+	acpi_early_processor_control_setup();//早期处理器控制设置（如P-state/C-state）
 
 	/*
 	 * Maybe EC region is required at bus_scan/acpi_get_devices. So it
 	 * is necessary to enable it as early as possible.
+	 * 探测DSDT中的EC设备：
+	 * - 早于总线扫描确保EC区域可用
+	 * - EC控制器常用于键盘背光/传感器等关键功能
 	 */
 	acpi_ec_dsdt_probe();
 
 	pr_info("Interpreter enabled\n");
 
 	/* Initialize sleep structures */
-	acpi_sleep_init();
+	acpi_sleep_init();//初始化睡眠状态结构（S-states），配置S1-S4状态
 
 	/*
 	 * Get the system interrupt model and evaluate \_PIC.
+	 * 初始化中断模型：
+	 * - 检测PIC/APIC中断控制器
+	 * - 评估\_PIC方法设置中断模式
 	 */
 	result = acpi_bus_init_irq();
 	if (result)
@@ -1403,6 +1420,9 @@ static int __init acpi_bus_init(void)
 
 	/*
 	 * Register the for all standard device notifications.
+	 * 注册全局通知处理器：
+	 * - 监听ACPI_ROOT_OBJECT下的系统事件
+	 * - 处理设备热插拔/电源状态变更等
 	 */
 	status =
 	    acpi_install_notify_handler(ACPI_ROOT_OBJECT, ACPI_SYSTEM_NOTIFY,
@@ -1414,16 +1434,19 @@ static int __init acpi_bus_init(void)
 
 	/*
 	 * Create the top ACPI proc directory
+	 * 创建/proc/acpi目录：
+	 * - 传统接口，部分工具仍依赖
+	 * - 现代系统更常用/sys/firmware/acpi
 	 */
 	acpi_root_dir = proc_mkdir(ACPI_BUS_FILE_ROOT, NULL);
 
-	result = bus_register(&acpi_bus_type);
+	result = bus_register(&acpi_bus_type);//注册ACPI总线类型（创建/sys/bus/acpi）
 	if (!result)
 		return 0;
 
 	/* Mimic structured exception handling */
       error1:
-	acpi_terminate();
+	acpi_terminate();//终止ACPI子系统（释放所有资源）
 	return -ENODEV;
 }
 
