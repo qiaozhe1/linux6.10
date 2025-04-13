@@ -415,26 +415,26 @@ static void acpi_os_drop_map_ref(struct acpi_ioremap *map)
  * __acpi_unmap_table() is an __init function, the __ref annotation is needed
  * here.
  */
-void __ref acpi_os_unmap_iomem(void __iomem *virt, acpi_size size)
+void __ref acpi_os_unmap_iomem(void __iomem *virt, acpi_size size)//解除ACPI内存映射，释放虚拟地址到物理地址的映射关系
 {
 	struct acpi_ioremap *map;
 
-	if (!acpi_permanent_mmap) {
-		__acpi_unmap_table(virt, size);
+	if (!acpi_permanent_mmap) {//全局标志，如果启用永久映射模式
+		__acpi_unmap_table(virt, size);// 解除映射，无需引用计数管理。
 		return;
 	}
 
-	mutex_lock(&acpi_ioremap_lock);
+	mutex_lock(&acpi_ioremap_lock);//获取互斥锁
 
-	map = acpi_map_lookup_virt(virt, size);
+	map = acpi_map_lookup_virt(virt, size);//根据虚拟地址virt和大小size，在映射表中查找对应的acpi_ioremap条目。
 	if (!map) {
 		mutex_unlock(&acpi_ioremap_lock);
 		WARN(true, "ACPI: %s: bad address %p\n", __func__, virt);
 		return;
 	}
-	acpi_os_drop_map_ref(map);
+	acpi_os_drop_map_ref(map);//减少映射记录的引用计数。
 
-	mutex_unlock(&acpi_ioremap_lock);
+	mutex_unlock(&acpi_ioremap_lock);//释放锁，允许其他线程访问映射表
 }
 EXPORT_SYMBOL_GPL(acpi_os_unmap_iomem);
 
@@ -783,6 +783,22 @@ acpi_os_write_memory(acpi_physical_address phys_addr, u64 value, u32 width)
 }
 
 #ifdef CONFIG_PCI
+/*
+ * acpi_os_read_pci_configuration - 操作系统层PCI配置空间读函数
+ * @pci_id:   PCI设备定位结构体（段/总线/设备/功能号）
+ * @reg:      配置空间寄存器偏移（0-255字节）
+ * @value:    输出参数，存储读取的值（根据width扩展为64位）
+ * @width:    访问位宽（8/16/32位）
+ *
+ * 返回值:
+ *  AE_OK         - 读取成功
+ *  AE_BAD_PARAMETER - 参数错误
+ *  AE_ERROR      - PCI访问失败
+ *
+ * 功能描述:
+ *  该函数通过平台底层PCI访问接口读取指定PCI设备的配置空间，
+ *  支持不同位宽访问，并严格遵循PCI Local Bus规范3.0第6章。
+ */
 acpi_status
 acpi_os_read_pci_configuration(struct acpi_pci_id *pci_id, u32 reg,
 			       u64 *value, u32 width)
@@ -790,12 +806,12 @@ acpi_os_read_pci_configuration(struct acpi_pci_id *pci_id, u32 reg,
 	int result, size;
 	u32 value32;
 
-	if (!value)
+	if (!value)//参数有效性验证
 		return AE_BAD_PARAMETER;
 
-	switch (width) {
+	switch (width) {// 位宽到字节数转换
 	case 8:
-		size = 1;
+		size = 1;//1字节访问
 		break;
 	case 16:
 		size = 2;
@@ -807,21 +823,31 @@ acpi_os_read_pci_configuration(struct acpi_pci_id *pci_id, u32 reg,
 		return AE_ERROR;
 	}
 
+	/*
+    	 * 执行底层PCI读取操作：
+    	 * 参数：
+   	 * - pci_id->segment : PCI段号（支持复杂拓扑）
+    	 * - pci_id->bus     : 总线号
+    	 * - PCI_DEVFN()     : 设备号(高5位)+功能号(低3位)合成
+    	 * - reg             : 配置寄存器偏移
+    	 * - size            : 访问字节数
+    	 * - &value32        : 结果存储地址
+    	 */
 	result = raw_pci_read(pci_id->segment, pci_id->bus,
 				PCI_DEVFN(pci_id->device, pci_id->function),
 				reg, size, &value32);
-	*value = value32;
+	*value = value32;//将结果转换为64位（高位补零）
 
 	return (result ? AE_ERROR : AE_OK);
 }
 
 acpi_status
 acpi_os_write_pci_configuration(struct acpi_pci_id *pci_id, u32 reg,
-				u64 value, u32 width)
+				u64 value, u32 width)//操作系统层PCI配置空间读函数
 {
 	int result, size;
 
-	switch (width) {
+	switch (width) {//位宽到字节数转换
 	case 8:
 		size = 1;
 		break;
@@ -837,7 +863,7 @@ acpi_os_write_pci_configuration(struct acpi_pci_id *pci_id, u32 reg,
 
 	result = raw_pci_write(pci_id->segment, pci_id->bus,
 				PCI_DEVFN(pci_id->device, pci_id->function),
-				reg, size, value);
+				reg, size, value);//执行底层PCI写操作
 
 	return (result ? AE_ERROR : AE_OK);
 }

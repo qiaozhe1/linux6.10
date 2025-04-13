@@ -895,11 +895,13 @@ struct acpi_parse_obj_asl {
 	u8 extra;
 	char parse_op_name[ACPI_MAX_PARSEOP_NAME];
 };
-
+/*
+ * union acpi_parse_object - ACPI解析树节点通用数据结构
+ */
 union acpi_parse_object {
-	struct acpi_parse_obj_common common;
-	struct acpi_parse_obj_named named;
-	struct acpi_parse_obj_asl asl;
+	struct acpi_parse_obj_common common;//：所有解析对象通用字段
+	struct acpi_parse_obj_named named;//命名对象扩展：用于Device/Method等需要名称绑定的对象
+	struct acpi_parse_obj_asl asl;//ASL编译器专用：携带源代码级调试信息
 };
 
 struct asl_comment_state {

@@ -1334,7 +1334,7 @@ static int __init acpi_bus_init(void)
 	int result;//用于存储函数返回状态（0成功，负数为错误码）
 	acpi_status status;//ACPI操作状态（AE_OK等）
 
-	acpi_os_initialize1();//阶段1初始化：设置OS服务层（内存管理/中断等基础功能）,启用/禁用服务接口
+	acpi_os_initialize1();//阶段1初始化：设置OS服务层,启用/禁用服务接口
 
 	status = acpi_load_tables();//加载ACPI系统描述表（RSDT/XSDT/FADT等）
 	if (ACPI_FAILURE(status)) {

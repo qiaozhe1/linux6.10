@@ -36,7 +36,22 @@ static acpi_status acpi_ns_delete_subtree(acpi_handle start_handle);
  * DESCRIPTION: Load one ACPI table into the namespace
  *
  ******************************************************************************/
-
+/* 
+ * acpi_ns_load_table - 将ACPI表加载到命名空间并初始化相关对象
+ * @table_index: 在ACPI全局表(RSDT/XSDT)中的索引位置
+ * @node:        挂载点的命名空间节点（通常为根节点）
+ * 
+ * 核心功能：
+ * 1. 两阶段加载机制：先创建命名空间对象，后解析控制方法
+ * 2. 资源生命周期管理（owner_id机制）
+ * 3. 错误回滚处理（命名空间对象删除）
+ * 4. 并发控制（解释器锁）
+ * 
+ * 特殊处理：
+ * - 防止重复加载
+ * - 处理前向引用问题
+ * - 支持Just-In-Time方法解析
+ */
 acpi_status
 acpi_ns_load_table(u32 table_index, struct acpi_namespace_node *node)
 {
@@ -44,9 +59,8 @@ acpi_ns_load_table(u32 table_index, struct acpi_namespace_node *node)
 
 	ACPI_FUNCTION_TRACE(ns_load_table);
 
-	/* If table already loaded into namespace, just return */
-
-	if (acpi_tb_is_table_loaded(table_index)) {
+	/* 如果表已加载到命名空间，直接返回 */
+	if (acpi_tb_is_table_loaded(table_index)) {//检查全局表状态标志位
 		status = AE_ALREADY_EXISTS;
 		goto unlock;
 	}
@@ -54,57 +68,48 @@ acpi_ns_load_table(u32 table_index, struct acpi_namespace_node *node)
 	ACPI_DEBUG_PRINT((ACPI_DB_INFO,
 			  "**** Loading table into namespace ****\n"));
 
-	status = acpi_tb_allocate_owner_id(table_index);
+	status = acpi_tb_allocate_owner_id(table_index);//分配所有者ID（用于资源跟踪）
 	if (ACPI_FAILURE(status)) {
 		goto unlock;
 	}
 
 	/*
-	 * Parse the table and load the namespace with all named
-	 * objects found within. Control methods are NOT parsed
-	 * at this time. In fact, the control methods cannot be
-	 * parsed until the entire namespace is loaded, because
-	 * if a control method makes a forward reference (call)
-	 * to another control method, we can't continue parsing
-	 * because we don't know how many arguments to parse next!
-	 */
-	status = acpi_ns_parse_table(table_index, node);
-	if (ACPI_SUCCESS(status)) {
-		acpi_tb_set_table_loaded_flag(table_index, TRUE);
+    	 * 解析表并将所有命名对象加载到命名空间。
+    	 * 此时不解析控制方法。实际上，在完整加载命名空间前无法解析控制方法，
+    	 * 因为控制方法可能包含前向引用（调用其他方法），此时无法确定参数数量
+    	 */
+	status = acpi_ns_parse_table(table_index, node);// 核心解析函数（创建Device/Scope等对象）
+	if (ACPI_SUCCESS(status)) {//如果解析成功
+		acpi_tb_set_table_loaded_flag(table_index, TRUE);//设置表加载状态标志位
 	} else {
 		/*
-		 * On error, delete any namespace objects created by this table.
-		 * We cannot initialize these objects, so delete them. There are
-		 * a couple of especially bad cases:
-		 * AE_ALREADY_EXISTS - namespace collision.
-		 * AE_NOT_FOUND - the target of a Scope operator does not
-		 * exist. This target of Scope must already exist in the
-		 * namespace, as per the ACPI specification.
-		 */
+        	 * 错误时删除本表创建的所有命名空间对象。
+        	 * 典型错误场景：
+        	 * - AE_ALREADY_EXISTS: 命名空间节点冲突
+        	 * - AE_NOT_FOUND: Scope操作符目标不存在（违反ACPI规范）
+        	 */
 		acpi_ns_delete_namespace_by_owner(acpi_gbl_root_table_list.
-						  tables[table_index].owner_id);
+						  tables[table_index].owner_id);//按所有者删除命名空间对象
 
-		acpi_tb_release_owner_id(table_index);
-		return_ACPI_STATUS(status);
+		acpi_tb_release_owner_id(table_index);//释放分配的所有者ID
+		return_ACPI_STATUS(status);//带函数跟踪的返回宏
 	}
 
-unlock:
-	if (ACPI_FAILURE(status)) {
-		return_ACPI_STATUS(status);
+unlock://统一错误处理标签
+	if (ACPI_FAILURE(status)) {//最终状态检查
+		return_ACPI_STATUS(status);//返回前执行调试输出
 	}
 
 	/*
-	 * Now we can parse the control methods. We always parse
-	 * them here for a sanity check, and if configured for
-	 * just-in-time parsing, we delete the control method
-	 * parse trees.
-	 */
+    	 * 现在可以安全解析控制方法。此处总会进行解析以完整性检查，
+    	 * 如果配置为JIT解析，则会删除控制方法解析树
+    	 */
 	ACPI_DEBUG_PRINT((ACPI_DB_INFO,
 			  "**** Begin Table Object Initialization\n"));
 
-	acpi_ex_enter_interpreter();
-	status = acpi_ds_initialize_objects(table_index, node);
-	acpi_ex_exit_interpreter();
+	acpi_ex_enter_interpreter();//获取解释器互斥锁
+	status = acpi_ds_initialize_objects(table_index, node);//初始化方法/区域/缓冲区等对象
+	acpi_ex_exit_interpreter();//释放解释器互斥锁
 
 	ACPI_DEBUG_PRINT((ACPI_DB_INFO,
 			  "**** Completed Table Object Initialization\n"));

@@ -30,52 +30,55 @@ ACPI_MODULE_NAME("evrgnini")
  * DESCRIPTION: Setup a system_memory operation region
  *
  ******************************************************************************/
+/* 系统内存区域的初始化和释放函数 
+ * ACPI系统内存区域的核心管理函数，负责在区域激活时分配上下文并记录物理地址，在去激活时释放所有资源。
+ * */
 acpi_status
-acpi_ev_system_memory_region_setup(acpi_handle handle,
-				   u32 function,
-				   void *handler_context, void **region_context)
+acpi_ev_system_memory_region_setup(acpi_handle handle,//指向ACPI命名空间节点的句柄
+				   u32 function,//操作类型（ACPI_REGION_ACTIVATE或ACPI_REGION_DEACTIVATE）。
+				   void *handler_context, void **region_context)//区域处理程序的上下文（未使用）;指向区域上下文的指针，用于存储内存映射信息
 {
 	union acpi_operand_object *region_desc =
-	    (union acpi_operand_object *)handle;
+	    (union acpi_operand_object *)handle;//将handle转换为区域对象
 	struct acpi_mem_space_context *local_region_context;
-	struct acpi_mem_mapping *mm;
+	struct acpi_mem_mapping *mm;//内存映射关系
 
 	ACPI_FUNCTION_TRACE(ev_system_memory_region_setup);
 
-	if (function == ACPI_REGION_DEACTIVATE) {
+	if (function == ACPI_REGION_DEACTIVATE) {//如果是去激活
 		if (*region_context) {
 			local_region_context =
 			    (struct acpi_mem_space_context *)*region_context;
 
 			/* Delete memory mappings if present */
 
-			while (local_region_context->first_mm) {
+			while (local_region_context->first_mm) {//遍历first_mm链表，逐个解除映射并释放内存
 				mm = local_region_context->first_mm;
 				local_region_context->first_mm = mm->next_mm;
 				acpi_os_unmap_memory(mm->logical_address,
-						     mm->length);
-				ACPI_FREE(mm);
+						     mm->length);//解除虚拟地址映射
+				ACPI_FREE(mm);//释放struct acpi_mem_mapping结构体
 			}
-			ACPI_FREE(local_region_context);
-			*region_context = NULL;
+			ACPI_FREE(local_region_context);//释放区域上下文
+			*region_context = NULL;//标记为空，表示资源已释放
 		}
 		return_ACPI_STATUS(AE_OK);
 	}
 
 	/* Create a new context */
-
+	/* 激活状态：分配上下文 */
 	local_region_context =
-	    ACPI_ALLOCATE_ZEROED(sizeof(struct acpi_mem_space_context));
+	    ACPI_ALLOCATE_ZEROED(sizeof(struct acpi_mem_space_context));//分配并初始化区域上下文
 	if (!(local_region_context)) {
 		return_ACPI_STATUS(AE_NO_MEMORY);
 	}
 
 	/* Save the region length and address for use in the handler */
-
+	/* 记录区域的长度和物理地址 */
 	local_region_context->length = region_desc->region.length;
 	local_region_context->address = region_desc->region.address;
 
-	*region_context = local_region_context;
+	*region_context = local_region_context;//返回上下文
 	return_ACPI_STATUS(AE_OK);
 }
 
@@ -93,7 +96,7 @@ acpi_ev_system_memory_region_setup(acpi_handle handle,
  * DESCRIPTION: Setup a IO operation region
  *
  ******************************************************************************/
-
+/* I/O 地址空间区域（OpRegion）的激活/停用处理 */
 acpi_status
 acpi_ev_io_space_region_setup(acpi_handle handle,
 			      u32 function,
@@ -101,10 +104,10 @@ acpi_ev_io_space_region_setup(acpi_handle handle,
 {
 	ACPI_FUNCTION_TRACE(ev_io_space_region_setup);
 
-	if (function == ACPI_REGION_DEACTIVATE) {
-		*region_context = NULL;
-	} else {
-		*region_context = handler_context;
+	if (function == ACPI_REGION_DEACTIVATE) {//如果是区域停用操作
+		*region_context = NULL;//清空区域上下文
+	} else {//如果是区域激活操作
+		*region_context = handler_context;//传递处理程序上下文到区域上下文
 	}
 
 	return_ACPI_STATUS(AE_OK);
@@ -126,7 +129,24 @@ acpi_ev_io_space_region_setup(acpi_handle handle,
  * MUTEX:       Assumes namespace is not locked
  *
  ******************************************************************************/
-
+/* 
+ * acpi_ev_pci_config_region_setup - PCI配置空间操作区域(OpRegion)的初始化/释放
+ * @handle:        ACPI操作区域对象句柄
+ * @function:      操作类型（ACPI_REGION_ACTIVATE/DEACTIVATE）
+ * @handler_context: 处理程序上下文（未使用）
+ * @region_context:  区域上下文指针的指针（输入输出参数）
+ * 
+ * 返回值:
+ *  AE_OK          - 操作成功
+ *  AE_NO_MEMORY   - 内存分配失败
+ *  AE_NOT_EXIST   - 未找到处理程序
+ *  AE_AML_OPERAND_TYPE - 无效的操作数类型
+ * 
+ * 功能描述:
+ *  1. 处理PCI配置空间的激活/停用操作
+ *  2. 激活时构建PCI ID信息（段/总线/设备/功能号）
+ *  3. 自动检测并关联PCI根桥处理程序
+ */
 acpi_status
 acpi_ev_pci_config_region_setup(acpi_handle handle,
 				u32 function,
@@ -134,17 +154,17 @@ acpi_ev_pci_config_region_setup(acpi_handle handle,
 {
 	acpi_status status = AE_OK;
 	u64 pci_value;
-	struct acpi_pci_id *pci_id = *region_context;
-	union acpi_operand_object *handler_obj;
-	struct acpi_namespace_node *parent_node;
-	struct acpi_namespace_node *pci_root_node;
-	struct acpi_namespace_node *pci_device_node;
+	struct acpi_pci_id *pci_id = *region_context;//PCI ID结构指针
+	union acpi_operand_object *handler_obj;//处理程序对象
+	struct acpi_namespace_node *parent_node;//父节点指针
+	struct acpi_namespace_node *pci_root_node;//PCI根桥节点
+	struct acpi_namespace_node *pci_device_node;//PCI设备节点
 	union acpi_operand_object *region_obj =
-	    (union acpi_operand_object *)handle;
+	    (union acpi_operand_object *)handle;//转换句柄为区域对象
 
 	ACPI_FUNCTION_TRACE(ev_pci_config_region_setup);
 
-	handler_obj = region_obj->region.handler;
+	handler_obj = region_obj->region.handler;//获取区域对象关联的处理程序对象
 	if (!handler_obj) {
 		/*
 		 * No installed handler. This shouldn't happen because the dispatch
@@ -156,44 +176,43 @@ acpi_ev_pci_config_region_setup(acpi_handle handle,
 		return_ACPI_STATUS(AE_NOT_EXIST);
 	}
 
-	*region_context = NULL;
-	if (function == ACPI_REGION_DEACTIVATE) {
-		if (pci_id) {
-			ACPI_FREE(pci_id);
+	*region_context = NULL;//初始化上下文指针
+	if (function == ACPI_REGION_DEACTIVATE) {//如果是区域停用请求
+		if (pci_id) {//如果存在已分配的PCI ID结构
+			ACPI_FREE(pci_id);//释放内存
 		}
 		return_ACPI_STATUS(status);
 	}
 
-	parent_node = region_obj->region.node->parent;
+	/* 激活处理开始 */
+
+	parent_node = region_obj->region.node->parent;//获取区域对象的父节点
 
 	/*
-	 * Get the _SEG and _BBN values from the device upon which the handler
-	 * is installed.
-	 *
-	 * We need to get the _SEG and _BBN objects relative to the PCI BUS device.
-	 * This is the device the handler has been registered to handle.
+	 * 从安装了处理程序的设备上获取 _SEG 和 _BBN 的值。
+	 * 我们需要获取相对于PCI总线设备 的 _SEG 和 _BBN 对象。这是处理程序已经注册
+	 * 来处理的设备。
 	 */
 
 	/*
-	 * If the address_space.Node is still pointing to the root, we need
-	 * to scan upward for a PCI Root bridge and re-associate the op_region
-	 * handlers with that device.
+	 * 如果address_space.Node仍然指向根节点，我们需要向上扫描寻找PCI根桥，并
+	 * 将op_region处理程序重新关联到该设备。
 	 */
-	if (handler_obj->address_space.node == acpi_gbl_root_node) {
+	if (handler_obj->address_space.node == acpi_gbl_root_node) {// 如果当前处理程序挂载在根节点
 
 		/* Start search from the parent object */
 
-		pci_root_node = parent_node;
-		while (pci_root_node != acpi_gbl_root_node) {
+		pci_root_node = parent_node;//从父对象开始搜索
+		while (pci_root_node != acpi_gbl_root_node) {//向上遍历命名空间直到根节点
 
 			/* Get the _HID/_CID in order to detect a root_bridge */
 
-			if (acpi_ev_is_pci_root_bridge(pci_root_node)) {
+			if (acpi_ev_is_pci_root_bridge(pci_root_node)) {// 检测是否为PCI根桥节点（通过_HID/_CID）
 
 				/* Install a handler for this PCI root bridge */
 
-				status = acpi_install_address_space_handler((acpi_handle)pci_root_node, ACPI_ADR_SPACE_PCI_CONFIG, ACPI_DEFAULT_HANDLER, NULL, NULL);
-				if (ACPI_FAILURE(status)) {
+				status = acpi_install_address_space_handler((acpi_handle)pci_root_node, ACPI_ADR_SPACE_PCI_CONFIG, ACPI_DEFAULT_HANDLER, NULL, NULL);//为此根桥安装默认PCI配置空间处理程序
+				if (ACPI_FAILURE(status)) {//处理安装结果
 					if (status == AE_SAME_HANDLER) {
 						/*
 						 * It is OK if the handler is already installed on the
@@ -208,28 +227,28 @@ acpi_ev_pci_config_region_setup(acpi_handle handle,
 								(pci_root_node)));
 					}
 				}
-				break;
+				break;//找到根桥后退出循环
 			}
 
-			pci_root_node = pci_root_node->parent;
+			pci_root_node = pci_root_node->parent;//继续向上层搜索
 		}
 
 		/* PCI root bridge not found, use namespace root node */
-	} else {
-		pci_root_node = handler_obj->address_space.node;
+	} else {//处理程序已关联到非根节点
+		pci_root_node = handler_obj->address_space.node;//处理程序所在节点作为根节点
 	}
 
 	/*
 	 * If this region is now initialized, we are done.
 	 * (install_address_space_handler could have initialized it)
 	 */
-	if (region_obj->region.flags & AOPOBJ_SETUP_COMPLETE) {
+	if (region_obj->region.flags & AOPOBJ_SETUP_COMPLETE) {//检查区域是否已完成初始化
 		return_ACPI_STATUS(AE_OK);
 	}
 
 	/* Region is still not initialized. Create a new context */
 
-	pci_id = ACPI_ALLOCATE_ZEROED(sizeof(struct acpi_pci_id));
+	pci_id = ACPI_ALLOCATE_ZEROED(sizeof(struct acpi_pci_id));//分配并清零PCI ID结构内存
 	if (!pci_id) {
 		return_ACPI_STATUS(AE_NO_MEMORY);
 	}
@@ -241,14 +260,14 @@ acpi_ev_pci_config_region_setup(acpi_handle handle,
 	 * Find the parent device object. (This allows the operation region to be
 	 * within a subscope under the device, such as a control method.)
 	 */
-	pci_device_node = region_obj->region.node;
+	pci_device_node = region_obj->region.node;//获取当前区域的节点
 	while (pci_device_node && (pci_device_node->type != ACPI_TYPE_DEVICE)) {
-		pci_device_node = pci_device_node->parent;
+		pci_device_node = pci_device_node->parent;// 向上遍历直到设备节点
 	}
 
-	if (!pci_device_node) {
-		ACPI_FREE(pci_id);
-		return_ACPI_STATUS(AE_AML_OPERAND_TYPE);
+	if (!pci_device_node) {//如果未找到设备节点
+		ACPI_FREE(pci_id);//释放pci_id结构内存
+		return_ACPI_STATUS(AE_AML_OPERAND_TYPE);//返回操作数类型错误
 	}
 
 	/*
@@ -256,44 +275,44 @@ acpi_ev_pci_config_region_setup(acpi_handle handle,
 	 * contained in the parent's scope.
 	 */
 	status = acpi_ut_evaluate_numeric_object(METHOD_NAME__ADR,
-						 pci_device_node, &pci_value);
+						 pci_device_node, &pci_value);//从设备节点的_ADR对象获取设备/功能号
 
 	/*
 	 * The default is zero, and since the allocation above zeroed the data,
 	 * just do nothing on failure.
 	 */
-	if (ACPI_SUCCESS(status)) {
-		pci_id->device = ACPI_HIWORD(ACPI_LODWORD(pci_value));
-		pci_id->function = ACPI_LOWORD(ACPI_LODWORD(pci_value));
+	if (ACPI_SUCCESS(status)) {//如果成功获取
+		pci_id->device = ACPI_HIWORD(ACPI_LODWORD(pci_value));//提取高16位为设备号
+		pci_id->function = ACPI_LOWORD(ACPI_LODWORD(pci_value));//提取低16位为功能号
 	}
 
 	/* The PCI segment number comes from the _SEG method */
 
 	status = acpi_ut_evaluate_numeric_object(METHOD_NAME__SEG,
-						 pci_root_node, &pci_value);
-	if (ACPI_SUCCESS(status)) {
-		pci_id->segment = ACPI_LOWORD(pci_value);
+						 pci_root_node, &pci_value);//从根桥节点获取段号(_SEG方法)
+	if (ACPI_SUCCESS(status)) {//如果成功获取
+		pci_id->segment = ACPI_LOWORD(pci_value);//取低16位作为段号
 	}
 
 	/* The PCI bus number comes from the _BBN method */
 
 	status = acpi_ut_evaluate_numeric_object(METHOD_NAME__BBN,
-						 pci_root_node, &pci_value);
-	if (ACPI_SUCCESS(status)) {
-		pci_id->bus = ACPI_LOWORD(pci_value);
+						 pci_root_node, &pci_value);//从根桥节点获取总线号(_BBN方法)
+	if (ACPI_SUCCESS(status)) {//如果成功获取
+		pci_id->bus = ACPI_LOWORD(pci_value);//取低16位作为总线号
 	}
 
 	/* Complete/update the PCI ID for this device */
 
 	status =
 	    acpi_hw_derive_pci_id(pci_id, pci_root_node,
-				  region_obj->region.node);
-	if (ACPI_FAILURE(status)) {
-		ACPI_FREE(pci_id);
+				  region_obj->region.node);//校验并完善PCI ID信息
+	if (ACPI_FAILURE(status)) {//如果失败
+		ACPI_FREE(pci_id);//释放已分配内存
 		return_ACPI_STATUS(status);
 	}
 
-	*region_context = pci_id;
+	*region_context = pci_id;//将PCI ID结构传递回调用者
 	return_ACPI_STATUS(AE_OK);
 }
 
@@ -422,39 +441,55 @@ acpi_ev_cmos_region_setup(acpi_handle handle,
  * MUTEX:       Assumes namespace is not locked
  *
  ******************************************************************************/
-
+/* 
+ * acpi_ev_data_table_region_setup - 数据表区域（Data Table Region）的激活/停用处理函数
+ * @handle:        操作区域对象句柄（ACPI内部对象）
+ * @function:      操作类型（ACPI_REGION_ACTIVATE 或 ACPI_REGION_DEACTIVATE）
+ * @handler_context: 未使用（保留参数）
+ * @region_context: 输入输出参数，传递区域上下文指针的指针
+ *
+ * 返回值:
+ *  AE_OK           - 操作成功
+ *  AE_NO_MEMORY    - 内存分配失败
+ *
+ * 功能描述:
+ *  1. 处理数据表区域的激活与停用：
+ *     - 激活时分配上下文并保存数据表指针
+ *     - 停用时释放上下文资源
+ *  2. 上下文结构 acpi_data_table_mapping 用于在访问区域时定位数据表
+ */
 acpi_status
 acpi_ev_data_table_region_setup(acpi_handle handle,
 				u32 function,
 				void *handler_context, void **region_context)
 {
 	union acpi_operand_object *region_desc =
-	    (union acpi_operand_object *)handle;
-	struct acpi_data_table_mapping *local_region_context;
+	    (union acpi_operand_object *)handle;//转换句柄为操作区域对象
+	struct acpi_data_table_mapping *local_region_context;//本地上下文指针
 
 	ACPI_FUNCTION_TRACE(ev_data_table_region_setup);
 
-	if (function == ACPI_REGION_DEACTIVATE) {
-		if (*region_context) {
-			ACPI_FREE(*region_context);
+	if (function == ACPI_REGION_DEACTIVATE) {//如果是区域停用请求
+		if (*region_context) {// 检查是否存在已分配的上下文
+			ACPI_FREE(*region_context);//释放内存
 			*region_context = NULL;
 		}
 		return_ACPI_STATUS(AE_OK);
 	}
 
 	/* Create a new context */
-
+	/* 激活处理：分配并初始化上下文结构 */
 	local_region_context =
-	    ACPI_ALLOCATE_ZEROED(sizeof(struct acpi_data_table_mapping));
-	if (!(local_region_context)) {
-		return_ACPI_STATUS(AE_NO_MEMORY);
+	    ACPI_ALLOCATE_ZEROED(sizeof(struct acpi_data_table_mapping));//分配并清零内存
+	if (!(local_region_context)) {//检查内存分配是否成功
+		return_ACPI_STATUS(AE_NO_MEMORY);//返回内存不足错误
 	}
 
 	/* Save the data table pointer for use in the handler */
+	/* 保存数据表指针，以便在处理程序中使用 */
+	local_region_context->pointer = region_desc->region.pointer;//从区域对象获取数据表地址
 
-	local_region_context->pointer = region_desc->region.pointer;
-
-	*region_context = local_region_context;
+	*region_context = local_region_context;//将新上下文返回
 	return_ACPI_STATUS(AE_OK);
 }
 
@@ -472,7 +507,29 @@ acpi_ev_data_table_region_setup(acpi_handle handle,
  * DESCRIPTION: Default region initialization
  *
  ******************************************************************************/
-
+/* 
+ * acpi_ev_default_region_setup - ACPI默认区域（OpRegion）激活/停用处理函数
+ * @handle:        ACPI操作区域对象句柄（未使用）
+ * @function:      操作类型（ACPI_REGION_ACTIVATE/DEACTIVATE）
+ * @handler_context: 处理程序上下文（通常为区域访问方法指针）
+ * @region_context: 输入输出参数，用于存储区域上下文指针
+ *
+ * 返回值:
+ *  AE_OK           - 始终返回成功
+ *
+ * 功能描述:
+ *  该函数为不需要特殊初始化/清理的ACPI区域提供默认设置逻辑：
+ *   1. 激活时直接传递handler_context到region_context
+ *   2. 停用时清空region_context指针
+ *  适用于以下地址空间类型：
+ *   - SystemMemory/SystemIO（已由更专用处理程序覆盖）
+ *   - PCI_Config（独立处理程序）
+ *   - EC（Embedded Controller）等需要简单上下文传递的区域
+ *
+ * 设计要点:
+ *  - 不涉及内存分配/释放，依赖外部管理handler_context生命周期
+ *  - 作为通用回退机制，适用于无特殊需求的区域类型
+ */
 acpi_status
 acpi_ev_default_region_setup(acpi_handle handle,
 			     u32 function,
@@ -480,10 +537,10 @@ acpi_ev_default_region_setup(acpi_handle handle,
 {
 	ACPI_FUNCTION_TRACE(ev_default_region_setup);
 
-	if (function == ACPI_REGION_DEACTIVATE) {
-		*region_context = NULL;
-	} else {
-		*region_context = handler_context;
+	if (function == ACPI_REGION_DEACTIVATE) {//如果是区域停用请求
+		*region_context = NULL;//清空上下文指针
+	} else {//区域激活请求
+		*region_context = handler_context;//直接传递预定义上下文
 	}
 
 	return_ACPI_STATUS(AE_OK);

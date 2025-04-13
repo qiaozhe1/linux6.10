@@ -797,7 +797,21 @@ acpi_status acpi_tb_delete_namespace_by_owner(u32 table_index)
  * DESCRIPTION: Allocates owner_id in table_desc
  *
  ******************************************************************************/
-
+/*
+ * acpi_tb_allocate_owner_id - 为指定ACPI表分配所有者ID
+ * @table_index: 需要分配ID的ACPI表索引
+ * 
+ * 核心功能：
+ * 1. 通过全局锁保护表列表访问
+ * 2. 验证表索引有效性
+ * 3. 调用底层ID分配器管理owner_id资源
+ * 4. 维护表描述符中的所有者标识
+ *
+ * 设计要点：
+ * - 使用ACPI_MTX_TABLES互斥锁保证并发安全
+ * - owner_id用于跟踪表创建的命名空间对象
+ * - 分配失败将保持表描述符原有状态
+ */
 acpi_status acpi_tb_allocate_owner_id(u32 table_index)
 {
 	acpi_status status = AE_BAD_PARAMETER;
@@ -805,11 +819,11 @@ acpi_status acpi_tb_allocate_owner_id(u32 table_index)
 	ACPI_FUNCTION_TRACE(tb_allocate_owner_id);
 
 	(void)acpi_ut_acquire_mutex(ACPI_MTX_TABLES);
-	if (table_index < acpi_gbl_root_table_list.current_table_count) {
+	if (table_index < acpi_gbl_root_table_list.current_table_count) {//验证索引有效性：索引值必须小于当前表数量
 		status =
 		    acpi_ut_allocate_owner_id(&
 					      (acpi_gbl_root_table_list.
-					       tables[table_index].owner_id));
+					       tables[table_index].owner_id));//调用核心ID分配函数,将新分配的owner_id存入表描述符
 	}
 
 	(void)acpi_ut_release_mutex(ACPI_MTX_TABLES);

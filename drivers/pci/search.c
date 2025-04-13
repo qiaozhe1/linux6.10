@@ -138,17 +138,38 @@ static struct pci_bus *pci_do_find_bus(struct pci_bus *bus, unsigned char busnr)
  * in the global list of PCI buses.  If the bus is found, a pointer to its
  * data structure is returned.  If no bus is found, %NULL is returned.
  */
+/*
+ * pci_find_bus - 在指定PCI域中查找特定总线号的PCI总线对象
+ * @domain: PCI域号（多主机桥系统使用）
+ * @busnr: 目标总线号
+ *
+ * 返回值:
+ *   成功: 指向struct pci_bus的指针
+ *   失败: NULL（未找到匹配的总线）
+ *
+ * 功能描述:
+ *   该函数遍历系统所有PCI总线，首先筛选出属于目标域的总线，
+ *   然后在匹配域的总线树中查找指定总线号的总线对象。
+ *   支持多级总线架构（PCI-PCI桥接器场景）。
+ *
+ * 算法步骤:
+ *   1. 初始化bus指针为NULL，启动总线遍历循环
+ *   2. 使用pci_find_next_bus迭代获取下一个总线对象
+ *   3. 检查当前总线是否属于目标域（domain过滤）
+ *   4. 对符合域条件的总线，调用pci_do_find_bus进行深度搜索
+ *   5. 找到匹配总线号后立即返回，优化搜索效率
+ */
 struct pci_bus *pci_find_bus(int domain, int busnr)
 {
-	struct pci_bus *bus = NULL;
-	struct pci_bus *tmp_bus;
+	struct pci_bus *bus = NULL;//总线遍历迭代指针，初始化为NULL开始全系统搜索
+	struct pci_bus *tmp_bus;//临时存储候选总线对象
 
-	while ((bus = pci_find_next_bus(bus)) != NULL)  {
-		if (pci_domain_nr(bus) != domain)
+	while ((bus = pci_find_next_bus(bus)) != NULL)  {//遍历系统中的所有PCI总线,pci_find_next_bus返回下一个总线对象
+		if (pci_domain_nr(bus) != domain)//段号匹配检查：跳过不属于目标段的总线,pci_domain_nr提取总线所属段号
 			continue;
-		tmp_bus = pci_do_find_bus(bus, busnr);
+		tmp_bus = pci_do_find_bus(bus, busnr);//在当前总线的层级结构中查找指定总线号
 		if (tmp_bus)
-			return tmp_bus;
+			return tmp_bus;//找到目标总线，立即返回
 	}
 	return NULL;
 }
@@ -163,16 +184,38 @@ EXPORT_SYMBOL(pci_find_bus);
  * @from is not %NULL, searches continue from next device on the
  * global list.
  */
+/*
+ * pci_find_next_bus - 遍历系统中的PCI总线链表，返回下一个总线对象
+ * @from: 起始查找的总线对象指针，如果为NULL则从根总线开始遍历
+ *
+ * 返回值:
+ *   成功: 下一个PCI总线对象的指针
+ *   失败: NULL（表示已遍历完所有总线）
+ *
+ * 功能描述:
+ *   该函数用于安全地遍历系统中的PCI总线层次结构。通过维护全局PCI总线链表，
+ *   结合读信号量保护并发访问，实现高效的总线枚举。
+ *
+ * 同步机制:
+ *   - 使用读信号量pci_bus_sem保证遍历期间链表结构不被修改
+ *   - 允许并发读访问，阻止写操作（写操作需获取写信号量）
+ */
 struct pci_bus *pci_find_next_bus(const struct pci_bus *from)
 {
-	struct list_head *n;
-	struct pci_bus *b = NULL;
+	struct list_head *n;//链表节点遍历指针
+	struct pci_bus *b = NULL;//返回的总线对象指针
 
-	down_read(&pci_bus_sem);
+	down_read(&pci_bus_sem);//获取读信号量：允许并发读，阻塞写操作
+    
+	/* 
+    	 * 确定遍历起始点：
+    	 * - 若from非空：从该总线的链表节点下一个位置开始
+    	 * - 若from为空：从根总线链表头开始(pci_root_buses)
+    	 */
 	n = from ? from->node.next : pci_root_buses.next;
-	if (n != &pci_root_buses)
-		b = list_entry(n, struct pci_bus, node);
-	up_read(&pci_bus_sem);
+	if (n != &pci_root_buses)//检查当前节点是否为根总线链表头（防止无限循环）
+		b = list_entry(n, struct pci_bus, node);//通过list_entry宏将链表节点转换为pci_bus结构体：
+	up_read(&pci_bus_sem);//释放读信号量
 	return b;
 }
 EXPORT_SYMBOL(pci_find_next_bus);

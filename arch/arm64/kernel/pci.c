@@ -30,26 +30,26 @@ int pcibios_alloc_irq(struct pci_dev *dev)
 #endif
 
 /*
- * raw_pci_read/write - Platform-specific PCI config space access.
+ * raw_pci_read/write - 平台特定的PCI配置空间访问。
  */
 int raw_pci_read(unsigned int domain, unsigned int bus,
-		  unsigned int devfn, int reg, int len, u32 *val)
+		  unsigned int devfn, int reg, int len, u32 *val)//直接读取PCI配置空间的基础函数
 {
-	struct pci_bus *b = pci_find_bus(domain, bus);
+	struct pci_bus *b = pci_find_bus(domain, bus);//遍历全局PCI总线树查找,根据domain和bus号查找PCI总线对象
 
 	if (!b)
 		return PCIBIOS_DEVICE_NOT_FOUND;
-	return b->ops->read(b, devfn, reg, len, val);
+	return b->ops->read(b, devfn, reg, len, val);//调用总线操作集的read方法
 }
 
 int raw_pci_write(unsigned int domain, unsigned int bus,
-		unsigned int devfn, int reg, int len, u32 val)
+		unsigned int devfn, int reg, int len, u32 val)//直接写PCI配置空间的基础函数
 {
-	struct pci_bus *b = pci_find_bus(domain, bus);
+	struct pci_bus *b = pci_find_bus(domain, bus);//遍历全局PCI总线树查找,根据domain和bus号查找PCI总线对象
 
 	if (!b)
 		return PCIBIOS_DEVICE_NOT_FOUND;
-	return b->ops->write(b, devfn, reg, len, val);
+	return b->ops->write(b, devfn, reg, len, val);//调用总线操作集的write方法
 }
 
 #ifdef CONFIG_NUMA

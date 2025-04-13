@@ -644,40 +644,39 @@ struct pci_bus_resource {
 
 #define PCI_REGION_FLAG_MASK	0x0fU	/* These bits of resource flags tell us the PCI region flags */
 
-struct pci_bus {
-	struct list_head node;		/* Node in list of buses */
-	struct pci_bus	*parent;	/* Parent bus this bridge is on */
-	struct list_head children;	/* List of child buses */
-	struct list_head devices;	/* List of devices on this bus */
-	struct pci_dev	*self;		/* Bridge device as seen by parent */
-	struct list_head slots;		/* List of slots on this bus;
-					   protected by pci_slot_mutex */
-	struct resource *resource[PCI_BRIDGE_RESOURCE_NUM];
-	struct list_head resources;	/* Address space routed to this bus */
-	struct resource busn_res;	/* Bus numbers routed to this bus */
+struct pci_bus {//PCI总线对象
+	struct list_head node;		/* 嵌入全局PCI总线链表的节点 */
+	struct pci_bus	*parent;	/* 父总线指针（桥接器所在的上级总线） */
+	struct list_head children;	/* 子总线链表头（通过桥接器扩展的总线） */
+	struct list_head devices;	/* 挂载在本总线的PCI设备链表 */
+	struct pci_dev	*self;		/* 关联的桥接器设备（若本总线由桥接器创建） */
+	struct list_head slots;		/* 热插拔插槽链表（受pci_slot_mutex保护） */
+	struct resource *resource[PCI_BRIDGE_RESOURCE_NUM];//桥接器资源数组（MEM/IO/Prefetch）
+	struct list_head resources;	/* 可分配资源链表（继承自父总线+自身资源） */
+	struct resource busn_res;	/* 总线号资源范围（如 bus 0-3） */
 
-	struct pci_ops	*ops;		/* Configuration access functions */
-	void		*sysdata;	/* Hook for sys-specific extension */
-	struct proc_dir_entry *procdir;	/* Directory entry in /proc/bus/pci */
+	struct pci_ops	*ops;		/* 配置空间访问方法（read/write） */
+	void		*sysdata;	/* 平台特定数据（如ACPI、DT信息） */
+	struct proc_dir_entry *procdir;	/* /proc/bus/pci 中的目录项 */
 
-	unsigned char	number;		/* Bus number */
-	unsigned char	primary;	/* Number of primary bridge */
-	unsigned char	max_bus_speed;	/* enum pci_bus_speed */
-	unsigned char	cur_bus_speed;	/* enum pci_bus_speed */
+	unsigned char	number;		/* 本总线编号（在域内唯一） */
+	unsigned char	primary;	/* 主桥编号（用于多桥接器系统） */
+	unsigned char	max_bus_speed;	/* 最大支持速度（如PCI_SPEED_133MHz） */
+	unsigned char	cur_bus_speed;	/* 当前运行速度 */
 #ifdef CONFIG_PCI_DOMAINS_GENERIC
-	int		domain_nr;
+	int		domain_nr;//PCI域编号（多主机控制器系统）
 #endif
 
-	char		name[48];
+	char		name[48];//总线名称（如 "pci0000:00"）
 
-	unsigned short	bridge_ctl;	/* Manage NO_ISA/FBB/et al behaviors */
-	pci_bus_flags_t bus_flags;	/* Inherited by child buses */
-	struct device		*bridge;
-	struct device		dev;
-	struct bin_attribute	*legacy_io;	/* Legacy I/O for this bus */
-	struct bin_attribute	*legacy_mem;	/* Legacy mem */
-	unsigned int		is_added:1;
-	unsigned int		unsafe_warn:1;	/* warned about RW1C config write */
+	unsigned short	bridge_ctl;	/* 桥接控制字（控制ISA兼容/FBB等） */
+	pci_bus_flags_t bus_flags;	/* 总线特性标志（继承给子总线） */
+	struct device		*bridge;//关联的桥设备（用于设备树）
+	struct device		dev;//总线自身的设备对象
+	struct bin_attribute	*legacy_io;	/* 传统I/O空间映射 */
+	struct bin_attribute	*legacy_mem;	/* 传统内存空间映射 */
+	unsigned int		is_added:1;//标记总线是否已注册到系统
+	unsigned int		unsafe_warn:1;	/*  标记是否已提示RW1C配置访问警告 */
 };
 
 #define to_pci_bus(n)	container_of(n, struct pci_bus, dev)

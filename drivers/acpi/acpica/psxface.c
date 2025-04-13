@@ -238,18 +238,33 @@ cleanup:
  * DESCRIPTION: Execute a table
  *
  ******************************************************************************/
-
+/*
+ * acpi_ps_execute_table - 执行AML解析的核心控制函数
+ * @info: 包含表执行上下文信息的评估信息结构
+ * 
+ * 核心流程：
+ * 1. 创建解析树根节点
+ * 2. 初始化AML遍历状态结构
+ * 3. 配置模块级代码执行环境
+ * 4. 进入解释器执行AML解析
+ * 5. 清理临时资源
+ *
+ * 关键机制：
+ * - 使用walk_state管理解析执行上下文
+ * - 通过scope_stack处理命名空间作用域
+ * - 支持嵌套方法执行（通过method_is_nested标志）
+ */
 acpi_status acpi_ps_execute_table(struct acpi_evaluate_info *info)
 {
 	acpi_status status;
-	union acpi_parse_object *op = NULL;
-	struct acpi_walk_state *walk_state = NULL;
+	union acpi_parse_object *op = NULL;// 解析树根节点指针
+	struct acpi_walk_state *walk_state = NULL;//AML遍历状态控制结构
 
 	ACPI_FUNCTION_TRACE(ps_execute_table);
 
 	/* Create and init a Root Node */
 
-	op = acpi_ps_create_scope_op(info->obj_desc->method.aml_start);
+	op = acpi_ps_create_scope_op(info->obj_desc->method.aml_start);//创建解析树根节点（作用域节点）,基于AML起始地址创建
 	if (!op) {
 		status = AE_NO_MEMORY;
 		goto cleanup;
@@ -259,7 +274,7 @@ acpi_status acpi_ps_execute_table(struct acpi_evaluate_info *info)
 
 	walk_state =
 	    acpi_ds_create_walk_state(info->obj_desc->method.owner_id, NULL,
-				      NULL, NULL);
+				      NULL, NULL);//分配并初始化walk_state结构
 	if (!walk_state) {
 		status = AE_NO_MEMORY;
 		goto cleanup;
@@ -268,24 +283,24 @@ acpi_status acpi_ps_execute_table(struct acpi_evaluate_info *info)
 	status = acpi_ds_init_aml_walk(walk_state, op, info->node,
 				       info->obj_desc->method.aml_start,
 				       info->obj_desc->method.aml_length, info,
-				       info->pass_number);
+				       info->pass_number);//初始化AML遍历器
 	if (ACPI_FAILURE(status)) {
 		goto cleanup;
 	}
 
-	walk_state->method_pathname = info->full_pathname;
-	walk_state->method_is_nested = FALSE;
+	walk_state->method_pathname = info->full_pathname;// 设置方法路径名
+	walk_state->method_is_nested = FALSE;//标记非嵌套执行
 
-	if (info->obj_desc->method.info_flags & ACPI_METHOD_MODULE_LEVEL) {
-		walk_state->parse_flags |= ACPI_PARSE_MODULE_LEVEL;
+	if (info->obj_desc->method.info_flags & ACPI_METHOD_MODULE_LEVEL) {//处理模块级代码标志
+		walk_state->parse_flags |= ACPI_PARSE_MODULE_LEVEL;//设置模块级解析标志
 	}
 
-	/* Info->Node is the default location to load the table  */
-
-	if (info->node && info->node != acpi_gbl_root_node) {
+	/* Info->Node是加载表格的默认位置  */
+	/* 非根节点时需要推入作用域栈 */
+	if (info->node && info->node != acpi_gbl_root_node) {// 检查起始节点有效性
 		status =
 		    acpi_ds_scope_stack_push(info->node, ACPI_TYPE_METHOD,
-					     walk_state);
+					     walk_state);//压入作用域栈
 		if (ACPI_FAILURE(status)) {
 			goto cleanup;
 		}
@@ -294,17 +309,17 @@ acpi_status acpi_ps_execute_table(struct acpi_evaluate_info *info)
 	/*
 	 * Parse the AML, walk_state will be deleted by parse_aml
 	 */
-	acpi_ex_enter_interpreter();
-	status = acpi_ps_parse_aml(walk_state);
-	acpi_ex_exit_interpreter();
-	walk_state = NULL;
+	acpi_ex_enter_interpreter();// 获取解释器互斥锁
+	status = acpi_ps_parse_aml(walk_state);// 核心AML解析函数
+	acpi_ex_exit_interpreter();//释放解释器互斥锁
+	walk_state = NULL;//防止悬空指针
 
-cleanup:
+cleanup://资源清理标签
 	if (walk_state) {
-		acpi_ds_delete_walk_state(walk_state);
+		acpi_ds_delete_walk_state(walk_state);// 释放walk_state内存
 	}
 	if (op) {
-		acpi_ps_delete_parse_tree(op);
+		acpi_ps_delete_parse_tree(op);//递归删除解析树
 	}
 	return_ACPI_STATUS(status);
 }

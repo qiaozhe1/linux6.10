@@ -330,16 +330,15 @@ union acpi_name_union {
 	char ascii[4];
 };
 
-/* Internal ACPI Table Descriptor. One per ACPI table. */
-
+//内部 ACPI 表描述符。每个 ACPI 表一个。
 struct acpi_table_desc {
-	acpi_physical_address address;
-	struct acpi_table_header *pointer;
-	u32 length;		/* Length fixed at 32 bits (fixed in table header) */
-	union acpi_name_union signature;
-	acpi_owner_id owner_id;
-	u8 flags;
-	u16 validation_count;
+	acpi_physical_address address;//物理地址：表在内存中的物理地址
+	struct acpi_table_header *pointer;//虚拟地址：映射后的内核虚拟地址指针
+	u32 length;		//表长度（字节）：固定为32位，来自表头
+	union acpi_name_union signature;//表签名：如 "RSDT", "DSDT", "SSDT" 等
+	acpi_owner_id owner_id;//所有者ID：标识表的拥有者（如驱动或子系统）
+	u8 flags;//标志位：表的状态（如是否验证、是否锁定等）
+	u16 validation_count;//验证计数：跟踪表的验证次数或同步状态
 };
 
 /*

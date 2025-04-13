@@ -1218,25 +1218,25 @@ struct acpi_device_info {
 
 /* Context structs for address space handlers */
 
-struct acpi_pci_id {
-	u16 segment;
-	u16 bus;
-	u16 device;
-	u16 function;
+struct acpi_pci_id {//PCI设备定位标识符(定位设备在PCI总线域位置)
+	u16 segment;//PCI域/段组号（多域系统区分不同物理PCI层级）
+	u16 bus;//总线号（同一段组内的总线标识）
+	u16 device;//设备号（总线上的物理设备位置）
+	u16 function;//功能号（多功能设备的子功能索引）
 };
 
-struct acpi_mem_mapping {
-	acpi_physical_address physical_address;
-	u8 *logical_address;
-	acpi_size length;
-	struct acpi_mem_mapping *next_mm;
+struct acpi_mem_mapping {//用于存储物理地址到内核虚拟地址的映射信息,并通过链表管理多个分段映射
+	acpi_physical_address physical_address;//存储物理地址基址，指向硬件寄存器或内存区域的起始位置
+	u8 *logical_address;//内核虚拟地址，通过acpi_os_map_memory()映射后的可访问地址
+	acpi_size length;//映射区域的长度（字节）
+	struct acpi_mem_mapping *next_mm;//通过链表串联多个映射节点，支持分段映射
 };
 
-struct acpi_mem_space_context {
-	u32 length;
-	acpi_physical_address address;
-	struct acpi_mem_mapping *cur_mm;
-	struct acpi_mem_mapping *first_mm;
+struct acpi_mem_space_context {//用于管理ACPI系统内存区域的上下文信息
+	u32 length;//区域的总长度（字节），对应ACPI OperationRegion定义的大小
+	acpi_physical_address address;//区域的物理地址基址，指向硬件寄存器或内存区域的起始位置。
+	struct acpi_mem_mapping *cur_mm;//当前活动的内存映射节点指针，指向链表中当前正在使用的映射项。
+	struct acpi_mem_mapping *first_mm;// 内存映射链表的头指针，管理多个内存映射的分段信息。
 };
 
 struct acpi_data_table_mapping {

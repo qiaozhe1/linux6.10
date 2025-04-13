@@ -23,11 +23,11 @@ acpi_ev_install_handler(acpi_handle obj_handle,
 
 /* These are the address spaces that will get default handlers */
 
-u8 acpi_gbl_default_address_spaces[ACPI_NUM_DEFAULT_SPACES] = {
-	ACPI_ADR_SPACE_SYSTEM_MEMORY,
-	ACPI_ADR_SPACE_SYSTEM_IO,
-	ACPI_ADR_SPACE_PCI_CONFIG,
-	ACPI_ADR_SPACE_DATA_TABLE
+u8 acpi_gbl_default_address_spaces[ACPI_NUM_DEFAULT_SPACES] = {//存储ACPI默认支持的地址空间类型
+	ACPI_ADR_SPACE_SYSTEM_MEMORY,//系统内存地址空间,允许ACPI访问物理内存
+	ACPI_ADR_SPACE_SYSTEM_IO,//系统I/O端口地址空间,访问I/O端口（如传统PCI设备或ISA设备的寄存器）
+	ACPI_ADR_SPACE_PCI_CONFIG,//PCI配置空间,访问PCI设备的配置寄存器（如BAR、中断线等）
+	ACPI_ADR_SPACE_DATA_TABLE//数据表地址空间,访问ACPI表中的静态数据区域（如DSDT或SSDT中的预定义数据）
 };
 
 /*******************************************************************************
@@ -42,14 +42,14 @@ u8 acpi_gbl_default_address_spaces[ACPI_NUM_DEFAULT_SPACES] = {
  *
  ******************************************************************************/
 
-acpi_status acpi_ev_install_region_handlers(void)
+acpi_status acpi_ev_install_region_handlers(void)//安装ACPI默认的地址空间处理程序（如内存、I/O、PCI配置空间）
 {
 	acpi_status status;
 	u32 i;
 
 	ACPI_FUNCTION_TRACE(ev_install_region_handlers);
 
-	status = acpi_ut_acquire_mutex(ACPI_MTX_NAMESPACE);
+	status = acpi_ut_acquire_mutex(ACPI_MTX_NAMESPACE);//命名空间互斥锁，确保在安装处理程序时没有其他线程修改命名空间。
 	if (ACPI_FAILURE(status)) {
 		return_ACPI_STATUS(status);
 	}
@@ -73,16 +73,16 @@ acpi_status acpi_ev_install_region_handlers(void)
 	 * has already been installed (via acpi_install_address_space_handler).
 	 * Similar for AE_SAME_HANDLER.
 	 */
-	for (i = 0; i < ACPI_NUM_DEFAULT_SPACES; i++) {
-		status = acpi_ev_install_space_handler(acpi_gbl_root_node,
+	for (i = 0; i < ACPI_NUM_DEFAULT_SPACES; i++) {//循环安装所有默认地址空间处理程序
+		status = acpi_ev_install_space_handler(acpi_gbl_root_node,//命名空间根节点（\_SB）
 						       acpi_gbl_default_address_spaces
-						       [i],
-						       ACPI_DEFAULT_HANDLER,
-						       NULL, NULL);
-		switch (status) {
-		case AE_OK:
-		case AE_SAME_HANDLER:
-		case AE_ALREADY_EXISTS:
+						       [i],//默认地址空间类型数组
+						       ACPI_DEFAULT_HANDLER,//表明安装默认处理函数指针
+						       NULL, NULL);//
+		switch (status) {//处理状态码
+		case AE_OK://安装成功
+		case AE_SAME_HANDLER://已存在相同处理程序，无需重复安装
+		case AE_ALREADY_EXISTS://已有其他处理程序（可能由用户自定义安装），忽略错误。
 
 			/* These exceptions are all OK */
 
@@ -91,12 +91,12 @@ acpi_status acpi_ev_install_region_handlers(void)
 
 		default:
 
-			goto unlock_and_exit;
+			goto unlock_and_exit;//致命错误：如内存不足或无效地址空间类型，跳转到unlock_and_exit释放锁并返回错误。
 		}
 	}
 
 unlock_and_exit:
-	(void)acpi_ut_release_mutex(ACPI_MTX_NAMESPACE);
+	(void)acpi_ut_release_mutex(ACPI_MTX_NAMESPACE);//释放互斥锁
 	return_ACPI_STATUS(status);
 }
 
@@ -382,13 +382,13 @@ acpi_ev_install_space_handler(struct acpi_namespace_node *node,
 		case ACPI_ADR_SPACE_SYSTEM_MEMORY://系统内存空间处理
 
 			handler = acpi_ex_system_memory_space_handler;//系统内存访问处理函数
-			setup = acpi_ev_system_memory_region_setup;//内存区域初始化函数
+			setup = acpi_ev_system_memory_region_setup;//内存区域的激活/停用处理
 			break;
 
 		case ACPI_ADR_SPACE_SYSTEM_IO://系统I/O空间处理
 
 			handler = acpi_ex_system_io_space_handler;//I/O端口访问处理函数
-			setup = acpi_ev_io_space_region_setup;//I/O区域初始化函数
+			setup = acpi_ev_io_space_region_setup;//I/O 地址空间区域（OpRegion）的激活/停用处理
 			break;
 #ifdef ACPI_PCI_CONFIGURED
 		case ACPI_ADR_SPACE_PCI_CONFIG://PCI配置空间处理

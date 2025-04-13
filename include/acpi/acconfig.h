@@ -95,8 +95,7 @@
 
 #define ACPI_DEFAULT_PAGE_SIZE          4096	/* Must be power of 2 */
 
-/* owner_id tracking. 128 entries allows for 4095 owner_ids */
-
+/* 所有者ID追踪。128个条目允许追踪4095个所有者ID */
 #define ACPI_NUM_OWNERID_MASKS          128
 
 /* Size of the root table array is increased by this increment */
