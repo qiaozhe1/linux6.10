@@ -723,27 +723,45 @@ struct acpi_address_range {
 /*
  * AML opcode, name, and argument layout
  */
+/*
+ * struct acpi_opcode_info - AML操作码元信息描述结构
+ *
+ * 核心作用：
+ * 1. 提供AML操作码的完整语义描述
+ * 2. 指导解析器正确处理操作码参数
+ * 3. 控制运行时解释行为
+ * 4. 支持反汇编和调试输出
+ *
+ * 存储位置：
+ * - 全局只读数组acpi_gbl_aml_op_info（按操作码索引）
+ * - 每个ACPI操作码对应一个静态实例
+ */
 struct acpi_opcode_info {
 #if defined(ACPI_DISASSEMBLER) || defined(ACPI_DEBUG_OUTPUT)
-	char *name;		/* Opcode name (disassembler/debug only) */
+	char *name;		//操作码助记符（如"MethodOp"），仅用于反汇编和调试输出
 #endif
-	u32 parse_args;		/* Grammar/Parse time arguments */
-	u32 runtime_args;	/* Interpret time arguments */
-	u16 flags;		/* Misc flags */
-	u8 object_type;		/* Corresponding internal object type */
-	u8 class;		/* Opcode class */
-	u8 type;		/* Opcode type */
+	u32 parse_args;		//解析阶段参数处理规则（位图编码）
+	u32 runtime_args;	//运行时参数处理规则（位图编码）
+	u16 flags;		//标志位
+	u8 object_type;		//对应的ACPI内部对象类型（ACPI_TYPE_*）
+	u8 class;		//操作码大类
+	u8 type;		//操作码子类型
 };
 
 /* Value associated with the parse object */
-
+/*
+ * union acpi_parse_value - ACPI解析器通用值类型联合体
+ * 
+ * 这个联合体用于表示ACPI解析树节点可以包含的不同类型的值。
+ * 根据上下文和操作码类型，使用不同的成员来存储对应的值。
+ */
 union acpi_parse_value {
-	u64 integer;		/* Integer constant (Up to 64 bits) */
-	u32 size;		/* bytelist or field size */
-	char *string;		/* NULL terminated string */
-	u8 *buffer;		/* buffer or string */
-	char *name;		/* NULL terminated string */
-	union acpi_parse_object *arg;	/* arguments and contained ops */
+	u64 integer;		/* 整数常量(最大64位) */
+	u32 size;		/* 字节列表或字段大小 */
+	char *string;		/* NULL结尾的字符串 */
+	u8 *buffer;		/* 缓冲区或字符串数据 */
+	char *name;		/* NULL结尾的名称字符串 */
+	union acpi_parse_object *arg;	/* 参数和包含的操作对象 */
 };
 
 #if defined(ACPI_DISASSEMBLER) || defined(ACPI_DEBUG_OUTPUT)
@@ -758,30 +776,38 @@ union acpi_parse_value {
 #define ACPI_CONVERTER_ONLY_MEMBERS(a)
 #endif
 
+/*
+ * ACPI_PARSE_COMMON - ACPI解析对象的通用基础结构定义
+ *
+ * 这个宏定义了所有ACPI解析对象(Parse Object)共有的基础字段，
+ * 用于构建ACPI解析树(Parse Tree)的节点结构。
+ */
 #define ACPI_PARSE_COMMON \
-	union acpi_parse_object         *parent;            /* Parent op */\
-	u8                              descriptor_type;    /* To differentiate various internal objs */\
-	u8                              flags;              /* Type of Op */\
-	u16                             aml_opcode;         /* AML opcode */\
-	u8                              *aml;               /* Address of declaration in AML */\
-	union acpi_parse_object         *next;              /* Next op */\
-	struct acpi_namespace_node      *node;              /* For use by interpreter */\
-	union acpi_parse_value          value;              /* Value or args associated with the opcode */\
-	u8                              arg_list_length;    /* Number of elements in the arg list */\
+	union acpi_parse_object         *parent;            /* 指向父节点，构成树形结构 */\
+	u8                              descriptor_type;    /* 对象类型标识符：用于区分不同类型的ACPI内部对象 */\
+	u8                              flags;              /* 操作符类型标志：包含操作符的特殊属性信息 */\
+	u16                             aml_opcode;         /* AML操作码：存储从AML字节码中解析出的操作码 */\
+	u8                              *aml;               /* 指向AML字节码中的声明位置：记录该节点对应的原始AML代码地址 */\
+	union acpi_parse_object         *next;              /* 指向同级下一个节点，构成链表 */\
+	struct acpi_namespace_node      *node;              /* 关联的命名空间节点：解释器使用，连接解析树和命名空间 */\
+	union acpi_parse_value          value;              /* 操作码关联的值或参数：联合体存储各种类型的操作数值 */\
+	u8                              arg_list_length;    /* 参数列表长度：记录该操作码携带的参数数量 */\
+	/* 反汇编工具专用字段 (仅在ACPI_DISASM_ONLY宏定义时包含) */ \
 	 ACPI_DISASM_ONLY_MEMBERS (\
-	u16                             disasm_flags;       /* Used during AML disassembly */\
-	u8                              disasm_opcode;      /* Subtype used for disassembly */\
-	char                            *operator_symbol;   /* Used for C-style operator name strings */\
-	char                            aml_op_name[16])    /* Op name (debug only) */\
+	u16                             disasm_flags;       /* 反汇编过程使用的标志位 */\
+	u8                              disasm_opcode;      /* 用于反汇编的子类型代码 */\
+	char                            *operator_symbol;   /* C风格操作符名称字符串 */\
+	char                            aml_op_name[16])    /* 操作码名称(调试用) */\
+	/* ASL转换器专用字段 (仅在ACPI_CONVERTER_ONLY宏定义时包含) */ \
 	 ACPI_CONVERTER_ONLY_MEMBERS (\
-	char                            *inline_comment;    /* Inline comment */\
-	char                            *end_node_comment;  /* End of node comment */\
-	char                            *name_comment;      /* Comment associated with the first parameter of the name node */\
-	char                            *close_brace_comment; /* Comments that come after } on the same as } */\
-	struct acpi_comment_node        *comment_list;      /* comments that appears before this node */\
-	struct acpi_comment_node        *end_blk_comment;   /* comments that at the end of a block but before ) or } */\
-	char                            *cv_filename;       /* Filename associated with this node. Used for ASL/ASL+ converter */\
-	char                            *cv_parent_filename)	/* Parent filename associated with this node. Used for ASL/ASL+ converter */
+	char                            *inline_comment;    /* 行内注释内容 */\
+	char                            *end_node_comment;  /* 节点结束注释 */\
+	char                            *name_comment;      /* Name操作符第一个参数的注释 */\
+	char                            *close_brace_comment; /* 右大括号后的注释 */\
+	struct acpi_comment_node        *comment_list;      /* 节点前的注释列表 */\
+	struct acpi_comment_node        *end_blk_comment;   /* 代码块结束前的注释 */\
+	char                            *cv_filename;       /* 关联的源文件名(ASL/ASL+转换用) */\
+	char                            *cv_parent_filename)	/* 父节点关联的源文件名 */
 
 /* categories of comments */
 

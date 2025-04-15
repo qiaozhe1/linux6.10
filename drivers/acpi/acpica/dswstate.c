@@ -502,7 +502,23 @@ struct acpi_walk_state *acpi_ds_pop_walk_state(struct acpi_thread_state *thread)
  *              state is set to this new state.
  *
  ******************************************************************************/
-
+/*
+ * acpi_ds_create_walk_state - 创建并初始化一个新的AML遍历状态结构
+ * @owner_id: 资源所有者ID（用于对象生命周期管理）
+ * @origin: 起始解析节点（通常为MethodOp或ScopeOp）
+ * @method_desc: 关联的方法描述符（控制方法执行时非NULL）
+ * @thread: 关联的线程状态（多线程执行时使用）
+ *
+ * 功能说明：
+ * 1. 分配并初始化walk_state结构体（ACPI解释器的核心上下文）
+ * 2. 设置方法参数/局部变量的初始状态
+ * 3. 将新状态压入线程状态栈（如果存在线程上下文）
+ * 4. 维护所有者ID与创建对象的关联关系
+ *
+ * 内存管理：
+ * - 使用ACPI_ALLOCATE_ZEROED分配归零内存
+ * - 必须通过acpi_ds_delete_walk_state释放
+ */
 struct acpi_walk_state *acpi_ds_create_walk_state(acpi_owner_id owner_id,
 						  union acpi_parse_object
 						  *origin,
@@ -515,29 +531,30 @@ struct acpi_walk_state *acpi_ds_create_walk_state(acpi_owner_id owner_id,
 
 	ACPI_FUNCTION_TRACE(ds_create_walk_state);
 
-	walk_state = ACPI_ALLOCATE_ZEROED(sizeof(struct acpi_walk_state));
+	walk_state = ACPI_ALLOCATE_ZEROED(sizeof(struct acpi_walk_state));//分配并清零内存 
 	if (!walk_state) {
 		return_PTR(NULL);
 	}
 
-	walk_state->descriptor_type = ACPI_DESC_TYPE_WALK;
-	walk_state->method_desc = method_desc;
-	walk_state->owner_id = owner_id;
-	walk_state->origin = origin;
-	walk_state->thread = thread;
+	/* 基础字段初始化 */
+	walk_state->descriptor_type = ACPI_DESC_TYPE_WALK;//设置描述符类型(0x8)
+	walk_state->method_desc = method_desc;//绑定方法对象
+	walk_state->owner_id = owner_id;// 设置所有者ID
+	walk_state->origin = origin;//记录起始解析节点
+	walk_state->thread = thread;//关联线程上下文
 
-	walk_state->parser_state.start_op = origin;
+	walk_state->parser_state.start_op = origin;//设置起始操作符
 
 	/* Init the method args/local */
 
-#ifndef ACPI_CONSTANT_EVAL_ONLY
-	acpi_ds_method_data_init(walk_state);
+#ifndef ACPI_CONSTANT_EVAL_ONLY//非常量求值模式下才初始化
+	acpi_ds_method_data_init(walk_state);//初始化Arg0-Arg6/Local0-Local7
 #endif
 
 	/* Put the new state at the head of the walk list */
 
-	if (thread) {
-		acpi_ds_push_walk_state(walk_state, thread);
+	if (thread) {//如果存在线程
+		acpi_ds_push_walk_state(walk_state, thread);//将新状态加入线程状态栈顶
 	}
 
 	return_PTR(walk_state);
@@ -560,7 +577,27 @@ struct acpi_walk_state *acpi_ds_create_walk_state(acpi_owner_id owner_id,
  * DESCRIPTION: Initialize a walk state for a pass 1 or 2 parse tree walk
  *
  ******************************************************************************/
-
+/*
+ * acpi_ds_init_aml_walk - 初始化AML解析/执行的遍历状态
+ * @walk_state:   待初始化的遍历状态结构
+ * @op:           起始解析节点（通常为ScopeOp）
+ * @method_node:  关联的命名空间方法节点（控制方法执行时非NULL）
+ * @aml_start:    AML字节码起始地址
+ * @aml_length:   AML字节码长度
+ * @info:         评估信息结构（含参数/返回值指针）
+ * @pass_number:  解析阶段编号（ACPI_IMODE_LOAD_PASS1等）
+ *
+ * 核心功能：
+ * 1. 设置AML解析器的初始状态（代码范围/当前位置等）
+ * 2. 为控制方法初始化参数和局部变量
+ * 3. 建立初始作用域栈
+ * 4. 配置解析回调函数
+ *
+ * 设计要点：
+ * - 区分方法执行和普通表解析两种模式
+ * - 严格校验AML长度防止越界访问
+ * - 维护完整的作用域链（Scope Stack）
+ */
 acpi_status
 acpi_ds_init_aml_walk(struct acpi_walk_state *walk_state,
 		      union acpi_parse_object *op,
@@ -575,77 +612,84 @@ acpi_ds_init_aml_walk(struct acpi_walk_state *walk_state,
 
 	ACPI_FUNCTION_TRACE(ds_init_aml_walk);
 
-	walk_state->parser_state.aml =
-	    walk_state->parser_state.aml_start =
-	    walk_state->parser_state.aml_end =
-	    walk_state->parser_state.pkg_end = aml_start;
-	/* Avoid undefined behavior: applying zero offset to null pointer */
+	/* 初始化AML解析范围 */
+	walk_state->parser_state.aml =			//当前解析位置
+	    walk_state->parser_state.aml_start =	//AML起始位置
+	    walk_state->parser_state.aml_end =		//AML结束位置（初始值）
+	    walk_state->parser_state.pkg_end = aml_start;//当前包结束位置
+	
+	/* 安全设置AML结束边界（避免对NULL指针做偏移） */
 	if (aml_length != 0) {
-		walk_state->parser_state.aml_end += aml_length;
+		walk_state->parser_state.aml_end += aml_length;//计算实际结束地址
 		walk_state->parser_state.pkg_end += aml_length;
 	}
 
 	/* The next_op of the next_walk will be the beginning of the method */
 
-	walk_state->next_op = NULL;
-	walk_state->pass_number = pass_number;
+	/* 初始化遍历控制字段 */
+	walk_state->next_op = NULL;//下一个待处理操作符初始为空
+	walk_state->pass_number = pass_number;//记录解析阶段（加载/执行等）
 
+	/* 处理调用参数（如果是方法调用） */
 	if (info) {
-		walk_state->params = info->parameters;
-		walk_state->caller_return_desc = &info->return_object;
+		walk_state->params = info->parameters;//方法参数指针数组
+		walk_state->caller_return_desc = &info->return_object;//返回值存储位置
 	}
 
-	status = acpi_ps_init_scope(&walk_state->parser_state, op);
+	/* 初始化解析器作用域 */
+	status = acpi_ps_init_scope(&walk_state->parser_state, op);//建立初始解析作用域
 	if (ACPI_FAILURE(status)) {
-		return_ACPI_STATUS(status);
+		return_ACPI_STATUS(status);//作用域初始化失败直接返回
 	}
 
+	/* 方法调用路径处理 */
 	if (method_node) {
-		walk_state->parser_state.start_node = method_node;
-		walk_state->walk_type = ACPI_WALK_METHOD;
-		walk_state->method_node = method_node;
+		walk_state->parser_state.start_node = method_node;//设置起始节点
+		walk_state->walk_type = ACPI_WALK_METHOD;//标记为方法执行模式
+		walk_state->method_node = method_node;//记录方法节点
 		walk_state->method_desc =
-		    acpi_ns_get_attached_object(method_node);
+		    acpi_ns_get_attached_object(method_node);//获取方法描述符
 
 		/* Push start scope on scope stack and make it current  */
 
 		status =
 		    acpi_ds_scope_stack_push(method_node, ACPI_TYPE_METHOD,
-					     walk_state);
+					     walk_state);//压入方法作用域到状态作用域栈
 		if (ACPI_FAILURE(status)) {
-			return_ACPI_STATUS(status);
+			return_ACPI_STATUS(status);//栈操作失败返回
 		}
 
 		/* Init the method arguments */
-
+		/* 初始化方法参数（Arg0-Arg6） */
 		status = acpi_ds_method_data_init_args(walk_state->params,
 						       ACPI_METHOD_NUM_ARGS,
 						       walk_state);
 		if (ACPI_FAILURE(status)) {
 			return_ACPI_STATUS(status);
 		}
-	} else {
+	} else {//非方法路径处理（如模块级代码执行）
+		
 		/*
-		 * Setup the current scope.
-		 * Find a Named Op that has a namespace node associated with it.
-		 * search upwards from this Op. Current scope is the first
-		 * Op with a namespace node.
-		 */
-		extra_op = parser_state->start_op;
-		while (extra_op && !extra_op->common.node) {
-			extra_op = extra_op->common.parent;
+                 * 设置当前作用域（scope）。
+                 * 寻找一个带有命名空间节点（namespace node）的 Named Op。
+                 * 从当前的 Op 向上查找。当前作用域即为第一个拥有命名空间
+		 * 节点的 Op。
+                 */
+		extra_op = parser_state->start_op;//从当前Op开始查找
+		while (extra_op && !extra_op->common.node) {//向上查找最近的命名空间节点作为作用域起点
+			extra_op = extra_op->common.parent;//向父节点回溯
 		}
 
+		/* 设置起始节点（可能为NULL表示全局作用域） */
 		if (!extra_op) {
 			parser_state->start_node = NULL;
 		} else {
 			parser_state->start_node = extra_op->common.node;
 		}
 
-		if (parser_state->start_node) {
+		if (parser_state->start_node) {//如果找到有效节点，压入作用域栈
 
-			/* Push start scope on scope stack and make it current  */
-
+			/* 将启动范围推入范围栈并使其成为当前范围 */
 			status =
 			    acpi_ds_scope_stack_push(parser_state->start_node,
 						     parser_state->start_node->
@@ -656,7 +700,7 @@ acpi_ds_init_aml_walk(struct acpi_walk_state *walk_state,
 		}
 	}
 
-	status = acpi_ds_init_callbacks(walk_state, pass_number);
+	status = acpi_ds_init_callbacks(walk_state, pass_number);//初始化解析回调函数（根据pass_number配置不同处理函数）
 	return_ACPI_STATUS(status);
 }
 

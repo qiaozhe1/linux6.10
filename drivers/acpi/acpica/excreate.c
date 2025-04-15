@@ -208,35 +208,46 @@ cleanup:
  * DESCRIPTION: Create a new operation region object
  *
  ******************************************************************************/
-
+/*
+ * acpi_ex_create_region - 创建ACPI区域对象
+ * @aml_start: AML字节码起始地址指针
+ * @aml_length: AML字节码长度
+ * @space_id: 地址空间ID(如系统内存、IO空间等)
+ * @walk_state: 当前walk状态结构体
+ *
+ * 功能：
+ * 1. 创建并初始化新的区域对象
+ * 2. 验证地址空间ID有效性
+ * 3. 将区域对象附加到命名空间节点
+ * 4. 设置区域操作相关参数
+ */
 acpi_status
 acpi_ex_create_region(u8 * aml_start,
 		      u32 aml_length,
 		      u8 space_id, struct acpi_walk_state *walk_state)
 {
 	acpi_status status;
-	union acpi_operand_object *obj_desc;
-	struct acpi_namespace_node *node;
-	union acpi_operand_object *region_obj2;
+	union acpi_operand_object *obj_desc;//区域对象描述符
+	struct acpi_namespace_node *node;//关联的命名空间节点
+	union acpi_operand_object *region_obj2;//区域辅助对象
 
 	ACPI_FUNCTION_TRACE(ex_create_region);
 
 	/* Get the Namespace Node */
 
-	node = walk_state->op->common.node;
+	node = walk_state->op->common.node;//从当前操作获取关联的命名空间节点
 
-	/*
-	 * If the region object is already attached to this node,
-	 * just return
-	 */
+        /*
+         * 检查是否已有区域对象附加到此节点
+         * 如果已附加则直接返回成功(避免重复创建)
+         */
 	if (acpi_ns_get_attached_object(node)) {
-		return_ACPI_STATUS(AE_OK);
+		return_ACPI_STATUS(AE_OK);//已存在则直接返回
 	}
 
-	/*
-	 * Space ID must be one of the predefined IDs, or in the user-defined
-	 * range
-	 */
+        /*
+         * 验证地址空间ID有效性,必须是预定义ID或在用户定义范围内
+         */
 	if (!acpi_is_valid_space_id(space_id)) {
 		/*
 		 * Print an error message, but continue. We don't want to abort
@@ -253,20 +264,27 @@ acpi_ex_create_region(u8 * aml_start,
 
 	/* Create the region descriptor */
 
-	obj_desc = acpi_ut_create_internal_object(ACPI_TYPE_REGION);
-	if (!obj_desc) {
+	obj_desc = acpi_ut_create_internal_object(ACPI_TYPE_REGION);//创建区域描述符对象
+	if (!obj_desc) {//对象创建失败
 		status = AE_NO_MEMORY;
-		goto cleanup;
+		goto cleanup;//跳转到清理环节
 	}
 
 	/*
 	 * Remember location in AML stream of address & length
 	 * operands since they need to be evaluated at run time.
 	 */
-	region_obj2 = acpi_ns_get_secondary_object(obj_desc);
-	region_obj2->extra.aml_start = aml_start;
-	region_obj2->extra.aml_length = aml_length;
-	region_obj2->extra.method_REG = NULL;
+        /*
+         * 设置区域辅助信息
+         * 记录地址和长度操作数在AML流中的位置，
+         * 因为它们需要在运行时被求值。
+         */
+	region_obj2 = acpi_ns_get_secondary_object(obj_desc);//获取辅助对象
+	region_obj2->extra.aml_start = aml_start;//保存AML起始位置
+	region_obj2->extra.aml_length = aml_length;//保存AML长度
+	region_obj2->extra.method_REG = NULL;//初始化方法指针
+	
+	/* 设置作用域节点(优先使用当前作用域，否则使用区域节点) */
 	if (walk_state->scope_info) {
 		region_obj2->extra.scope_node =
 		    walk_state->scope_info->scope.node;
@@ -275,26 +293,26 @@ acpi_ex_create_region(u8 * aml_start,
 	}
 
 	/* Init the region from the operands */
-
-	obj_desc->region.space_id = space_id;
-	obj_desc->region.address = 0;
-	obj_desc->region.length = 0;
-	obj_desc->region.pointer = NULL;
-	obj_desc->region.node = node;
-	obj_desc->region.handler = NULL;
+	/* 初始化区域对象字段 */
+	obj_desc->region.space_id = space_id;//设置地址空间ID
+	obj_desc->region.address = 0;//初始化地址为0
+	obj_desc->region.length = 0;//初始化长度为0
+	obj_desc->region.pointer = NULL;//初始化指针为NULL
+	obj_desc->region.node = node;//设置关联节点
+	obj_desc->region.handler = NULL;//初始化处理器为NULL
 	obj_desc->common.flags &=
 	    ~(AOPOBJ_SETUP_COMPLETE | AOPOBJ_REG_CONNECTED |
-	      AOPOBJ_OBJECT_INITIALIZED);
+	      AOPOBJ_OBJECT_INITIALIZED);//清除对象状态标志位
 
 	/* Install the new region object in the parent Node */
 
-	status = acpi_ns_attach_object(node, obj_desc, ACPI_TYPE_REGION);
+	status = acpi_ns_attach_object(node, obj_desc, ACPI_TYPE_REGION);//将区域对象附加到父节点
 
 cleanup:
 
 	/* Remove local reference to the object */
 
-	acpi_ut_remove_reference(obj_desc);
+	acpi_ut_remove_reference(obj_desc);//减少引用计数
 	return_ACPI_STATUS(status);
 }
 
@@ -404,21 +422,37 @@ acpi_status acpi_ex_create_power_resource(struct acpi_walk_state *walk_state)
  * DESCRIPTION: Create a new method object
  *
  ******************************************************************************/
-
+/*
+ * acpi_ex_create_method - 创建ACPI方法对象
+ * @aml_start: 方法AML代码的起始地址指针
+ * @aml_length: 方法AML代码的长度
+ * @walk_state: 当前walk状态结构体
+ *
+ * 功能：
+ * 1. 创建新的方法对象(ACPI_TYPE_METHOD)
+ * 2. 设置方法的基本属性(AML指针、长度、关联节点)
+ * 3. 解析方法标志位(参数计数、串行化、同步级别)
+ * 4. 将方法对象附加到命名空间节点
+ * 5. 管理对象引用计数
+ *
+ * 返回值：
+ * AE_OK - 方法创建成功
+ * AE_NO_MEMORY - 内存分配失败
+ * AE_BAD_PARAMETER - 无效参数
+ */
 acpi_status
 acpi_ex_create_method(u8 * aml_start,
 		      u32 aml_length, struct acpi_walk_state *walk_state)
 {
-	union acpi_operand_object **operand = &walk_state->operands[0];
-	union acpi_operand_object *obj_desc;
-	acpi_status status;
+	union acpi_operand_object **operand = &walk_state->operands[0];//操作数数组
+	union acpi_operand_object *obj_desc;//新方法对象
+	acpi_status status;//操作状态
 	u8 method_flags;
 
 	ACPI_FUNCTION_TRACE_PTR(ex_create_method, walk_state);
 
-	/* Create a new method object */
-
-	obj_desc = acpi_ut_create_internal_object(ACPI_TYPE_METHOD);
+	/* 创建方法对象 */
+	obj_desc = acpi_ut_create_internal_object(ACPI_TYPE_METHOD);//创建方法类型对象
 	if (!obj_desc) {
 		status = AE_NO_MEMORY;
 		goto exit;
@@ -426,45 +460,45 @@ acpi_ex_create_method(u8 * aml_start,
 
 	/* Save the method's AML pointer and length  */
 
-	obj_desc->method.aml_start = aml_start;
-	obj_desc->method.aml_length = aml_length;
-	obj_desc->method.node = operand[0];
+	obj_desc->method.aml_start = aml_start;//保存AML代码起始位置
+	obj_desc->method.aml_length = aml_length;//保存AML代码长度
+	obj_desc->method.node = operand[0];//关联命名空间节点
 
 	/*
 	 * Disassemble the method flags. Split off the arg_count, Serialized
 	 * flag, and sync_level for efficiency.
 	 */
-	method_flags = (u8)operand[1]->integer.value;
+	method_flags = (u8)operand[1]->integer.value;//从操作数获取标志位
 	obj_desc->method.param_count = (u8)
-	    (method_flags & AML_METHOD_ARG_COUNT);
+	    (method_flags & AML_METHOD_ARG_COUNT);//提取参数计数(低3位)
 
 	/*
 	 * Get the sync_level. If method is serialized, a mutex will be
 	 * created for this method when it is parsed.
 	 */
-	if (method_flags & AML_METHOD_SERIALIZED) {
-		obj_desc->method.info_flags = ACPI_METHOD_SERIALIZED;
+	if (method_flags & AML_METHOD_SERIALIZED) {//检查串行化标志
+		obj_desc->method.info_flags = ACPI_METHOD_SERIALIZED;//设置串行化标志
 
 		/*
 		 * ACPI 1.0: sync_level = 0
 		 * ACPI 2.0: sync_level = sync_level in method declaration
 		 */
 		obj_desc->method.sync_level = (u8)
-		    ((method_flags & AML_METHOD_SYNC_LEVEL) >> 4);
+		    ((method_flags & AML_METHOD_SYNC_LEVEL) >> 4);//提取同步级别(ACPI 2.0特性),同步级别存储在标志位的高4位
 	}
 
 	/* Attach the new object to the method Node */
 
 	status = acpi_ns_attach_object((struct acpi_namespace_node *)operand[0],
-				       obj_desc, ACPI_TYPE_METHOD);
+				       obj_desc, ACPI_TYPE_METHOD);//将方法对象附加到命名空间节点
 
 	/* Remove local reference to the object */
 
-	acpi_ut_remove_reference(obj_desc);
+	acpi_ut_remove_reference(obj_desc);//减少本地对象引用计数
 
 exit:
 	/* Remove a reference to the operand */
 
-	acpi_ut_remove_reference(operand[1]);
-	return_ACPI_STATUS(status);
+	acpi_ut_remove_reference(operand[1]);//减少标志位操作数的引用
+	return_ACPI_STATUS(status);// 返回最终状态
 }

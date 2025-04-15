@@ -66,28 +66,46 @@ u8 acpi_ps_has_completed_scope(struct acpi_parse_state * parser_state)
  * DESCRIPTION: Allocate and init a new scope object
  *
  ******************************************************************************/
-
+/*
+ * acpi_ps_init_scope - 初始化解析器作用域状态
+ * @parser_state: 解析状态结构指针（需被初始化）
+ * @root_op:      作为作用域根的解析节点（通常是ScopeOp或MethodOp）
+ *
+ * 功能说明：
+ * 1. 创建并初始化一个新的解析作用域状态对象
+ * 2. 建立作用域与根解析节点的关联
+ * 3. 设置默认参数处理模式（可变参数）
+ * 4. 初始化AML边界指针（防止解析越界）
+ *
+ * 设计要点：
+ * - 每个作用域对应一个独立的状态对象（acpi_generic_state）
+ * - 作用域栈通过链表结构管理嵌套关系
+ * - 严格设置AML边界保证解析安全性
+ */
 acpi_status
 acpi_ps_init_scope(struct acpi_parse_state * parser_state,
 		   union acpi_parse_object * root_op)
 {
-	union acpi_generic_state *scope;
+	union acpi_generic_state *scope;//新作用域状态指针
 
 	ACPI_FUNCTION_TRACE_PTR(ps_init_scope, root_op);
 
-	scope = acpi_ut_create_generic_state();
+	/* 创建新的通用状态对象 */
+	scope = acpi_ut_create_generic_state();//从ACPI状态缓存分配内存
 	if (!scope) {
 		return_ACPI_STATUS(AE_NO_MEMORY);
 	}
 
-	scope->common.descriptor_type = ACPI_DESC_TYPE_STATE_RPSCOPE;
-	scope->parse_scope.op = root_op;
-	scope->parse_scope.arg_count = ACPI_VAR_ARGS;
-	scope->parse_scope.arg_end = parser_state->aml_end;
-	scope->parse_scope.pkg_end = parser_state->aml_end;
+	/* 初始化作用域状态 */
+	scope->common.descriptor_type = ACPI_DESC_TYPE_STATE_RPSCOPE;//标记为解析作用域
+	scope->parse_scope.op = root_op;//绑定根解析节点
+	scope->parse_scope.arg_count = ACPI_VAR_ARGS;//默认接受可变参数
+	scope->parse_scope.arg_end = parser_state->aml_end;//参数解析边界
+	scope->parse_scope.pkg_end = parser_state->aml_end;//包解析边界
 
-	parser_state->scope = scope;
-	parser_state->start_op = root_op;
+	/* 更新解析器状态 */
+	parser_state->scope = scope;//设置当前作用域
+	parser_state->start_op = root_op;//记录起始操作符
 
 	return_ACPI_STATUS(AE_OK);
 }

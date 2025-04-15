@@ -293,43 +293,66 @@ acpi_ps_build_named_op(struct acpi_walk_state *walk_state,
  * DESCRIPTION: Get Op from AML
  *
  ******************************************************************************/
-
+/*
+ * acpi_ps_create_op - 创建并初始化一个新的ACPI解析操作节点(Op)
+ * @walk_state: ACPI解析状态机上下文
+ * @aml_op_start: 指向AML字节码中操作码起始位置的指针
+ * @new_op: 输出参数，返回新创建的Op节点指针
+ *
+ * 功能：
+ * 1. 从AML字节码中解析操作码
+ * 2. 根据操作码类型创建对应的Op节点
+ * 3. 处理命名操作码的特殊情况
+ * 4. 将新节点附加到父节点的参数列表
+ * 5. 处理创建类操作码和银行字段的特殊情况
+ * 6. 执行下降回调函数(如果存在)
+ *
+ * 返回值：
+ * - AE_OK: 操作成功完成
+ * - AE_NO_MEMORY: 内存分配失败
+ * - AE_CTRL_PARSE_CONTINUE: 需要继续解析
+ * - 其他ACPI状态码表示错误
+ */
 acpi_status
 acpi_ps_create_op(struct acpi_walk_state *walk_state,
 		  u8 *aml_op_start, union acpi_parse_object **new_op)
 {
 	acpi_status status = AE_OK;
-	union acpi_parse_object *op;
-	union acpi_parse_object *named_op = NULL;
-	union acpi_parse_object *parent_scope;
-	u8 argument_count;
-	const struct acpi_opcode_info *op_info;
+	union acpi_parse_object *op;//新创建的Op节点指针
+	union acpi_parse_object *named_op = NULL;//命名操作节点指针(初始为NULL)
+	union acpi_parse_object *parent_scope;//父作用域节点指针
+	u8 argument_count;//参数计数器
+	const struct acpi_opcode_info *op_info;//操作码信息结构体指针
 
 	ACPI_FUNCTION_TRACE_PTR(ps_create_op, walk_state);
 
+	/* 第一步：从AML字节码中解析操作码 */
 	status = acpi_ps_get_aml_opcode(walk_state);
 	if (status == AE_CTRL_PARSE_CONTINUE) {
 		return_ACPI_STATUS(AE_CTRL_PARSE_CONTINUE);
 	}
 	if (ACPI_FAILURE(status)) {
-		return_ACPI_STATUS(status);
+		return_ACPI_STATUS(status);//操作码解析失败，直接返回错误状态
 	}
 
 	/* Create Op structure and append to parent's argument list */
 
-	walk_state->op_info = acpi_ps_get_opcode_info(walk_state->opcode);
-	op = acpi_ps_alloc_op(walk_state->opcode, aml_op_start);
+	/* 第二步：创建基础Op节点结构 */
+	walk_state->op_info = acpi_ps_get_opcode_info(walk_state->opcode);//获取当前操作码的详细信息
+	op = acpi_ps_alloc_op(walk_state->opcode, aml_op_start);//分配新的Op节点内存空间
 	if (!op) {
 		return_ACPI_STATUS(AE_NO_MEMORY);
 	}
 
+	/* 第三步：处理命名操作码的特殊情况 */
 	if (walk_state->op_info->flags & AML_NAMED) {
 		status =
 		    acpi_ps_build_named_op(walk_state, aml_op_start, op,
-					   &named_op);
-		acpi_ps_free_op(op);
+					   &named_op);//构建命名操作节点
+		acpi_ps_free_op(op);//释放临时Op节点(因为named_op已创建)
 
 #ifdef ACPI_ASL_COMPILER
+		/* 反汇编器特殊处理：外部操作码(EXTERNAL_OP)解析失败时跳过 */
 		if (acpi_gbl_disasm_flag
 		    && walk_state->opcode == AML_EXTERNAL_OP
 		    && status == AE_NOT_FOUND) {
@@ -348,45 +371,55 @@ acpi_ps_create_op(struct acpi_walk_state *walk_state,
 			return_ACPI_STATUS(AE_CTRL_PARSE_CONTINUE);
 		}
 #endif
+		//检查命名操作构建是否成功
 		if (ACPI_FAILURE(status)) {
 			return_ACPI_STATUS(status);
 		}
 
-		*new_op = named_op;
+		*new_op = named_op;//返回构建好的命名操作节点
 		return_ACPI_STATUS(AE_OK);
 	}
 
 	/* Not a named opcode, just allocate Op and append to parent */
 
+	/* 第四步：处理非命名操作码的常规情况 */
+	/* 特殊处理创建类操作码(如Field、BankField等) */
 	if (walk_state->op_info->flags & AML_CREATE) {
 		/*
 		 * Backup to beginning of create_XXXfield declaration
 		 * body_length is unknown until we parse the body
 		 */
-		op->named.data = aml_op_start;
-		op->named.length = 0;
+		op->named.data = aml_op_start;//指向操作码起始位置
+		op->named.length = 0;//初始长度设为0(后续解析填充)
 	}
 
+	/* 特殊处理BankField操作码 */
 	if (walk_state->opcode == AML_BANK_FIELD_OP) {
 		/*
 		 * Backup to beginning of bank_field declaration
 		 * body_length is unknown until we parse the body
 		 */
+		//同样保存原始AML位置信息
 		op->named.data = aml_op_start;
 		op->named.length = 0;
 	}
 
-	parent_scope = acpi_ps_get_parent_scope(&(walk_state->parser_state));
-	acpi_ps_append_arg(parent_scope, op);
+	/* 第五步：将新节点附加到父作用域 */
 
+	parent_scope = acpi_ps_get_parent_scope(&(walk_state->parser_state));//获取当前解析位置的父作用域节点
+	acpi_ps_append_arg(parent_scope, op);//将新Op节点添加到父节点的参数列表
+
+	/* 第六步：处理目标操作数标记 */
 	if (parent_scope) {
 		op_info =
-		    acpi_ps_get_opcode_info(parent_scope->common.aml_opcode);
+		    acpi_ps_get_opcode_info(parent_scope->common.aml_opcode);//获取父操作码的详细信息
+	
+		/* 标记目标操作数(需要写入的操作数) */
 		if (op_info->flags & AML_HAS_TARGET) {
 			argument_count =
-			    acpi_ps_get_argument_count(op_info->type);
+			    acpi_ps_get_argument_count(op_info->type);//获取预期的参数数量
 			if (parent_scope->common.arg_list_length >
-			    argument_count) {
+			    argument_count) {//如果实际参数数量超过预期，标记为Target
 				op->common.flags |= ACPI_PARSEOP_TARGET;
 			}
 		}
@@ -395,28 +428,30 @@ acpi_ps_create_op(struct acpi_walk_state *walk_state,
 		 * Special case for both Increment() and Decrement(), where
 		 * the lone argument is both a source and a target.
 		 */
+		/* 特殊处理Increment/Decrement操作 */
 		else if ((parent_scope->common.aml_opcode == AML_INCREMENT_OP)
 			 || (parent_scope->common.aml_opcode ==
 			     AML_DECREMENT_OP)) {
-			op->common.flags |= ACPI_PARSEOP_TARGET;
+			op->common.flags |= ACPI_PARSEOP_TARGET;//这些操作的参数既是源也是目标
 		}
 	}
 
+	/* 第七步：执行下降回调函数(如果存在) */
 	if (walk_state->descending_callback != NULL) {
 		/*
 		 * Find the object. This will either insert the object into
 		 * the namespace or simply look it up
 		 */
-		walk_state->op = *new_op = op;
+		walk_state->op = *new_op = op;//设置当前操作节点
 
-		status = walk_state->descending_callback(walk_state, &op);
-		status = acpi_ps_next_parse_state(walk_state, op, status);
-		if (status == AE_CTRL_PENDING) {
+		status = walk_state->descending_callback(walk_state, &op);//调用回调函数进行进一步处理
+		status = acpi_ps_next_parse_state(walk_state, op, status);//更新解析状态
+		if (status == AE_CTRL_PENDING) {//处理挂起状态
 			status = AE_CTRL_PARSE_PENDING;
 		}
 	}
 
-	return_ACPI_STATUS(status);
+	return_ACPI_STATUS(status);// 返回最终状态
 }
 
 /*******************************************************************************
@@ -432,7 +467,23 @@ acpi_ps_create_op(struct acpi_walk_state *walk_state,
  * DESCRIPTION: Complete Op
  *
  ******************************************************************************/
-
+/*
+ * acpi_ps_complete_op - 完成当前Op(解析树节点)的解析处理并进行状态转换
+ * @walk_state: 当前AML解析/执行状态
+ * @op:         当前处理的解析节点（输入输出参数）
+ * @status:     前序操作返回的状态码
+ *
+ * 核心功能：
+ * 1. 处理不同状态码的控制流（break/continue/terminate等）
+ * 2. 维护作用域栈和参数计数
+ * 3. 执行完成回调并清理解析树节点
+ * 4. 处理模块级代码的错误恢复
+ *
+ * 状态机设计：
+ * - 根据status参数进入不同的处理路径
+ * - 支持正常完成(AE_OK)和控制流转移(AE_CTRL_*) 
+ * - 严格管理解析树生命周期
+ */
 acpi_status
 acpi_ps_complete_op(struct acpi_walk_state *walk_state,
 		    union acpi_parse_object **op, acpi_status status)
@@ -444,46 +495,45 @@ acpi_ps_complete_op(struct acpi_walk_state *walk_state,
 	/*
 	 * Finished one argument of the containing scope
 	 */
-	walk_state->parser_state.scope->parse_scope.arg_count--;
+	walk_state->parser_state.scope->parse_scope.arg_count--;//减少当前作用域的参数计数器
 
-	/* Close this Op (will result in parse subtree deletion) */
-
-	status2 = acpi_ps_complete_this_op(walk_state, *op);
+	/* 关闭此操作（将导致解析子树删除）*/
+	status2 = acpi_ps_complete_this_op(walk_state, *op);//完成当前Op的处理（可能释放解析树节点） 
 	if (ACPI_FAILURE(status2)) {
 		return_ACPI_STATUS(status2);
 	}
 
 	*op = NULL;
 
-	switch (status) {
-	case AE_OK:
+	switch (status) {//根据主状态码进行不同处理
+	case AE_OK://正常状态
 
 		break;
 
-	case AE_CTRL_TRANSFER:
+	case AE_CTRL_TRANSFER://控制转移状态（如方法调用）
 
-		/* We are about to transfer to a called method */
+		/* 准备转移到被调用的方法 */
 
-		walk_state->prev_op = NULL;
-		walk_state->prev_arg_types = walk_state->arg_types;
-		return_ACPI_STATUS(status);
+		walk_state->prev_op = NULL;//清除前一个Op
+		walk_state->prev_arg_types = walk_state->arg_types;//保存参数类型
+		return_ACPI_STATUS(status);//直接返回转移状态
 
-	case AE_CTRL_END:
+	case AE_CTRL_END://控制结束状态
 
 		acpi_ps_pop_scope(&(walk_state->parser_state), op,
 				  &walk_state->arg_types,
-				  &walk_state->arg_count);
+				  &walk_state->arg_count);//弹出当前作用域
 
-		if (*op) {
-			walk_state->op = *op;
+		if (*op) {//如果存在新的Op
+			walk_state->op = *op;//更新walk_state中的当前Op
 			walk_state->op_info =
-			    acpi_ps_get_opcode_info((*op)->common.aml_opcode);
-			walk_state->opcode = (*op)->common.aml_opcode;
+			    acpi_ps_get_opcode_info((*op)->common.aml_opcode);//获取Op信息
+			walk_state->opcode = (*op)->common.aml_opcode;//设置操作码
 
-			status = walk_state->ascending_callback(walk_state);
-			(void)acpi_ps_next_parse_state(walk_state, *op, status);
+			status = walk_state->ascending_callback(walk_state);//执行回调函数
+			(void)acpi_ps_next_parse_state(walk_state, *op, status);//更新解析状态
 
-			status2 = acpi_ps_complete_this_op(walk_state, *op);
+			status2 = acpi_ps_complete_this_op(walk_state, *op);//完成新Op的处理
 			if (ACPI_FAILURE(status2)) {
 				return_ACPI_STATUS(status2);
 			}
@@ -491,79 +541,79 @@ acpi_ps_complete_op(struct acpi_walk_state *walk_state,
 
 		break;
 
-	case AE_CTRL_BREAK:
-	case AE_CTRL_CONTINUE:
+	case AE_CTRL_BREAK://break控制流
+	case AE_CTRL_CONTINUE://continue控制流
 
 		/* Pop off scopes until we find the While */
 
-		while (!(*op) || ((*op)->common.aml_opcode != AML_WHILE_OP)) {
+		while (!(*op) || ((*op)->common.aml_opcode != AML_WHILE_OP)) {//弹出作用域直到找到While Op
 			acpi_ps_pop_scope(&(walk_state->parser_state), op,
 					  &walk_state->arg_types,
 					  &walk_state->arg_count);
 		}
 
 		/* Close this iteration of the While loop */
-
+		/* 完成当前While循环迭代 */
 		walk_state->op = *op;
 		walk_state->op_info =
-		    acpi_ps_get_opcode_info((*op)->common.aml_opcode);
-		walk_state->opcode = (*op)->common.aml_opcode;
+		    acpi_ps_get_opcode_info((*op)->common.aml_opcode);//获取Op信息
+		walk_state->opcode = (*op)->common.aml_opcode;//设置操作码
 
-		status = walk_state->ascending_callback(walk_state);
-		(void)acpi_ps_next_parse_state(walk_state, *op, status);
+		status = walk_state->ascending_callback(walk_state);//执行回调函数
+		(void)acpi_ps_next_parse_state(walk_state, *op, status);//设置状态码
 
-		status2 = acpi_ps_complete_this_op(walk_state, *op);
+		status2 = acpi_ps_complete_this_op(walk_state, *op);//完成当前Op的处理
 		if (ACPI_FAILURE(status2)) {
 			return_ACPI_STATUS(status2);
 		}
 
 		break;
 
-	case AE_CTRL_TERMINATE:
+	case AE_CTRL_TERMINATE://终止控制流
 
-		/* Clean up */
+		/* 清理控制状态栈 */
 		do {
 			if (*op) {
 				status2 =
-				    acpi_ps_complete_this_op(walk_state, *op);
+				    acpi_ps_complete_this_op(walk_state, *op);//完成当前Op的处理
 				if (ACPI_FAILURE(status2)) {
 					return_ACPI_STATUS(status2);
 				}
 
 				acpi_ut_delete_generic_state
 				    (acpi_ut_pop_generic_state
-				     (&walk_state->control_state));
+				     (&walk_state->control_state));//弹出并删除控制状态
 			}
 
 			acpi_ps_pop_scope(&(walk_state->parser_state), op,
 					  &walk_state->arg_types,
-					  &walk_state->arg_count);
+					  &walk_state->arg_count);//弹出当前作用域
 
 		} while (*op);
 
-		return_ACPI_STATUS(AE_OK);
+		return_ACPI_STATUS(AE_OK);//返回成功
 
-	default:		/* All other non-AE_OK status */
+	default:		/* 所有其他非AE_OK状态 */
 
 		do {
-			if (*op) {
-				/*
-				 * These Opcodes need to be removed from the namespace because they
-				 * get created even if these opcodes cannot be created due to
-				 * errors.
-				 */
+			if (*op) {//检查当前Op是否有效
+                                /*
+                                 * 特殊处理REGION_OP和DATA_REGION_OP：
+                                 * 这些Opcode即使在错误情况下也可能已经创建了命名空间节点，
+                                 * 因此需要显式清理
+                                 */
 				if (((*op)->common.aml_opcode == AML_REGION_OP)
 				    || ((*op)->common.aml_opcode ==
 					AML_DATA_REGION_OP)) {
 					acpi_ns_delete_children((*op)->common.
-								node);
-					acpi_ns_remove_node((*op)->common.node);
-					(*op)->common.node = NULL;
-					acpi_ps_delete_parse_tree(*op);
+								node);//递归删除该节点下的所有子节点
+					acpi_ns_remove_node((*op)->common.node);//从命名空间移除该节点本身
+					(*op)->common.node = NULL;//清空节点指针避免悬空引用
+					acpi_ps_delete_parse_tree(*op);//删除整个解析树
 				}
 
 				status2 =
-				    acpi_ps_complete_this_op(walk_state, *op);
+				    acpi_ps_complete_this_op(walk_state, *op);//完成当前Op的处理
 				if (ACPI_FAILURE(status2)) {
 					return_ACPI_STATUS(status2);
 				}
@@ -571,7 +621,7 @@ acpi_ps_complete_op(struct acpi_walk_state *walk_state,
 
 			acpi_ps_pop_scope(&(walk_state->parser_state), op,
 					  &walk_state->arg_types,
-					  &walk_state->arg_count);
+					  &walk_state->arg_count);//弹出作用域
 
 		} while (*op);
 
@@ -585,33 +635,30 @@ acpi_ps_complete_op(struct acpi_walk_state *walk_state,
 					  &walk_state->arg_count);
 		}
 #endif
-		walk_state->prev_op = NULL;
-		walk_state->prev_arg_types = walk_state->arg_types;
+		walk_state->prev_op = NULL;//清除前一个Op
+		walk_state->prev_arg_types = walk_state->arg_types;//保存参数类型 
 
-		if (walk_state->parse_flags & ACPI_PARSE_MODULE_LEVEL) {
+		if (walk_state->parse_flags & ACPI_PARSE_MODULE_LEVEL) {//模块级错误特殊处理
 			/*
-			 * There was something that went wrong while executing code at the
-			 * module-level. We need to skip parsing whatever caused the
-			 * error and keep going. One runtime error during the table load
-			 * should not cause the entire table to not be loaded. This is
-			 * because there could be correct AML beyond the parts that caused
-			 * the runtime error.
+			 * 在执行模块级别的代码时出现了某种错误。我们需要跳过导致错误的部分，
+			 * 并继续进行解析。一次运行时错误不应该导致整个表格加载失败，
+			 * 因为在导致错误的部分之后，可能还存在正确的 AML 代码。
 			 */
 			ACPI_INFO(("Ignoring error and continuing table load"));
 			return_ACPI_STATUS(AE_OK);
 		}
-		return_ACPI_STATUS(status);
+		return_ACPI_STATUS(status);//返回原始状态
 	}
 
 	/* This scope complete? */
 
-	if (acpi_ps_has_completed_scope(&(walk_state->parser_state))) {
+	if (acpi_ps_has_completed_scope(&(walk_state->parser_state))) {//检查当前作用域是否完成
 		acpi_ps_pop_scope(&(walk_state->parser_state), op,
 				  &walk_state->arg_types,
-				  &walk_state->arg_count);
+				  &walk_state->arg_count);//作用域完成则弹出
 		ACPI_DEBUG_PRINT((ACPI_DB_PARSE, "Popped scope, Op=%p\n", *op));
 	} else {
-		*op = NULL;
+		*op = NULL;//作用域未完成则清空Op
 	}
 
 	return_ACPI_STATUS(AE_OK);

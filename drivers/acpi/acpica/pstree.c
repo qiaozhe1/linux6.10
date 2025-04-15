@@ -89,12 +89,23 @@ union acpi_parse_object *acpi_ps_get_arg(union acpi_parse_object *op, u32 argn)
  * DESCRIPTION: Append an argument to an op's argument list (a NULL arg is OK)
  *
  ******************************************************************************/
-
+/*
+ * acpi_ps_append_arg - 将参数节点追加到ACPI解析操作节点的参数列表中
+ * @op: 目标操作节点(父节点)
+ * @arg: 要追加的参数节点
+ *
+ * 功能：
+ * 1. 验证操作码的有效性
+ * 2. 检查操作码是否支持参数
+ * 3. 将参数追加到参数链表末尾
+ * 4. 设置参数的父节点指针
+ * 5. 更新参数计数器
+ */
 void
 acpi_ps_append_arg(union acpi_parse_object *op, union acpi_parse_object *arg)
 {
-	union acpi_parse_object *prev_arg;
-	const struct acpi_opcode_info *op_info;
+	union acpi_parse_object *prev_arg;//用于遍历参数链表的指针
+	const struct acpi_opcode_info *op_info;//操作码信息结构体指针
 
 	ACPI_FUNCTION_TRACE(ps_append_arg);
 
@@ -104,8 +115,8 @@ acpi_ps_append_arg(union acpi_parse_object *op, union acpi_parse_object *arg)
 
 	/* Get the info structure for this opcode */
 
-	op_info = acpi_ps_get_opcode_info(op->common.aml_opcode);
-	if (op_info->class == AML_CLASS_UNKNOWN) {
+	op_info = acpi_ps_get_opcode_info(op->common.aml_opcode);//根据操作码获取信息
+	if (op_info->class == AML_CLASS_UNKNOWN) {//无效操作码处理
 
 		/* Invalid opcode */
 
@@ -116,40 +127,39 @@ acpi_ps_append_arg(union acpi_parse_object *op, union acpi_parse_object *arg)
 
 	/* Check if this opcode requires argument sub-objects */
 
-	if (!(op_info->flags & AML_HAS_ARGS)) {
+	if (!(op_info->flags & AML_HAS_ARGS)) {//检查操作码是否支持参数
 
 		/* Has no linked argument objects */
 
-		return_VOID;
+		return_VOID;//该操作码不支持参数,直接返回
 	}
 
-	/* Append the argument to the linked argument list */
 
-	if (op->common.value.arg) {
+	/* 将参数追加到链表末尾 */
+	if (op->common.value.arg) {//如果已有参数链表
 
 		/* Append to existing argument list */
 
-		prev_arg = op->common.value.arg;
-		while (prev_arg->common.next) {
+		prev_arg = op->common.value.arg;//获取第一个参数
+		while (prev_arg->common.next) {//遍历到链表末尾
 			prev_arg = prev_arg->common.next;
 		}
-		prev_arg->common.next = arg;
-	} else {
+		prev_arg->common.next = arg;//将新参数追加到末尾
+	} else {//如果是空参数链表
 		/* No argument list, this will be the first argument */
 
-		op->common.value.arg = arg;
+		op->common.value.arg = arg;//直接设置为第一个参数
 	}
 
-	/* Set the parent in this arg and any args linked after it */
-
+	/* 设置父节点指针并更新参数计数 */
 	while (arg) {
-		arg->common.parent = op;
-		arg = arg->common.next;
+		arg->common.parent = op;//设置当前参数的父节点
+		arg = arg->common.next;//移动到下一个参数
 
-		op->common.arg_list_length++;
+		op->common.arg_list_length++;//递增参数计数器
 	}
 
-	return_VOID;
+	return_VOID;//函数结束
 }
 
 /*******************************************************************************

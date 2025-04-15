@@ -95,40 +95,62 @@ u16 acpi_ps_peek_opcode(struct acpi_parse_state * parser_state)
  * DESCRIPTION: Perform any cleanup at the completion of an Op.
  *
  ******************************************************************************/
-
+/*
+ * acpi_ps_complete_this_op - 完成并清理当前解析操作(Op)及其子树
+ * @walk_state: ACPI解析状态机上下文
+ * @op: 要完成的解析操作节点
+ *
+ * 功能说明：
+ * 1. 检查并处理空Op情况(AML代码损坏时可能发生)
+ * 2. 停止该Op的跟踪记录
+ * 3. 根据解析标志决定是否删除Op及其子树
+ * 4. 对需要保留的子树用占位符Op替换
+ * 5. 从父节点链表中正确解除关联
+ * 6. 最终删除Op及其子树
+ *
+ * 特殊处理：
+ * - 控制类(AML_CLASS_CONTROL)Op保持原样
+ * - 创建类(AML_CLASS_CREATE)Op用返回值占位符替换
+ * - 命名对象类(AML_CLASS_NAMED_OBJECT)根据具体类型处理
+ *
+ * 返回值：
+ * - AE_OK: 操作成功完成
+ * - AE_NO_MEMORY: 内存分配失败
+ */
 acpi_status
 acpi_ps_complete_this_op(struct acpi_walk_state *walk_state,
 			 union acpi_parse_object *op)
 {
-	union acpi_parse_object *prev;
-	union acpi_parse_object *next;
-	const struct acpi_opcode_info *parent_info;
-	union acpi_parse_object *replacement_op = NULL;
+	union acpi_parse_object *prev;//前一个同级Op指针
+	union acpi_parse_object *next;//下一个同级Op指针
+	const struct acpi_opcode_info *parent_info;//父节点操作码信息结构体指针
+	union acpi_parse_object *replacement_op = NULL;//替换Op指针
 	acpi_status status = AE_OK;
 
 	ACPI_FUNCTION_TRACE_PTR(ps_complete_this_op, op);
 
-	/* Check for null Op, can happen if AML code is corrupt */
-
+	/* 检查空Op情况(可能由于AML代码损坏) */
 	if (!op) {
-		return_ACPI_STATUS(AE_OK);	/* OK for now */
+		return_ACPI_STATUS(AE_OK);	/* 暂时返回OK */
 	}
 
-	acpi_ex_stop_trace_opcode(op, walk_state);
+	acpi_ex_stop_trace_opcode(op, walk_state);//停止该Op的跟踪
 
-	/* Delete this op and the subtree below it if asked to */
-
+        /*
+         * 检查是否需要删除当前Op及其子树：
+         * 1. 检查parse_flags中的树处理标志
+         * 2. 排除参数类(ARGUMENT)Op
+         */
 	if (((walk_state->parse_flags & ACPI_PARSE_TREE_MASK) !=
 	     ACPI_PARSE_DELETE_TREE)
 	    || (walk_state->op_info->class == AML_CLASS_ARGUMENT)) {
-		return_ACPI_STATUS(AE_OK);
+		return_ACPI_STATUS(AE_OK);//不需要删除则直接返回成功
 	}
 
-	/* Make sure that we only delete this subtree */
-
-	if (op->common.parent) {
-		prev = op->common.parent->common.value.arg;
-		if (!prev) {
+	/* 确保我们只删除这个子树 */
+	if (op->common.parent) {//如果当前op存在父节点
+		prev = op->common.parent->common.value.arg;//获取父节点的第一个节点
+		if (!prev) {//如果父节点没有子节点，直接跳转到清理阶段
 
 			/* Nothing more to do */
 
@@ -141,13 +163,18 @@ acpi_ps_complete_this_op(struct acpi_walk_state *walk_state,
 		 */
 		parent_info =
 		    acpi_ps_get_opcode_info(op->common.parent->common.
-					    aml_opcode);
+					    aml_opcode);//获取父节点的操作码信息
 
-		switch (parent_info->class) {
-		case AML_CLASS_CONTROL:
+		switch (parent_info->class) {//根据父节点类型决定替换策略
+		case AML_CLASS_CONTROL://控制类Op不需要替换，直接跳出switch
 
 			break;
 
+		/*
+                 * 创建类Op需要替换为返回值占位符：
+                 * 1. 分配新的RETURN_VALUE_OP节点
+                 * 2. 使用原Op的AML位置信息
+                 */
 		case AML_CLASS_CREATE:
 			/*
 			 * These opcodes contain term_arg operands. The current
@@ -155,51 +182,76 @@ acpi_ps_complete_this_op(struct acpi_walk_state *walk_state,
 			 */
 			replacement_op =
 			    acpi_ps_alloc_op(AML_INT_RETURN_VALUE_OP,
-					     op->common.aml);
+					     op->common.aml);//分配RETURN_VALUE_OP节点，用于替换
 			if (!replacement_op) {
 				status = AE_NO_MEMORY;
 			}
 			break;
 
-		case AML_CLASS_NAMED_OBJECT:
-			/*
-			 * These opcodes contain term_arg operands. The current
-			 * op must be replaced by a placeholder return op
-			 */
+		case AML_CLASS_NAMED_OBJECT://命名对象类操作码
+                        /*
+                         * 命名对象类操作码包含终止参数操作数(term_arg)，
+                         * 需要将当前操作码替换为占位符返回操作码
+                         * 
+                         * 这类操作码通常用于定义ACPI命名空间中的对象，
+                         * 需要特殊处理以确保命名空间一致性
+                         */
+                        
+                        /* 
+                         * 第一组条件检查：处理需要特殊替换的父操作码类型
+                         * 这些操作码定义的区域/缓冲区/包等对象需要保留占位符，
+                         * 即使删除子树也要保持对象引用有效性
+                         */
 			if ((op->common.parent->common.aml_opcode ==
-			     AML_REGION_OP)
+			     AML_REGION_OP)//操作区定义
 			    || (op->common.parent->common.aml_opcode ==
-				AML_DATA_REGION_OP)
+				AML_DATA_REGION_OP)//数据区定义
 			    || (op->common.parent->common.aml_opcode ==
-				AML_BUFFER_OP)
+				AML_BUFFER_OP)//缓冲区定义
 			    || (op->common.parent->common.aml_opcode ==
-				AML_PACKAGE_OP)
+				AML_PACKAGE_OP)//固定长度包
 			    || (op->common.parent->common.aml_opcode ==
-				AML_BANK_FIELD_OP)
+				AML_BANK_FIELD_OP)//bank字段
 			    || (op->common.parent->common.aml_opcode ==
-				AML_VARIABLE_PACKAGE_OP)) {
+				AML_VARIABLE_PACKAGE_OP)) {//可变长度包
 				replacement_op =
 				    acpi_ps_alloc_op(AML_INT_RETURN_VALUE_OP,
-						     op->common.aml);
+						     op->common.aml);//为这些类型创建返回值占位符
 				if (!replacement_op) {
 					status = AE_NO_MEMORY;
 				}
-			} else
+			} else 
+                        /* 
+                         * 第二组条件检查：特殊处理NAME_OP在加载阶段的缓冲区和包
+                         * 
+                         * 在ACPI表加载过程中(PASS1/PASS2)，对于NAME操作码下的
+                         * 缓冲区/包定义需要保留原操作码类型而非替换为RETURN_VALUE，
+                         * 以确保正确的命名空间初始化
+                         */
 			    if ((op->common.parent->common.aml_opcode ==
-				 AML_NAME_OP)
+				 AML_NAME_OP)//命名对象定义
 				&& (walk_state->pass_number <=
-				    ACPI_IMODE_LOAD_PASS2)) {
-				if ((op->common.aml_opcode == AML_BUFFER_OP)
-				    || (op->common.aml_opcode == AML_PACKAGE_OP)
+				    ACPI_IMODE_LOAD_PASS2)) {//加载阶段检查
+							
+				/* 检查当前操作码是否为需要保留的类型 */
+				if ((op->common.aml_opcode == AML_BUFFER_OP)//缓冲区操作码
+				    || (op->common.aml_opcode == AML_PACKAGE_OP)//固定长度包
 				    || (op->common.aml_opcode ==
-					AML_VARIABLE_PACKAGE_OP)) {
+					AML_VARIABLE_PACKAGE_OP)) {//可变长度包
 					replacement_op =
 					    acpi_ps_alloc_op(op->common.
 							     aml_opcode,
-							     op->common.aml);
+							     op->common.aml);//分配相同类型的操作码(而非RETURN_VALUE),保持原操作码类型和AML位置
 					if (!replacement_op) {
 						status = AE_NO_MEMORY;
 					} else {
+                                                /*
+                                                 * 成功分配后复制关键数据字段：
+                                                 * - named.data: 存储对象初始化数据
+                                                 * - named.length: 数据长度
+                                                 * 
+                                                 * 这些字段在加载阶段用于构建命名空间对象
+                                                 */
 						replacement_op->named.data =
 						    op->named.data;
 						replacement_op->named.length =
@@ -213,60 +265,59 @@ acpi_ps_complete_this_op(struct acpi_walk_state *walk_state,
 
 			replacement_op =
 			    acpi_ps_alloc_op(AML_INT_RETURN_VALUE_OP,
-					     op->common.aml);
+					     op->common.aml);//默认情况创建返回值占位符
 			if (!replacement_op) {
 				status = AE_NO_MEMORY;
 			}
 		}
 
-		/* We must unlink this op from the parent tree */
+		/* 我们必须取消此 op 与父树的链接 */
+		if (prev == op) {//prev是同级的第一个节点
 
-		if (prev == op) {
-
-			/* This op is the first in the list */
-
+			/* 情况1：当前Op是链表中第一个节点 */
 			if (replacement_op) {
 				replacement_op->common.parent =
-				    op->common.parent;
-				replacement_op->common.value.arg = NULL;
-				replacement_op->common.node = op->common.node;
+				    op->common.parent;//设置替换节点的父指针
+				replacement_op->common.value.arg = NULL;//初始化替换节点的参数列表
+				replacement_op->common.node = op->common.node;//复制原节点的命名空间节点指针
 				op->common.parent->common.value.arg =
-				    replacement_op;
-				replacement_op->common.next = op->common.next;
+				    replacement_op;//更新父节点的第一个参数指针
+				replacement_op->common.next = op->common.next;//保持链表连续性
 			} else {
 				op->common.parent->common.value.arg =
-				    op->common.next;
+				    op->common.next;//没有替换节点时直接跳过当前节点
 			}
 		}
 
 		/* Search the parent list */
 
-		else
+		else/* 情况2：当前Op在链表中间位置 */
 			while (prev) {
 
 				/* Traverse all siblings in the parent's argument list */
 
-				next = prev->common.next;
+				next = prev->common.next;//获取下一个节点
+				/* 找到当前Op的位置 */
 				if (next == op) {
 					if (replacement_op) {
 						replacement_op->common.parent =
-						    op->common.parent;
+						    op->common.parent;//设置替换节点的父指针
 						replacement_op->common.value.
-						    arg = NULL;
+						    arg = NULL;//初始化参数列表
 						replacement_op->common.node =
-						    op->common.node;
+						    op->common.node;//复制命名空间节点
 						prev->common.next =
-						    replacement_op;
+						    replacement_op;//在前驱节点后插入替换节点
 						replacement_op->common.next =
-						    op->common.next;
-						next = NULL;
+						    op->common.next;//保持链表连续性
+						next = NULL;//标记处理完成
 					} else {
 						prev->common.next =
-						    op->common.next;
+						    op->common.next;//直接跳过当前节点
 						next = NULL;
 					}
 				}
-				prev = next;
+				prev = next;//移动到下一个节点
 			}
 	}
 
@@ -274,8 +325,8 @@ cleanup:
 
 	/* Now we can actually delete the subtree rooted at Op */
 
-	acpi_ps_delete_parse_tree(op);
-	return_ACPI_STATUS(status);
+	acpi_ps_delete_parse_tree(op);//删除当前Op及其子树
+	return_ACPI_STATUS(status);//返回处理状态
 }
 
 /*******************************************************************************
@@ -473,9 +524,9 @@ acpi_status acpi_ps_parse_aml(struct acpi_walk_state *walk_state)//解析并执�
 	while (walk_state) {//循环条件：只要存在walk_state（方法执行上下文），就持续处理
 		if (ACPI_SUCCESS(status)) {//如果上一步执行成功（status为AE_OK），则继续解析AML指令
 			/*
-			 * The parse_loop executes AML until the method terminates
-			 * or calls another method.
-			 */
+                         * parse_loop 执行 AML（ACPI Machine Language）代码，
+                         * 直到该方法终止或者调用另一个方法为止。
+                         */
 			status = acpi_ps_parse_loop(walk_state);//调用核心解析函数执行AML代码流
 		}
 

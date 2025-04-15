@@ -1343,14 +1343,6 @@ static int __init acpi_bus_init(void)
 	}
 
 	/*
-	 * ACPI 2.0 requires the EC driver to be loaded and work before the EC
-	 * device is found in the namespace.
-	 *
-	 * This is accomplished by looking for the ECDT table and getting the EC
-	 * parameters out of that.
-	 *
-	 * Do that before calling acpi_initialize_objects() which may trigger EC
-	 * address space accesses.
 	 * 提前探测ECDT（Embedded Controller Description Table）：
 	 * - ACPI 2.0+要求EC驱动在命名空间枚举前就绪
 	 * - 通过ECDT获取EC控制器的硬件参数

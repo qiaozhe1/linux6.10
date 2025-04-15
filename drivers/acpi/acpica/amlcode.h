@@ -13,25 +13,36 @@
 #define __AMLCODE_H__
 
 /* primary opcodes */
-
-#define AML_ZERO_OP                 (u16) 0x00
-#define AML_ONE_OP                  (u16) 0x01
-#define AML_ALIAS_OP                (u16) 0x06
-#define AML_NAME_OP                 (u16) 0x08
-#define AML_BYTE_OP                 (u16) 0x0a
-#define AML_WORD_OP                 (u16) 0x0b
-#define AML_DWORD_OP                (u16) 0x0c
-#define AML_STRING_OP               (u16) 0x0d
-#define AML_QWORD_OP                (u16) 0x0e	/* ACPI 2.0 */
-#define AML_SCOPE_OP                (u16) 0x10
-#define AML_BUFFER_OP               (u16) 0x11
-#define AML_PACKAGE_OP              (u16) 0x12
-#define AML_VARIABLE_PACKAGE_OP     (u16) 0x13	/* ACPI 2.0 */
-#define AML_METHOD_OP               (u16) 0x14
-#define AML_EXTERNAL_OP             (u16) 0x15	/* ACPI 6.0 */
-#define AML_DUAL_NAME_PREFIX        (u16) 0x2e
-#define AML_MULTI_NAME_PREFIX       (u16) 0x2f
-#define AML_EXTENDED_PREFIX         (u16) 0x5b
+/*
+ * ACPI AML 操作码定义宏
+ * 
+ * 这些宏定义了ACPI Machine Language (AML)中的基础操作码，用于：
+ * 1. 构建ACPI表（DSDT/SSDT等）中的AML字节码
+ * 2. 解析和执行ACPI控制方法
+ * 3. 定义ACPI命名空间对象
+ *
+ * 编码规范：
+ * - 操作码为1字节（0x00-0xFF），部分操作码需要配合扩展前缀(0x5B)
+ * - 按功能分组定义（常量/对象/控制流等）
+ */
+#define AML_ZERO_OP                 (u16) 0x00//数字常量0（优化存储）
+#define AML_ONE_OP                  (u16) 0x01//数字常量1（优化存储）
+#define AML_ALIAS_OP                (u16) 0x06//创建别名对象（Alias()）
+#define AML_NAME_OP                 (u16) 0x08//命名对象声明（Name()）
+#define AML_BYTE_OP                 (u16) 0x0a//8位整型数据
+#define AML_WORD_OP                 (u16) 0x0b//6位整型数据
+#define AML_DWORD_OP                (u16) 0x0c//32位整型数据
+#define AML_STRING_OP               (u16) 0x0d//ASCII字符串数据
+#define AML_QWORD_OP                (u16) 0x0e//64位整型数据（ACPI 2.0+）
+#define AML_SCOPE_OP                (u16) 0x10//创建作用域（Scope()）
+#define AML_BUFFER_OP               (u16) 0x11//字节缓冲区（Buffer()）
+#define AML_PACKAGE_OP              (u16) 0x12//固定长度对象包（Package()）
+#define AML_VARIABLE_PACKAGE_OP     (u16) 0x13//可变长度对象包（ACPI 2.0+）
+#define AML_METHOD_OP               (u16) 0x14//定义控制方法（Method()）
+#define AML_EXTERNAL_OP             (u16) 0x15//外部对象声明（ACPI 6.0+）
+#define AML_DUAL_NAME_PREFIX        (u16) 0x2e//双段名称前缀（如\_SB.PCI0）
+#define AML_MULTI_NAME_PREFIX       (u16) 0x2f//多段名称前缀（如\_SB_.PCI0._ADR）
+#define AML_EXTENDED_PREFIX         (u16) 0x5b//扩展操作码前缀（后跟2字节操作码）
 #define AML_ROOT_PREFIX             (u16) 0x5c//AML编码中的根路径前缀字符（反斜杠'\'）
 #define AML_PARENT_PREFIX           (u16) 0x5e//AML编码中的父路径前缀字符（脱字符'^'）
 #define AML_FIRST_LOCAL_OP          (u16) 0x60	/* Used for Local op # calculations */

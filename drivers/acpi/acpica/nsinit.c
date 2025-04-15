@@ -42,14 +42,27 @@ acpi_ns_find_ini_methods(acpi_handle obj_handle,
  *              initialization on the objects found therein
  *
  ******************************************************************************/
-
+/*
+ * acpi_ns_initialize_objects - 初始化ACPI命名空间中的所有对象
+ *
+ * 功能：
+ * 1. 遍历整个ACPI命名空间
+ * 2. 对每个对象执行初始化操作
+ * 3. 收集命名空间统计信息
+ * 4. 输出调试信息
+ *
+ * 返回值：
+ *   AE_OK - 操作成功完成
+ *   其他ACPI状态码表示错误情况
+ */
 acpi_status acpi_ns_initialize_objects(void)
 {
 	acpi_status status;
-	struct acpi_init_walk_info info;
+	struct acpi_init_walk_info info;//遍历命名空间时使用的信息结构体
 
 	ACPI_FUNCTION_TRACE(ns_initialize_objects);
 
+	/* 调试信息输出 - 显示初始化开始信息 */
 	ACPI_DEBUG_PRINT((ACPI_DB_EXEC,
 			  "[Init] Completing Initialization of ACPI Objects\n"));
 	ACPI_DEBUG_PRINT((ACPI_DB_DISPATCH,
@@ -57,17 +70,23 @@ acpi_status acpi_ns_initialize_objects(void)
 	ACPI_DEBUG_PRINT_RAW((ACPI_DB_INIT,
 			      "Final data object initialization: "));
 
-	/* Clear the info block */
+	/* 第一步：初始化info信息结构体 */
+	memset(&info, 0, sizeof(struct acpi_init_walk_info));//将info结构体所有成员清零
 
-	memset(&info, 0, sizeof(struct acpi_init_walk_info));
-
-	/* Walk entire namespace from the supplied root */
-
-	/*
-	 * TBD: will become ACPI_TYPE_PACKAGE as this type object
-	 * is now the only one that supports deferred initialization
-	 * (forward references).
-	 */
+        /* 第二步：遍历整个命名空间并初始化对象 */
+        /*
+         * 参数说明：
+         * ACPI_TYPE_ANY - 遍历所有类型的对象
+         * ACPI_ROOT_OBJECT - 从命名空间根节点开始遍历
+         * ACPI_UINT32_MAX - 最大遍历深度(无限制)
+         * acpi_ns_init_one_object - 每个对象的初始化回调函数
+         * NULL - 上下文参数(未使用)
+         * &info - 传递给回调函数的信息结构体指针
+         * NULL - 返回值指针(未使用)
+         *
+         * 注意：当前使用ACPI_TYPE_ANY，但未来可能会改为ACPI_TYPE_PACKAGE，
+         * 因为只有Package类型的对象支持延迟初始化(前向引用)
+         */
 	status = acpi_walk_namespace(ACPI_TYPE_ANY, ACPI_ROOT_OBJECT,
 				     ACPI_UINT32_MAX, acpi_ns_init_one_object,
 				     NULL, &info, NULL);
@@ -77,11 +96,11 @@ acpi_status acpi_ns_initialize_objects(void)
 
 	ACPI_DEBUG_PRINT_RAW((ACPI_DB_INIT,
 			      "Namespace contains %u (0x%X) objects\n",
-			      info.object_count, info.object_count));
+			      info.object_count, info.object_count));//输出命名空间对象总数
 
 	ACPI_DEBUG_PRINT((ACPI_DB_DISPATCH,
 			  "%u Control Methods found\n%u Op Regions found\n",
-			  info.method_count, info.op_region_count));
+			  info.method_count, info.op_region_count));//输出控制方法和操作区域的统计信息
 
 	return_ACPI_STATUS(AE_OK);
 }

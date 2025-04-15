@@ -549,7 +549,28 @@ static void acpi_ns_resolve_references(struct acpi_evaluate_info *info)
  *              a compare function, etc.
  *
  ******************************************************************************/
-
+/*
+ * acpi_walk_namespace - 遍历ACPI命名空间的通用函数
+ * @type: 要遍历的对象类型(ACPI_TYPE_ANY表示所有类型)
+ * @start_object: 遍历起始节点的句柄
+ * @max_depth: 最大遍历深度
+ * @descending_callback: 下降时调用的回调函数(进入节点时)
+ * @ascending_callback: 上升时调用的回调函数(离开节点时) 
+ * @context: 传递给回调函数的上下文指针
+ * @return_value: 用于返回值的指针
+ *
+ * 功能：
+ * 1. 参数验证和初始检查
+ * 2. 获取命名空间读写锁和互斥锁
+ * 3. 验证起始节点有效性
+ * 4. 调用内部实现函数执行实际遍历
+ * 5. 确保在退出时正确释放所有锁
+ *
+ * 返回值：
+ *   AE_OK - 遍历成功完成
+ *   AE_BAD_PARAMETER - 参数无效
+ *   其他ACPI状态码表示错误情况
+ */
 acpi_status
 acpi_walk_namespace(acpi_object_type type,
 		    acpi_handle start_object,
@@ -558,12 +579,15 @@ acpi_walk_namespace(acpi_object_type type,
 		    acpi_walk_callback ascending_callback,
 		    void *context, void **return_value)
 {
-	acpi_status status;
+	acpi_status status;//用于存储函数执行状态
 
 	ACPI_FUNCTION_TRACE(acpi_walk_namespace);
 
 	/* Parameter validation */
-
+        /* 第一步：参数验证 */
+        // 检查对象类型是否有效(不超过最大值)
+        // 确保max_depth不为0
+        // 确保至少有一个回调函数被提供
 	if ((type > ACPI_TYPE_LOCAL_MAX) ||
 	    (!max_depth) || (!descending_callback && !ascending_callback)) {
 		return_ACPI_STATUS(AE_BAD_PARAMETER);
@@ -580,6 +604,15 @@ acpi_walk_namespace(acpi_object_type type,
 	 * namespace deletion lock (and the user function can execute control
 	 * methods.)
 	 */
+        /*
+         * 第二步：获取命名空间读写锁
+         * 目的：
+         * 1. 防止与并发表卸载操作产生干扰
+         * 2. 确保在用户函数使用节点时不会被删除
+         * 例外情况：
+         * - 控制方法执行期间创建的临时节点不受此锁保护
+         * - 用户函数可以执行控制方法(即使持有此锁)
+         */
 	status = acpi_ut_acquire_read_lock(&acpi_gbl_namespace_rw_lock);
 	if (ACPI_FAILURE(status)) {
 		return_ACPI_STATUS(status);
@@ -591,28 +624,35 @@ acpi_walk_namespace(acpi_object_type type,
 	 * function must be allowed to make ACPICA calls itself (for example, it
 	 * will typically execute control methods during device enumeration.)
 	 */
+        /*
+         * 第三步：获取命名空间互斥锁
+         * 注意：
+         * - 每次调用用户函数前后会临时解锁/重新锁定
+         * - 允许用户函数内执行ACPI调用(如设备枚举时执行控制方法)
+         */
 	status = acpi_ut_acquire_mutex(ACPI_MTX_NAMESPACE);
 	if (ACPI_FAILURE(status)) {
 		goto unlock_and_exit;
 	}
 
 	/* Now we can validate the starting node */
-
+	/* 第四步：验证起始节点 */
 	if (!acpi_ns_validate_handle(start_object)) {
 		status = AE_BAD_PARAMETER;
 		goto unlock_and_exit2;
 	}
 
+	/* 第五步：执行实际的命名空间遍历 */
 	status = acpi_ns_walk_namespace(type, start_object, max_depth,
 					ACPI_NS_WALK_UNLOCK,
 					descending_callback, ascending_callback,
 					context, return_value);
 
 unlock_and_exit2:
-	(void)acpi_ut_release_mutex(ACPI_MTX_NAMESPACE);
+	(void)acpi_ut_release_mutex(ACPI_MTX_NAMESPACE);//释放命名空间互斥锁
 
 unlock_and_exit:
-	(void)acpi_ut_release_read_lock(&acpi_gbl_namespace_rw_lock);
+	(void)acpi_ut_release_read_lock(&acpi_gbl_namespace_rw_lock);//释放命名空间读写锁(忽略返回值)
 	return_ACPI_STATUS(status);
 }
 

@@ -417,7 +417,27 @@ void acpi_ds_clear_operands(struct acpi_walk_state *walk_state)
  *              namespace.
  *
  ******************************************************************************/
-
+/*
+ * acpi_ds_create_operand - 为ACPI解析树节点创建操作数对象
+ * @walk_state: 当前walk状态结构体
+ * @arg: 要处理的解析节点
+ * @arg_index: 参数索引(在参数列表中的位置)
+ *
+ * 功能：
+ * 1. 处理命名路径(AML_INT_NAMEPATH_OP)的查找和创建
+ * 2. 处理缓冲区字段(BUFFER_FIELD)的特殊情况
+ * 3. 处理空名称路径的占位符创建
+ * 4. 处理已有返回值的复用
+ * 5. 创建新对象并初始化
+ * 6. 管理操作数栈
+ *
+ * 返回值：
+ * AE_OK - 操作成功
+ * AE_BAD_PARAMETER - 无效参数
+ * AE_NO_MEMORY - 内存不足
+ * AE_NOT_FOUND - 名称未找到
+ * AE_AML_* - AML相关错误
+ */
 acpi_status
 acpi_ds_create_operand(struct acpi_walk_state *walk_state,
 		       union acpi_parse_object *arg, u32 arg_index)
@@ -658,36 +678,46 @@ acpi_ds_create_operand(struct acpi_walk_state *walk_state,
  *              stack in preparation for evaluation by the interpreter.
  *
  ******************************************************************************/
-
+/*
+ * acpi_ds_create_operands - 为ACPI方法创建操作数对象
+ * @walk_state: 当前walk状态结构体
+ * @first_arg: 参数链表的第一个参数节点
+ *
+ * 功能：
+ * 1. 收集所有参数节点
+ * 2. 逆序创建解释器操作数对象
+ * 3. 处理错误情况下的资源清理
+ * 4. 维护操作数栈状态
+ */
 acpi_status
 acpi_ds_create_operands(struct acpi_walk_state *walk_state,
 			union acpi_parse_object *first_arg)
 {
 	acpi_status status = AE_OK;
-	union acpi_parse_object *arg;
-	union acpi_parse_object *arguments[ACPI_OBJ_NUM_OPERANDS];
-	u32 arg_count = 0;
-	u32 index = walk_state->num_operands;
-	u32 i;
+	union acpi_parse_object *arg;//当前处理的参数对象
+	union acpi_parse_object *arguments[ACPI_OBJ_NUM_OPERANDS];//参数节点临时数组
+	u32 arg_count = 0;//参数计数器
+	u32 index = walk_state->num_operands;//操作数栈起始索引
+	u32 i;//循环计数器
 
 	ACPI_FUNCTION_TRACE_PTR(ds_create_operands, first_arg);
 
 	/* Get all arguments in the list */
-
-	arg = first_arg;
-	while (arg) {
-		if (index >= ACPI_OBJ_NUM_OPERANDS) {
-			return_ACPI_STATUS(AE_BAD_DATA);
+	/* 收集参数链表中的所有参数节点 */
+	arg = first_arg;//从第一个参数开始
+	while (arg) {//遍历参数链表
+		if (index >= ACPI_OBJ_NUM_OPERANDS) {//检查操作数栈是否溢出
+			return_ACPI_STATUS(AE_BAD_DATA);//返回数据错误
 		}
 
-		arguments[index] = arg;
-		walk_state->operands[index] = NULL;
+		arguments[index] = arg;//保存参数节点引用
+		walk_state->operands[index] = NULL;//初始化操作数槽位
 
 		/* Move on to next argument, if any */
 
-		arg = arg->common.next;
-		arg_count++;
-		index++;
+		arg = arg->common.next;//获取链表下一个参数节点
+		arg_count++;//递增参数计数
+		index++;//递增索引
 	}
 
 	ACPI_DEBUG_PRINT((ACPI_DB_DISPATCH,
@@ -695,13 +725,13 @@ acpi_ds_create_operands(struct acpi_walk_state *walk_state,
 			  walk_state->num_operands, arg_count, index));
 
 	/* Create the interpreter arguments, in reverse order */
+	/* 逆序创建解释器操作数对象 */
+	index--;//调整到最后一个参数的索引位置
+	for (i = 0; i < arg_count; i++) {//遍历所有参数
+		arg = arguments[index];//获取当前参数节点
+		walk_state->operand_index = (u8)index;//设置当前操作数索引
 
-	index--;
-	for (i = 0; i < arg_count; i++) {
-		arg = arguments[index];
-		walk_state->operand_index = (u8)index;
-
-		status = acpi_ds_create_operand(walk_state, arg, index);
+		status = acpi_ds_create_operand(walk_state, arg, index);//创建操作数对象
 		if (ACPI_FAILURE(status)) {
 			goto cleanup;
 		}
@@ -709,21 +739,20 @@ acpi_ds_create_operands(struct acpi_walk_state *walk_state,
 		ACPI_DEBUG_PRINT((ACPI_DB_DISPATCH,
 				  "Created Arg #%u (%p) %u args total\n",
 				  index, arg, arg_count));
-		index--;
+		index--;//移动到前一个参数位置(逆序处理)
 	}
 
-	return_ACPI_STATUS(status);
+	return_ACPI_STATUS(status);//成功完成则返回状态
 
 cleanup:
-	/*
-	 * We must undo everything done above; meaning that we must
-	 * pop everything off of the operand stack and delete those
-	 * objects
-	 */
-	acpi_ds_obj_stack_pop_and_delete(arg_count, walk_state);
+        /*
+         * 错误处理：必须撤销之前完成的所有操作
+         * 即必须从操作数栈弹出所有对象并删除它们
+         */
+	acpi_ds_obj_stack_pop_and_delete(arg_count, walk_state);//清理已创建的操作数
 
-	ACPI_EXCEPTION((AE_INFO, status, "While creating Arg %u", index));
-	return_ACPI_STATUS(status);
+	ACPI_EXCEPTION((AE_INFO, status, "While creating Arg %u", index));//记录异常信息(包含错误位置)
+	return_ACPI_STATUS(status);//返回错误状态
 }
 
 /*****************************************************************************

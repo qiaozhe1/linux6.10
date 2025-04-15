@@ -65,13 +65,12 @@ acpi_status ACPI_INIT_FUNCTION acpi_load_tables(void)//加载ACPI表并初始化
 				"While loading namespace from ACPI tables"));
 	}
 
-	/*
-	 * Initialize the objects in the namespace that remain uninitialized.
-	 * This runs the executable AML that may be part of the declaration of
-	 * these name objects:
-	 *     operation_regions, buffer_fields, Buffers, and Packages.
-	 *
-	 */
+        /*
+         * 初始化命名空间中仍未初始化的对象。
+         * 这将执行可能包含在以下名称对象声明中的可执行 AML 代码：
+         *     operation_regions、buffer_fields、Buffers 和 Packages。
+         *
+         */
 	status = acpi_ns_initialize_objects();//执行命名空间中未初始化对象的AML代码:操作区域(初始化硬件寄存器映射。),缓冲区字段(解析缓冲区结构),静态数据(初始化预定义数据结构)
 	if (ACPI_SUCCESS(status)) {
 		acpi_gbl_namespace_initialized = TRUE;//acpi_gbl_namespace_initialized表示命名空间已完全初始化，允许后续ACPI方法执行。

@@ -31,11 +31,25 @@ static const u8 acpi_gbl_argument_count[] =
  *              NOTE: This procedure must ALWAYS return a valid pointer!
  *
  ******************************************************************************/
-
+/*
+ * acpi_ps_get_opcode_info - 获取AML操作码的元信息描述
+ * @opcode: 要查询的操作码（8位基础或16位扩展操作码）
+ * 
+ * 核心功能：
+ * 1. 区分基础操作码(0x00-0xFF)和扩展操作码(0x5BXX)
+ * 2. 通过全局查找表快速定位操作码描述信息
+ * 3. 处理特殊数据项（原始数据/长度前缀等）
+ * 4. 为未知操作码提供安全返回值
+ *
+ * 关键数据结构：
+ * - acpi_gbl_short_op_index : 基础操作码索引表（256项）
+ * - acpi_gbl_long_op_index  : 扩展操作码索引表（256项）
+ * - acpi_gbl_aml_op_info    : 操作码信息描述表（按类型排序）
+ */
 const struct acpi_opcode_info *acpi_ps_get_opcode_info(u16 opcode)
 {
 #ifdef ACPI_DEBUG_OUTPUT
-	const char *opcode_name = "Unknown AML opcode";
+	const char *opcode_name = "Unknown AML opcode";//默认未知操作码名称
 #endif
 
 	ACPI_FUNCTION_NAME(ps_get_opcode_info);
@@ -43,59 +57,61 @@ const struct acpi_opcode_info *acpi_ps_get_opcode_info(u16 opcode)
 	/*
 	 * Detect normal 8-bit opcode or extended 16-bit opcode
 	 */
-	if (!(opcode & 0xFF00)) {
+	if (!(opcode & 0xFF00)) {//检查8位基础操作码（0x00-0xFF）,判断高8位是否为0
 
 		/* Simple (8-bit) opcode: 0-255, can't index beyond table  */
-
+		/* 基础操作码直接通过索引表查询, acpi_gbl_short_op_index将操作码映射到信息表下标*/
 		return (&acpi_gbl_aml_op_info
 			[acpi_gbl_short_op_index[(u8)opcode]]);
 	}
 
-	if (((opcode & 0xFF00) == AML_EXTENDED_OPCODE) &&
-	    (((u8)opcode) <= MAX_EXTENDED_OPCODE)) {
+	/* 检查有效的16位扩展操作码（0x5B00-0x5BFF） */
+	if (((opcode & 0xFF00) == AML_EXTENDED_OPCODE) &&//判断扩展前缀0x5B
+	    (((u8)opcode) <= MAX_EXTENDED_OPCODE)) {//检查低8位是否合法
 
 		/* Valid extended (16-bit) opcode */
-
+		/* 扩展操作码通过独立索引表查询, acpi_gbl_long_op_index处理扩展操作码映射 */
 		return (&acpi_gbl_aml_op_info
 			[acpi_gbl_long_op_index[(u8)opcode]]);
 	}
 #if defined ACPI_ASL_COMPILER && defined ACPI_DEBUG_OUTPUT
 #include "asldefine.h"
 
+	/* ASL编译器特殊处理（原始数据项） */
 	switch (opcode) {
-	case AML_RAW_DATA_BYTE:
+	case AML_RAW_DATA_BYTE://原始字节数据
 		opcode_name = "-Raw Data Byte-";
 		break;
 
-	case AML_RAW_DATA_WORD:
+	case AML_RAW_DATA_WORD://原始字数据
 		opcode_name = "-Raw Data Word-";
 		break;
 
-	case AML_RAW_DATA_DWORD:
+	case AML_RAW_DATA_DWORD://原始双字数据
 		opcode_name = "-Raw Data Dword-";
 		break;
 
-	case AML_RAW_DATA_QWORD:
+	case AML_RAW_DATA_QWORD://原始四字数据
 		opcode_name = "-Raw Data Qword-";
 		break;
 
-	case AML_RAW_DATA_BUFFER:
+	case AML_RAW_DATA_BUFFER://原始缓冲区
 		opcode_name = "-Raw Data Buffer-";
 		break;
 
-	case AML_RAW_DATA_CHAIN:
+	case AML_RAW_DATA_CHAIN://原始数据链
 		opcode_name = "-Raw Data Buffer Chain-";
 		break;
 
-	case AML_PACKAGE_LENGTH:
+	case AML_PACKAGE_LENGTH://包长度前缀
 		opcode_name = "-Package Length-";
 		break;
 
-	case AML_UNASSIGNED_OPCODE:
+	case AML_UNASSIGNED_OPCODE://未分配操作码
 		opcode_name = "-Unassigned Opcode-";
 		break;
 
-	case AML_DEFAULT_ARG_OP:
+	case AML_DEFAULT_ARG_OP://默认参数标记
 		opcode_name = "-Default Arg-";
 		break;
 
@@ -108,7 +124,7 @@ const struct acpi_opcode_info *acpi_ps_get_opcode_info(u16 opcode)
 
 	ACPI_DEBUG_PRINT((ACPI_DB_EXEC, "%s [%4.4X]\n", opcode_name, opcode));
 
-	return (&acpi_gbl_aml_op_info[_UNK]);
+	return (&acpi_gbl_aml_op_info[_UNK]);//返回全局未知操作码描述（安全处理）._UNK是未知操作码的默认下标
 }
 
 /*******************************************************************************

@@ -283,7 +283,7 @@ acpi_status acpi_ps_execute_table(struct acpi_evaluate_info *info)
 	status = acpi_ds_init_aml_walk(walk_state, op, info->node,
 				       info->obj_desc->method.aml_start,
 				       info->obj_desc->method.aml_length, info,
-				       info->pass_number);//初始化AML遍历器
+				       info->pass_number);//初始化AML遍历器(继续初始化walk_state结构)
 	if (ACPI_FAILURE(status)) {
 		goto cleanup;
 	}

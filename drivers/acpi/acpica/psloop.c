@@ -221,7 +221,7 @@ acpi_ps_get_arguments(struct acpi_walk_state *walk_state,
 acpi_status acpi_ps_parse_loop(struct acpi_walk_state *walk_state)//核心解析循环函数，负责解析并执行AML字节码。该函数处理控制方法的重新启动（如被抢占后恢复）、条件分支判断、作用域管理等核心逻辑。
 {
 	acpi_status status = AE_OK;//函数返回状态码
-	union acpi_parse_object *op = NULL;//当前解析的操作节点
+	union acpi_parse_object *op = NULL;//当前解析树操作节点
 	struct acpi_parse_state *parser_state;//解析器状态结构指针
 	u8 *aml_op_start = NULL;//AML操作的起始字节（初始化为0）
 	u8 opcode_length;// 当前操作码长度（用于解析）
@@ -295,8 +295,7 @@ acpi_status acpi_ps_parse_loop(struct acpi_walk_state *walk_state)//核心解析
 	}
 #endif
 
-	/* Iterative parsing loop, while there is more AML to process: */
-
+	/* 迭代解析循环，只要还有 AML 代码需要处理，就持续解析 */
 	while ((parser_state->aml < parser_state->aml_end) || (op)) {//循环条件：AML未解析完毕或存在未处理的操作节点
 		ASL_CV_CAPTURE_COMMENTS(walk_state);
 
@@ -332,7 +331,7 @@ acpi_status acpi_ps_parse_loop(struct acpi_walk_state *walk_state)//核心解析
 
 				status =
 				    acpi_ps_complete_op(walk_state, &op,
-							status);//释放资源并标记操作失败
+							status);//完成当前Op的解析处理并进行状态转换
 				if (ACPI_FAILURE(status)) {
 					return_ACPI_STATUS(status);// 返回最终错误码
 				}
@@ -404,7 +403,7 @@ acpi_status acpi_ps_parse_loop(struct acpi_walk_state *walk_state)//核心解析
 			if (ACPI_FAILURE(status)) {//如果获取参数失败
 				status =
 				    acpi_ps_complete_op(walk_state, &op,
-							status);//清理操作步骤（释放资源）
+							status);//完成当前Op的解析处理并进行状态转换
 				if (ACPI_FAILURE(status)) {
 					return_ACPI_STATUS(status);//失败返回错误码
 				}
@@ -465,7 +464,7 @@ acpi_status acpi_ps_parse_loop(struct acpi_walk_state *walk_state)//核心解析
 			if (ACPI_FAILURE(status)) {
 				status =
 				    acpi_ps_complete_op(walk_state, &op,
-							status);//清理失败，重新开始循环
+							status);//完成当前Op的解析处理并进行状态转换
 				if (ACPI_FAILURE(status)) {
 					return_ACPI_STATUS(status);
 				}
@@ -530,7 +529,7 @@ acpi_status acpi_ps_parse_loop(struct acpi_walk_state *walk_state)//核心解析
 			walk_state->op = op;// 设置当前操作对象
 			walk_state->opcode = op->common.aml_opcode;//设置操作码类型
 
-			status = walk_state->ascending_callback(walk_state);// 执行回调函数（如类型检查、资源分配）
+			status = walk_state->ascending_callback(walk_state);// 执行回调函数
 			status =
 			    acpi_ps_next_parse_state(walk_state, op, status);//进入下一解析状态
 			if (status == AE_CTRL_PENDING) {//处理控制状态（表示需要延迟处理）
