@@ -72,11 +72,24 @@ u32 acpi_ev_sci_dispatch(void)
  *              control method to call to deal with a SCI.
  *
  ******************************************************************************/
-
+/*
+ * acpi_ev_sci_xrupt_handler - ACPI系统控制中断(SCI)处理程序
+ * @context: 指向GPE中断信息结构的指针
+ *
+ * 功能：
+ * 1. 检测并处理固定ACPI事件
+ * 2. 检测并处理通用目的事件(GPE)
+ * 3. 调用所有主机安装的SCI处理程序
+ * 4. 更新SCI中断计数
+ *
+ * 返回值：
+ *   ACPI_INTERRUPT_HANDLED - 中断已处理
+ *   ACPI_INTERRUPT_NOT_HANDLED - 没有需要处理的事件
+ */
 static u32 ACPI_SYSTEM_XFACE acpi_ev_sci_xrupt_handler(void *context)
 {
-	struct acpi_gpe_xrupt_info *gpe_xrupt_list = context;
-	u32 interrupt_handled = ACPI_INTERRUPT_NOT_HANDLED;
+	struct acpi_gpe_xrupt_info *gpe_xrupt_list = context;//GPE中断信息
+	u32 interrupt_handled = ACPI_INTERRUPT_NOT_HANDLED;//中断处理状态
 
 	ACPI_FUNCTION_TRACE(ev_sci_xrupt_handler);
 
@@ -89,20 +102,20 @@ static u32 ACPI_SYSTEM_XFACE acpi_ev_sci_xrupt_handler(void *context)
 	 * Fixed Events:
 	 * Check for and dispatch any Fixed Events that have occurred
 	 */
-	interrupt_handled |= acpi_ev_fixed_event_detect();
+	interrupt_handled |= acpi_ev_fixed_event_detect();//固定事件处理,检测并分发已发生的固定事件
 
 	/*
 	 * General Purpose Events:
 	 * Check for and dispatch any GPEs that have occurred
 	 */
-	interrupt_handled |= acpi_ev_gpe_detect(gpe_xrupt_list);
+	interrupt_handled |= acpi_ev_gpe_detect(gpe_xrupt_list);//通用目的事件(GPE)处理,检测并分发已发生的GPE事件
 
 	/* Invoke all host-installed SCI handlers */
 
-	interrupt_handled |= acpi_ev_sci_dispatch();
+	interrupt_handled |= acpi_ev_sci_dispatch();//调用所有主机安装的SCI处理程序,允许平台特定的SCI处理
 
-	acpi_sci_count++;
-	return_UINT32(interrupt_handled);
+	acpi_sci_count++;//更新SCI中断计数器(用于统计和调试)
+	return_UINT32(interrupt_handled);//返回中断处理状态
 }
 
 /*******************************************************************************

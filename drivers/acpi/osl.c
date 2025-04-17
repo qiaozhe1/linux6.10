@@ -556,38 +556,63 @@ static irqreturn_t acpi_irq(int irq, void *dev_id)
 	}
 }
 
+/*
+ * acpi_os_install_interrupt_handler - 安装ACPI中断处理程序
+ * @gsi: 全局系统中断号(GSI)
+ * @handler: 中断处理函数指针
+ * @context: 传递给处理函数的上下文
+ *
+ * 功能：
+ * 1. 验证GSI是否为有效的SCI中断
+ * 2. 检查是否已注册过处理程序
+ * 3. 转换GSI为Linux IRQ编号
+ * 4. 注册线程化中断处理程序
+ *
+ * 返回值：
+ *   AE_OK - 操作成功
+ *   AE_BAD_PARAMETER - 无效的GSI参数
+ *   AE_ALREADY_ACQUIRED - 处理程序已注册
+ *   AE_NOT_ACQUIRED - 中断请求失败
+ */
 acpi_status
 acpi_os_install_interrupt_handler(u32 gsi, acpi_osd_handler handler,
 				  void *context)
 {
 	unsigned int irq;
 
-	acpi_irq_stats_init();
+	acpi_irq_stats_init();//初始化中断统计信息
 
 	/*
-	 * ACPI interrupts different from the SCI in our copy of the FADT are
-	 * not supported.
+	 * 只允许安装SCI中断的处理程序,其他ACPI中断在当前实现中不支持
 	 */
 	if (gsi != acpi_gbl_FADT.sci_interrupt)
 		return AE_BAD_PARAMETER;
 
-	if (acpi_irq_handler)
+	if (acpi_irq_handler)//检查是否已存在处理程序
 		return AE_ALREADY_ACQUIRED;
 
-	if (acpi_gsi_to_irq(gsi, &irq) < 0) {
+	if (acpi_gsi_to_irq(gsi, &irq) < 0) {//将ACPI GSI转换为Linux IRQ编号
 		pr_err("SCI (ACPI GSI %d) not registered\n", gsi);
-		return AE_OK;
+		return AE_OK;//转换失败但返回成功
 	}
 
+	/* 保存处理程序和上下文 */
 	acpi_irq_handler = handler;
 	acpi_irq_context = context;
+
+        /* 
+         * 注册线程化中断处理程序
+         * 使用IRQF_SHARED | IRQF_ONESHOT标志：
+         * - 共享中断线
+         * - 线程化中断(下半部在线程中运行)
+         */
 	if (request_threaded_irq(irq, NULL, acpi_irq, IRQF_SHARED | IRQF_ONESHOT,
 			         "acpi", acpi_irq)) {
 		pr_err("SCI (IRQ%d) allocation failed\n", irq);
 		acpi_irq_handler = NULL;
 		return AE_NOT_ACQUIRED;
 	}
-	acpi_sci_irq = irq;
+	acpi_sci_irq = irq;//保存SCI IRQ编号供后续使用 
 
 	return AE_OK;
 }

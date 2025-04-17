@@ -53,11 +53,17 @@ ACPI_MODULE_NAME("evgpeinit")
  * DESCRIPTION: Initialize the GPE data structures and the FADT GPE 0/1 blocks
  *
  ******************************************************************************/
+/*  
+ * acpi_ev_gpe_initialize - 初始化通用目的事件(GPE)子系统
+ * 返回值：
+ *   AE_OK - 成功（即使没有GPE块也返回成功）
+ *   其他 - 互斥锁获取失败的错误码
+ */
 acpi_status acpi_ev_gpe_initialize(void)
 {
-	u32 register_count0 = 0;
-	u32 register_count1 = 0;
-	u32 gpe_number_max = 0;
+	u32 register_count0 = 0;//GPE0块寄存器对数量（每个块包含状态/使能寄存器对）
+	u32 register_count1 = 0;//GPE1块寄存器对数量
+	u32 gpe_number_max = 0;//GPE0块中最大的GPE编号
 	acpi_status status;
 	u64 address;
 
@@ -66,45 +72,41 @@ acpi_status acpi_ev_gpe_initialize(void)
 	ACPI_DEBUG_PRINT_RAW((ACPI_DB_INIT,
 			      "Initializing General Purpose Events (GPEs):\n"));
 
-	status = acpi_ut_acquire_mutex(ACPI_MTX_NAMESPACE);
+	status = acpi_ut_acquire_mutex(ACPI_MTX_NAMESPACE);//获取命名空间互斥锁，防止并发访问ACPI表
 	if (ACPI_FAILURE(status)) {
 		return_ACPI_STATUS(status);
 	}
 
-	/*
-	 * Initialize the GPE Block(s) defined in the FADT
-	 *
-	 * Why the GPE register block lengths are divided by 2:  From the ACPI
-	 * Spec, section "General-Purpose Event Registers", we have:
-	 *
-	 * "Each register block contains two registers of equal length
-	 *  GPEx_STS and GPEx_EN (where x is 0 or 1). The length of the
-	 *  GPE0_STS and GPE0_EN registers is equal to half the GPE0_LEN
-	 *  The length of the GPE1_STS and GPE1_EN registers is equal to
-	 *  half the GPE1_LEN. If a generic register block is not supported
-	 *  then its respective block pointer and block length values in the
-	 *  FADT table contain zeros. The GPE0_LEN and GPE1_LEN do not need
-	 *  to be the same size."
-	 */
+        /*
+         * 初始化 FADT 中定义的 GPE（通用用途事件）块
+         *
+         * 关于为何将 GPE 寄存器块长度除以 2 的原因：根据 ACPI 规范中
+         * “General-Purpose Event Registers”部分的描述如下：
+         *
+         * “每个寄存器块包含两个长度相同的寄存器：GPEx_STS 和 GPEx_EN
+         *  （其中 x 为 0 或 1）。GPE0_STS 和 GPE0_EN 的长度等于 GPE0_LEN 的一半；
+         *  GPE1_STS 和 GPE1_EN 的长度等于 GPE1_LEN 的一半。如果某个通用寄存器块
+         *  不被支持，则在 FADT 表中的对应块指针和块长度值将为零。
+         *  GPE0_LEN 和 GPE1_LEN 可以具有不同的长度。”
+         */
 
-	/*
-	 * Determine the maximum GPE number for this machine.
-	 *
-	 * Note: both GPE0 and GPE1 are optional, and either can exist without
-	 * the other.
-	 *
-	 * If EITHER the register length OR the block address are zero, then that
-	 * particular block is not supported.
-	 */
-	address = ACPI_FADT_GPE_BLOCK_ADDRESS(0);
+        /*
+         * 判断当前平台支持的最大 GPE 编号。
+         *
+         * 注意：GPE0 和 GPE1 是可选的，它们可以独立存在。
+         *
+         * 如果 GPE 寄存器的长度或寄存器块地址中的任意一项为零，
+         * 则说明该寄存器块不被支持。
+         */
+	address = ACPI_FADT_GPE_BLOCK_ADDRESS(0);//从FADT获取GPE0块的地址
 
-	if (acpi_gbl_FADT.gpe0_block_length && address) {
+	if (acpi_gbl_FADT.gpe0_block_length && address) {//检查GPE0块是否存在（长度和地址都非零）
 
 		/* GPE block 0 exists (has both length and address > 0) */
 
-		register_count0 = (u16)(acpi_gbl_FADT.gpe0_block_length / 2);
+		register_count0 = (u16)(acpi_gbl_FADT.gpe0_block_length / 2);//计算寄存器对数量（总长度除以2，因为每个GPE有状态+使能两个寄存器）
 		gpe_number_max =
-		    (register_count0 * ACPI_GPE_REGISTER_WIDTH) - 1;
+		    (register_count0 * ACPI_GPE_REGISTER_WIDTH) - 1;//计算GPE0块中最大的GPE编号（寄存器数量 × 每个寄存器的位数 - 1）
 
 		/* Install GPE Block 0 */
 
@@ -113,7 +115,7 @@ acpi_status acpi_ev_gpe_initialize(void)
 						  acpi_gbl_FADT.xgpe0_block.
 						  space_id, register_count0, 0,
 						  acpi_gbl_FADT.sci_interrupt,
-						  &acpi_gbl_gpe_fadt_blocks[0]);
+						  &acpi_gbl_gpe_fadt_blocks[0]);//创建GPE0块数据结构
 
 		if (ACPI_FAILURE(status)) {
 			ACPI_EXCEPTION((AE_INFO, status,
@@ -121,18 +123,18 @@ acpi_status acpi_ev_gpe_initialize(void)
 		}
 	}
 
-	address = ACPI_FADT_GPE_BLOCK_ADDRESS(1);
+	address = ACPI_FADT_GPE_BLOCK_ADDRESS(1);//从FADT获取GPE1块的地址
 
-	if (acpi_gbl_FADT.gpe1_block_length && address) {
+	if (acpi_gbl_FADT.gpe1_block_length && address) {//检查GPE1块是否存在
 
 		/* GPE block 1 exists (has both length and address > 0) */
 
-		register_count1 = (u16)(acpi_gbl_FADT.gpe1_block_length / 2);
+		register_count1 = (u16)(acpi_gbl_FADT.gpe1_block_length / 2);//计算寄存器对数量
 
 		/* Check for GPE0/GPE1 overlap (if both banks exist) */
 
 		if ((register_count0) &&
-		    (gpe_number_max >= acpi_gbl_FADT.gpe1_base)) {
+		    (gpe_number_max >= acpi_gbl_FADT.gpe1_base)) {//检查GPE0和GPE1范围是否重叠
 			ACPI_ERROR((AE_INFO,
 				    "GPE0 block (GPE 0 to %u) overlaps the GPE1 block "
 				    "(GPE %u to %u) - Ignoring GPE1",
@@ -143,8 +145,8 @@ acpi_status acpi_ev_gpe_initialize(void)
 
 			/* Ignore GPE1 block by setting the register count to zero */
 
-			register_count1 = 0;
-		} else {
+			register_count1 = 0;//通过设置寄存器计数为0来忽略GPE1块
+		} else {//不重叠
 			/* Install GPE Block 1 */
 
 			status =
@@ -156,7 +158,7 @@ acpi_status acpi_ev_gpe_initialize(void)
 						     acpi_gbl_FADT.
 						     sci_interrupt,
 						     &acpi_gbl_gpe_fadt_blocks
-						     [1]);
+						     [1]);//创建GPE1块数据结构
 
 			if (ACPI_FAILURE(status)) {
 				ACPI_EXCEPTION((AE_INFO, status,
@@ -172,17 +174,17 @@ acpi_status acpi_ev_gpe_initialize(void)
 
 	/* Exit if there are no GPE registers */
 
-	if ((register_count0 + register_count1) == 0) {
+	if ((register_count0 + register_count1) == 0) {//如果没有任何GPE块
 
 		/* GPEs are not required by ACPI, this is OK */
-
+		/* 根据ACPI规范，GPE不是必需的 */
 		ACPI_DEBUG_PRINT((ACPI_DB_INIT,
 				  "There are no GPE blocks defined in the FADT\n"));
 		goto cleanup;
 	}
 
 cleanup:
-	(void)acpi_ut_release_mutex(ACPI_MTX_NAMESPACE);
+	(void)acpi_ut_release_mutex(ACPI_MTX_NAMESPACE);//释放命名空间互斥锁
 	return_ACPI_STATUS(AE_OK);
 }
 

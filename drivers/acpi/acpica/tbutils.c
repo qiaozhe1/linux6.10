@@ -31,25 +31,35 @@ acpi_tb_get_root_table_entry(u8 *table_entry, u32 table_entry_size);
  *              for accessing the Global Lock and Firmware Waking Vector
  *
  ******************************************************************************/
-
+/*
+ * acpi_tb_initialize_facs - 初始化FACS(Firmware ACPI Control Structure)表
+ *
+ * 功能：
+ * 1. 根据FADT表信息加载X_FACS(64位地址)或FACS(32位地址)
+ * 2. 更新全局FACS指针(acpi_gbl_FACS)
+ * 3. 处理32/64位地址兼容性问题
+ *
+ * 返回值：
+ * 总是返回AE_OK，错误情况已在底层处理
+ */
 acpi_status acpi_tb_initialize_facs(void)
 {
 	struct acpi_table_facs *facs;
 
-	if (acpi_gbl_FADT.Xfacs &&
-		   (!acpi_gbl_FADT.facs
-		    || !acpi_gbl_use32_bit_facs_addresses)) {
+	if (acpi_gbl_FADT.Xfacs &&//检查64位X_FACS地址
+		   (!acpi_gbl_FADT.facs//无32位FACS地址
+		    || !acpi_gbl_use32_bit_facs_addresses)) {//或强制64位模式
 		(void)acpi_get_table_by_index(acpi_gbl_xfacs_index,
 					      ACPI_CAST_INDIRECT_PTR(struct
 								     acpi_table_header,
-								     &facs));
-		acpi_gbl_FACS = facs;
-	} else if (acpi_gbl_FADT.facs) {
+								     &facs));//通过索引获取X_FACS表
+		acpi_gbl_FACS = facs;//更新全局FACS指针
+	} else if (acpi_gbl_FADT.facs) {//检查32位FACS地址
 		(void)acpi_get_table_by_index(acpi_gbl_facs_index,
 					      ACPI_CAST_INDIRECT_PTR(struct
 								     acpi_table_header,
-								     &facs));
-		acpi_gbl_FACS = facs;
+								     &facs));//通过索引获取FACS表
+		acpi_gbl_FACS = facs;//更新全局FACS指针
 	}
 
 	/* If there is no FACS, just continue. There was already an error msg */
@@ -359,7 +369,21 @@ next_table:
  *              this API must be invoked with ACPI_MTX_TABLES acquired.
  *
  ******************************************************************************/
-
+/*
+ * acpi_tb_get_table - 获取已验证的ACPI表指针
+ * @table_desc: 表描述符指针
+ * @out_table:  输出参数，返回表头指针
+ *
+ * 返回值：
+ * AE_OK - 成功获取表
+ * 其他 - 表验证失败状态
+ *
+ * 功能说明：
+ * 1. 表验证状态检查
+ * 2. 验证计数管理
+ * 3. 溢出检测警告
+ * 4. 返回表指针
+ */
 acpi_status
 acpi_tb_get_table(struct acpi_table_desc *table_desc,
 		  struct acpi_table_header **out_table)
@@ -368,31 +392,33 @@ acpi_tb_get_table(struct acpi_table_desc *table_desc,
 
 	ACPI_FUNCTION_TRACE(acpi_tb_get_table);
 
-	if (table_desc->validation_count == 0) {
+	/* 检查1：表验证状态 */
+	if (table_desc->validation_count == 0) {//未验证表处理
 
 		/* Table need to be "VALIDATED" */
-
+		/* 执行表验证 */
 		status = acpi_tb_validate_table(table_desc);
 		if (ACPI_FAILURE(status)) {
-			return_ACPI_STATUS(status);
+			return_ACPI_STATUS(status);//验证失败直接返回
 		}
 	}
 
+	/* 检查2：验证计数管理 */
 	if (table_desc->validation_count < ACPI_MAX_TABLE_VALIDATIONS) {
-		table_desc->validation_count++;
+		table_desc->validation_count++;//安全增加引用计数
 
 		/*
 		 * Detect validation_count overflows to ensure that the warning
 		 * message will only be printed once.
 		 */
-		if (table_desc->validation_count >= ACPI_MAX_TABLE_VALIDATIONS) {
+		if (table_desc->validation_count >= ACPI_MAX_TABLE_VALIDATIONS) {//溢出检测
 			ACPI_WARNING((AE_INFO,
 				      "Table %p, Validation count overflows\n",
 				      table_desc));
 		}
 	}
 
-	*out_table = table_desc->pointer;
+	*out_table = table_desc->pointer;//返回表指针
 	return_ACPI_STATUS(AE_OK);
 }
 

@@ -108,7 +108,7 @@ acpi_ns_execute_table(u32 table_index, struct acpi_namespace_node *start_node)
 			      ACPI_GET_FUNCTION_NAME, table->signature, table,
 			      method_obj));
 
-	/* 初始化方法对象属性 */
+	/* 初始化方法对象属性,将整个表作为一个方法对象处理 */
 	method_obj->method.aml_start = aml_start;//设置AML代码起始地址
 	method_obj->method.aml_length = aml_length; // 设置AML代码长度
 	method_obj->method.owner_id = owner_id;//绑定所有者ID
@@ -116,7 +116,7 @@ acpi_ns_execute_table(u32 table_index, struct acpi_namespace_node *start_node)
 
 	/* 构建评估上下文 */
 	info->pass_number = ACPI_IMODE_EXECUTE;//设置为执行模式
-	info->node = start_node;//设置起始命名空间节点
+	info->node = start_node;//设置起始命名空间节点(根命名空间节点)
 	info->obj_desc = method_obj;//绑定方法对象
 	info->node_flags = info->node->flags;//继承节点标志
 	info->full_pathname = acpi_ns_get_normalized_pathname(info->node, TRUE);//获取节点路径

@@ -106,7 +106,7 @@ static u64 efi_pa_va_lookup(u64 pa)
 #define get_next_handler(a) ((struct acpi_prmt_handler_info *) (sizeof(struct acpi_prmt_handler_info) + (char *) a))
 
 /**
- * acpi_parse_prmt - 解析ACPI PRMT(Platform Runtime Mechanism Table)模块信息
+ * acpi_parse_prmt - 解析ACPI PRMT(Platform Runtime Mechanism Table)模块条目信息
  * @header: ACPI子表头指针
  * @end: 表结束地址(用于边界检查)
  *

@@ -28,6 +28,22 @@ ACPI_MODULE_NAME("evxfevnt")
  * DESCRIPTION: Transfers the system into ACPI mode.
  *
  ******************************************************************************/
+/*
+ * acpi_enable - 将系统切换到ACPI模式
+ * 
+ * 功能：
+ * 1. 检查ACPI表是否存在
+ * 2. 处理简化硬件模式特殊情况
+ * 3. 检查当前系统模式
+ * 4. 执行模式切换
+ * 5. 验证切换结果
+ *
+ * 返回值：
+ * AE_OK - 成功切换到ACPI模式
+ * AE_NO_ACPI_TABLES - 缺少必要的ACPI表
+ * AE_NO_HARDWARE_RESPONSE - 硬件未响应模式切换
+ * 其他 - 硬件操作错误码
+ */
 acpi_status acpi_enable(void)
 {
 	acpi_status status;
@@ -36,48 +52,49 @@ acpi_status acpi_enable(void)
 	ACPI_FUNCTION_TRACE(acpi_enable);
 
 	/* ACPI tables must be present */
-
-	if (acpi_gbl_fadt_index == ACPI_INVALID_TABLE_INDEX) {
+	/* 验证ACPI表是否存在 */
+	if (acpi_gbl_fadt_index == ACPI_INVALID_TABLE_INDEX) {//检查FADT表索引
 		return_ACPI_STATUS(AE_NO_ACPI_TABLES);
 	}
 
 	/* If the Hardware Reduced flag is set, machine is always in acpi mode */
 
-	if (acpi_gbl_reduced_hardware) {
-		return_ACPI_STATUS(AE_OK);
+	/* 处理简化硬件模式 */
+	if (acpi_gbl_reduced_hardware) {//检查全局简化硬件标志
+		return_ACPI_STATUS(AE_OK);//简化硬件模式下默认已启用ACPI
 	}
 
 	/* Check current mode */
-
-	if (acpi_hw_get_mode() == ACPI_SYS_MODE_ACPI) {
+	/* 检测当前系统模式 */
+	if (acpi_hw_get_mode() == ACPI_SYS_MODE_ACPI) {//获取当前硬件模式
 		ACPI_DEBUG_PRINT((ACPI_DB_INIT,
 				  "System is already in ACPI mode\n"));
-		return_ACPI_STATUS(AE_OK);
+		return_ACPI_STATUS(AE_OK);//已是ACPI模式则直接返回
 	}
 
 	/* Transition to ACPI mode */
 
-	status = acpi_hw_set_mode(ACPI_SYS_MODE_ACPI);
+	status = acpi_hw_set_mode(ACPI_SYS_MODE_ACPI);//尝试切换到ACPI模式
 	if (ACPI_FAILURE(status)) {
 		ACPI_ERROR((AE_INFO,
 			    "Could not transition to ACPI mode"));
-		return_ACPI_STATUS(status);
+		return_ACPI_STATUS(status);//返回硬件操作错误
 	}
 
 	/* Sanity check that transition succeeded */
-
-	for (retry = 0; retry < 30000; ++retry) {
-		if (acpi_hw_get_mode() == ACPI_SYS_MODE_ACPI) {
-			if (retry != 0)
+	/* 验证模式切换结果 */
+	for (retry = 0; retry < 30000; ++retry) {//最大重试30000次
+		if (acpi_hw_get_mode() == ACPI_SYS_MODE_ACPI) {// 检查当前模式
+			if (retry != 0)//如果重试过
 				ACPI_WARNING((AE_INFO,
 				"Platform took > %d00 usec to enter ACPI mode", retry));
-			return_ACPI_STATUS(AE_OK);
+			return_ACPI_STATUS(AE_OK);// 返回成功
 		}
-		acpi_os_stall(100);	/* 100 usec */
+		acpi_os_stall(100);	//每次等待100微秒
 	}
 
-	ACPI_ERROR((AE_INFO, "Hardware did not enter ACPI mode"));
-	return_ACPI_STATUS(AE_NO_HARDWARE_RESPONSE);
+	ACPI_ERROR((AE_INFO, "Hardware did not enter ACPI mode"));//错误输出
+	return_ACPI_STATUS(AE_NO_HARDWARE_RESPONSE);//返回硬件无响应错误
 }
 
 ACPI_EXPORT_SYMBOL(acpi_enable)

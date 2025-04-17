@@ -30,7 +30,23 @@ static u32 acpi_ev_fixed_event_dispatch(u32 event);
  * DESCRIPTION: Initialize global data structures for ACPI events (Fixed, GPE)
  *
  ******************************************************************************/
-
+/*
+ * acpi_ev_initialize_events - 初始化ACPI事件处理子系统
+ *
+ * 功能：
+ * 1. 检查简化硬件模式
+ * 2. 初始化固定事件(Fixed Events)
+ * 3. 初始化通用事件(GPEs)
+ *
+ * 返回值：
+ * AE_OK - 初始化成功
+ * 其他 - 具体错误状态码
+ *
+ * 设计要点：
+ * - 在启用SCI前完成初始化，避免中断竞争
+ * - 分层错误处理机制
+ * - 简化硬件模式快速路径
+ */
 acpi_status acpi_ev_initialize_events(void)
 {
 	acpi_status status;
@@ -39,8 +55,8 @@ acpi_status acpi_ev_initialize_events(void)
 
 	/* If Hardware Reduced flag is set, there are no fixed events */
 
-	if (acpi_gbl_reduced_hardware) {
-		return_ACPI_STATUS(AE_OK);
+	if (acpi_gbl_reduced_hardware) {//检查ACPI简化硬件标志
+		return_ACPI_STATUS(AE_OK);//简化硬件无事件支持,直接返回
 	}
 
 	/*
@@ -48,21 +64,25 @@ acpi_status acpi_ev_initialize_events(void)
 	 * enabling SCIs to prevent interrupts from occurring before the handlers
 	 * are installed.
 	 */
-	status = acpi_ev_fixed_event_initialize();
+        /*
+         * 固定事件初始化
+         * 注意：必须在启用SCI前完成
+         */
+	status = acpi_ev_fixed_event_initialize();//初始化固定事件控制器
 	if (ACPI_FAILURE(status)) {
 		ACPI_EXCEPTION((AE_INFO, status,
 				"Unable to initialize fixed events"));
 		return_ACPI_STATUS(status);
 	}
 
-	status = acpi_ev_gpe_initialize();
+	status = acpi_ev_gpe_initialize();//初始化通用事件控制器
 	if (ACPI_FAILURE(status)) {
 		ACPI_EXCEPTION((AE_INFO, status,
 				"Unable to initialize general purpose events"));
 		return_ACPI_STATUS(status);
 	}
 
-	return_ACPI_STATUS(status);
+	return_ACPI_STATUS(status);//返回成功状态
 }
 
 /*******************************************************************************
@@ -76,7 +96,18 @@ acpi_status acpi_ev_initialize_events(void)
  * DESCRIPTION: Install interrupt handlers for the SCI and Global Lock
  *
  ******************************************************************************/
-
+/*
+ * acpi_ev_install_xrupt_handlers - 安装ACPI中断处理程序
+ * 
+ * 功能：
+ * 1. 安装系统控制中断(SCI)处理程序
+ * 2. 初始化全局锁处理程序
+ * 3. 标记ACPI事件子系统初始化完成
+ *
+ * 返回值：
+ *   AE_OK - 操作成功
+ *   其他 - 中断处理程序安装失败的错误状态
+ */
 acpi_status acpi_ev_install_xrupt_handlers(void)
 {
 	acpi_status status;
@@ -84,14 +115,17 @@ acpi_status acpi_ev_install_xrupt_handlers(void)
 	ACPI_FUNCTION_TRACE(ev_install_xrupt_handlers);
 
 	/* If Hardware Reduced flag is set, there is no ACPI h/w */
-
+        /* 
+         * 检查硬件简化标志(ACPI 5.0+特性)
+         * 如果设置了该标志，表示运行在无ACPI硬件的简化平台上
+         */
 	if (acpi_gbl_reduced_hardware) {
-		return_ACPI_STATUS(AE_OK);
+		return_ACPI_STATUS(AE_OK);//直接返回
 	}
 
 	/* Install the SCI handler */
 
-	status = acpi_ev_install_sci_handler();
+	status = acpi_ev_install_sci_handler();//安装系统控制中断(SCI)处理程序
 	if (ACPI_FAILURE(status)) {
 		ACPI_EXCEPTION((AE_INFO, status,
 				"Unable to install System Control Interrupt handler"));
@@ -100,14 +134,14 @@ acpi_status acpi_ev_install_xrupt_handlers(void)
 
 	/* Install the handler for the Global Lock */
 
-	status = acpi_ev_init_global_lock_handler();
+	status = acpi_ev_init_global_lock_handler();//初始化全局锁处理程序,全局锁用于ACPI表的同步访问
 	if (ACPI_FAILURE(status)) {
 		ACPI_EXCEPTION((AE_INFO, status,
 				"Unable to initialize Global Lock handler"));
 		return_ACPI_STATUS(status);
 	}
 
-	acpi_gbl_events_initialized = TRUE;
+	acpi_gbl_events_initialized = TRUE;//标记ACPI事件子系统已完成初始化
 	return_ACPI_STATUS(status);
 }
 
@@ -122,34 +156,50 @@ acpi_status acpi_ev_install_xrupt_handlers(void)
  * DESCRIPTION: Install the fixed event handlers and disable all fixed events.
  *
  ******************************************************************************/
-
+/*
+ * acpi_ev_fixed_event_initialize - 初始化ACPI固定事件处理框架
+ *
+ * 功能：
+ * 1. 初始化固定事件处理程序数组
+ * 2. 禁用所有固定事件
+ * 
+ * 返回值：
+ * AE_OK - 操作成功
+ * 其他 - 寄存器操作失败状态
+ *
+ * 设计要点：
+ * - 原子化初始化过程
+ * - 硬件寄存器级禁用
+ * - 安全的状态初始化
+ */
 static acpi_status acpi_ev_fixed_event_initialize(void)
 {
 	u32 i;
 	acpi_status status;
 
-	/*
-	 * Initialize the structure that keeps track of fixed event handlers and
-	 * disable all of the fixed events.
-	 */
+        /*
+         * 初始化循环：处理所有预定义的固定事件
+         * ACPI_NUM_FIXED_EVENTS 定义了系统支持的固定事件数量
+         */
 	for (i = 0; i < ACPI_NUM_FIXED_EVENTS; i++) {
-		acpi_gbl_fixed_event_handlers[i].handler = NULL;
-		acpi_gbl_fixed_event_handlers[i].context = NULL;
+		/* 步骤1：清除事件处理程序 */
+		acpi_gbl_fixed_event_handlers[i].handler = NULL;//重置回调函数
+		acpi_gbl_fixed_event_handlers[i].context = NULL;//清除上下文指针
 
 		/* Disable the fixed event */
-
+		/* 步骤2：硬件级禁用事件 */
 		if (acpi_gbl_fixed_event_info[i].enable_register_id != 0xFF) {
 			status =
 			    acpi_write_bit_register(acpi_gbl_fixed_event_info
 						    [i].enable_register_id,
-						    ACPI_DISABLE_EVENT);
+						    ACPI_DISABLE_EVENT);//写入禁用位到对应的使能寄存器
 			if (ACPI_FAILURE(status)) {
 				return (status);
 			}
 		}
 	}
 
-	return (AE_OK);
+	return (AE_OK);//所有事件初始化成功
 }
 
 /*******************************************************************************

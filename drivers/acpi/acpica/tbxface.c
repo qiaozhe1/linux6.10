@@ -402,6 +402,22 @@ ACPI_EXPORT_SYMBOL(acpi_put_table)
  *              internally also.
  *
  ******************************************************************************/
+/*
+ * acpi_get_table_by_index - 通过索引获取ACPI表
+ * @table_index: 请求的表索引
+ * @out_table:   输出参数，返回表头指针
+ *
+ * 返回值：
+ * AE_OK - 成功获取表
+ * AE_BAD_PARAMETER - 参数无效或索引越界
+ * 其他 - 表获取错误状态
+ *
+ * 功能说明：
+ * 1. 参数有效性检查
+ * 2. 线程安全的表访问控制
+ * 3. 索引边界验证
+ * 4. 核心表获取操作
+ */
 acpi_status
 acpi_get_table_by_index(u32 table_index, struct acpi_table_header **out_table)
 {
@@ -420,23 +436,27 @@ acpi_get_table_by_index(u32 table_index, struct acpi_table_header **out_table)
 	 * check if the returned table is NULL instead of the returned status
 	 * to determined if this function is succeeded.
 	 */
-	*out_table = NULL;
+        /*
+         * 兼容性处理：确保输出参数初始化为NULL
+         * 某些OSPM实现仅检查输出表是否为NULL而非返回状态
+         */
+	*out_table = NULL;//显式初始化输出参数
 
-	(void)acpi_ut_acquire_mutex(ACPI_MTX_TABLES);
+	(void)acpi_ut_acquire_mutex(ACPI_MTX_TABLES);//获取表互斥锁
 
 	/* Validate index */
 
-	if (table_index >= acpi_gbl_root_table_list.current_table_count) {
-		status = AE_BAD_PARAMETER;
-		goto unlock_and_exit;
+	if (table_index >= acpi_gbl_root_table_list.current_table_count) {//表索引边界检查
+		status = AE_BAD_PARAMETER;//索引越界错误
+		goto unlock_and_exit;//跳转到解锁路径
 	}
 
 	status =
 	    acpi_tb_get_table(&acpi_gbl_root_table_list.tables[table_index],
-			      out_table);
+			      out_table);//通过索引获取表
 
 unlock_and_exit:
-	(void)acpi_ut_release_mutex(ACPI_MTX_TABLES);
+	(void)acpi_ut_release_mutex(ACPI_MTX_TABLES);//释放表互斥锁
 	return_ACPI_STATUS(status);
 }
 

@@ -109,6 +109,21 @@ ACPI_EXPORT_SYMBOL_INIT(acpi_initialize_subsystem)
  *              Puts system into ACPI mode if it isn't already.
  *
  ******************************************************************************/
+/*
+ * acpi_enable_subsystem - 启用ACPI子系统核心功能
+ * @flags: 控制标志位(ACPI_NO_*系列标志)
+ *
+ * 功能：
+ * 1. 标记早期初始化阶段完成
+ * 2. 启用ACPI模式(除非明确跳过)
+ * 3. 初始化FACS表(固件ACPI控制结构)
+ * 4. 初始化事件处理机制(固定事件和通用事件)
+ * 5. 安装SCI和全局锁中断处理程序
+ *
+ * 返回值：
+ * AE_OK - 所有请求的初始化成功完成
+ * AE_* - 具体错误代码
+ */
 acpi_status ACPI_INIT_FUNCTION acpi_enable_subsystem(u32 flags)
 {
 	acpi_status status = AE_OK;
@@ -120,19 +135,18 @@ acpi_status ACPI_INIT_FUNCTION acpi_enable_subsystem(u32 flags)
 	 * and we can now support address spaces other than Memory, I/O, and
 	 * PCI_Config.
 	 */
-	acpi_gbl_early_initialization = FALSE;
+	acpi_gbl_early_initialization = FALSE;//更新全局标志,标记早期初始化阶段完成
 
-#if (!ACPI_REDUCED_HARDWARE)
+#if (!ACPI_REDUCED_HARDWARE)//在完整硬件支持配置下执行以下代码
 
-	/* Enable ACPI mode */
-
-	if (!(flags & ACPI_NO_ACPI_ENABLE)) {
+	/* 阶段1：启用ACPI硬件模式 */
+	if (!(flags & ACPI_NO_ACPI_ENABLE)) {//检查是否跳过ACPI启用
 		ACPI_DEBUG_PRINT((ACPI_DB_EXEC,
 				  "[Init] Going into ACPI mode\n"));
 
-		acpi_gbl_original_mode = acpi_hw_get_mode();
+		acpi_gbl_original_mode = acpi_hw_get_mode();//获取当前硬件模式(ACPI或非ACPI)
 
-		status = acpi_enable();
+		status = acpi_enable();//调用硬件抽象层函数启用ACPI模式
 		if (ACPI_FAILURE(status)) {
 			ACPI_WARNING((AE_INFO, "AcpiEnable failed"));
 			return_ACPI_STATUS(status);
@@ -143,8 +157,12 @@ acpi_status ACPI_INIT_FUNCTION acpi_enable_subsystem(u32 flags)
 	 * Obtain a permanent mapping for the FACS. This is required for the
 	 * Global Lock and the Firmware Waking Vector
 	 */
-	if (!(flags & ACPI_NO_FACS_INIT)) {
-		status = acpi_tb_initialize_facs();
+	/* 阶段2：初始化FACS(Firmware ACPI Control Structure) 
+	 * FACS表: 非AML表,是 ACPI与操作系统在低功耗状态下的一些通信工作，
+	 * 尤其是睡眠/唤醒（S3/S4）相关控制
+	 * */
+	if (!(flags & ACPI_NO_FACS_INIT)) {//检查是否跳过FACS初始化
+		status = acpi_tb_initialize_facs();//对FACS表进行永久内存映射
 		if (ACPI_FAILURE(status)) {
 			ACPI_WARNING((AE_INFO, "Could not map the FACS table"));
 			return_ACPI_STATUS(status);
@@ -165,11 +183,12 @@ acpi_status ACPI_INIT_FUNCTION acpi_enable_subsystem(u32 flags)
 	 * initialization control methods are run (_REG, _STA, _INI) on the
 	 * entire namespace.
 	 */
-	if (!(flags & ACPI_NO_EVENT_INIT)) {
+	/* 阶段3：初始化ACPI事件处理系统 */
+	if (!(flags & ACPI_NO_EVENT_INIT)) {//检查是否跳过事件初始化
 		ACPI_DEBUG_PRINT((ACPI_DB_EXEC,
 				  "[Init] Initializing ACPI events\n"));
 
-		status = acpi_ev_initialize_events();
+		status = acpi_ev_initialize_events();//初始化固定事件和通用事件(GPE)基础设施
 		if (ACPI_FAILURE(status)) {
 			return_ACPI_STATUS(status);
 		}
@@ -179,11 +198,12 @@ acpi_status ACPI_INIT_FUNCTION acpi_enable_subsystem(u32 flags)
 	 * Install the SCI handler and Global Lock handler. This completes the
 	 * hardware initialization.
 	 */
-	if (!(flags & ACPI_NO_HANDLER_INIT)) {
+	/*阶段4：安装系统控制中断处理程序*/
+	if (!(flags & ACPI_NO_HANDLER_INIT)) {//检查是否跳过处理程序安装
 		ACPI_DEBUG_PRINT((ACPI_DB_EXEC,
 				  "[Init] Installing SCI/GL handlers\n"));
 
-		status = acpi_ev_install_xrupt_handlers();
+		status = acpi_ev_install_xrupt_handlers();//安装SCI(System Control Interrupt)和全局锁处理程序
 		if (ACPI_FAILURE(status)) {
 			return_ACPI_STATUS(status);
 		}

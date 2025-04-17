@@ -291,7 +291,22 @@ error_exit:
  *              Note: Assumes namespace is locked.
  *
  ******************************************************************************/
-
+/*
+ * acpi_ev_create_gpe_block - 创建并初始化一个GPE(通用事件)块
+ * @gpe_device: 关联的ACPI命名空间节点
+ * @address: GPE寄存器块的物理地址
+ * @space_id: 地址空间ID(内存空间或IO空间)
+ * @register_count: 寄存器对数量(状态寄存器+使能寄存器)
+ * @gpe_block_base_number: 该GPE块的起始事件编号
+ * @interrupt_number: 关联的中断号
+ * @return_gpe_block: 返回创建的GPE块指针
+ *
+ * 返回值：
+ *   AE_OK - 成功
+ *   AE_SUPPORT - 不支持的地址空间
+ *   AE_NO_MEMORY - 内存分配失败
+ *   其他 - 操作过程中出现的错误
+ */
 acpi_status
 acpi_ev_create_gpe_block(struct acpi_namespace_node *gpe_device,
 			 u64 address,
@@ -302,73 +317,72 @@ acpi_ev_create_gpe_block(struct acpi_namespace_node *gpe_device,
 			 struct acpi_gpe_block_info **return_gpe_block)
 {
 	acpi_status status;
-	struct acpi_gpe_block_info *gpe_block;
-	struct acpi_gpe_walk_info walk_info;
+	struct acpi_gpe_block_info *gpe_block;//新GPE块指针
+	struct acpi_gpe_walk_info walk_info;//用于命名空间遍历的结构
 
 	ACPI_FUNCTION_TRACE(ev_create_gpe_block);
 
-	if (!register_count) {
-		return_ACPI_STATUS(AE_OK);
+	if (!register_count) {//检查寄存器数量是否为0
+		return_ACPI_STATUS(AE_OK);//无寄存器直接返回成功
 	}
 
 	/* Validate the space_ID */
-
+	/* 验证地址空间类型 */
 	if ((space_id != ACPI_ADR_SPACE_SYSTEM_MEMORY) &&
-	    (space_id != ACPI_ADR_SPACE_SYSTEM_IO)) {
+	    (space_id != ACPI_ADR_SPACE_SYSTEM_IO)) {//仅支持内存和IO空间
 		ACPI_ERROR((AE_INFO,
 			    "Unsupported address space: 0x%X", space_id));
 		return_ACPI_STATUS(AE_SUPPORT);
 	}
 
-	if (space_id == ACPI_ADR_SPACE_SYSTEM_IO) {
+	if (space_id == ACPI_ADR_SPACE_SYSTEM_IO) {//如果是IO空间
 		status = acpi_hw_validate_io_block(address,
 						   ACPI_GPE_REGISTER_WIDTH,
-						   register_count);
+						   register_count);//验证IO端口范围有效性
 		if (ACPI_FAILURE(status))
-			return_ACPI_STATUS(status);
+			return_ACPI_STATUS(status);//IO端口验证失败
 	}
 
 	/* Allocate a new GPE block */
 
-	gpe_block = ACPI_ALLOCATE_ZEROED(sizeof(struct acpi_gpe_block_info));
+	gpe_block = ACPI_ALLOCATE_ZEROED(sizeof(struct acpi_gpe_block_info));//分配GPE块结构体内存并初始化为0 
 	if (!gpe_block) {
 		return_ACPI_STATUS(AE_NO_MEMORY);
 	}
 
 	/* Initialize the new GPE block */
 
-	gpe_block->address = address;
-	gpe_block->space_id = space_id;
-	gpe_block->node = gpe_device;
-	gpe_block->gpe_count = (u16)(register_count * ACPI_GPE_REGISTER_WIDTH);
-	gpe_block->initialized = FALSE;
-	gpe_block->register_count = register_count;
-	gpe_block->block_base_number = gpe_block_base_number;
+	gpe_block->address = address;//设置寄存器块物理地址
+	gpe_block->space_id = space_id;//设置地址空间类型
+	gpe_block->node = gpe_device;//关联的ACPI设备节点
+	gpe_block->gpe_count = (u16)(register_count * ACPI_GPE_REGISTER_WIDTH);//计算总GPE数量
+	gpe_block->initialized = FALSE;//标记为未完全初始化
+	gpe_block->register_count = register_count;//寄存器对数量
+	gpe_block->block_base_number = gpe_block_base_number;//起始GPE编号
 
-	/*
-	 * Create the register_info and event_info sub-structures
-	 * Note: disables and clears all GPEs in the block
-	 */
+        /* 
+         * 创建GPE信息子结构(寄存器信息和事件信息)
+         * 注意：此操作会禁用并清除该块中所有GPE
+         */
 	status = acpi_ev_create_gpe_info_blocks(gpe_block);
 	if (ACPI_FAILURE(status)) {
-		ACPI_FREE(gpe_block);
+		ACPI_FREE(gpe_block);//失败时释放主结构
 		return_ACPI_STATUS(status);
 	}
 
 	/* Install the new block in the global lists */
 
-	status = acpi_ev_install_gpe_block(gpe_block, interrupt_number);
-	if (ACPI_FAILURE(status)) {
+	status = acpi_ev_install_gpe_block(gpe_block, interrupt_number);//将新GPE块安装到全局列表中
+	if (ACPI_FAILURE(status)) {//失败时释放所有已分配资源 
 		ACPI_FREE(gpe_block->register_info);
 		ACPI_FREE(gpe_block->event_info);
 		ACPI_FREE(gpe_block);
 		return_ACPI_STATUS(status);
 	}
 
-	acpi_gbl_all_gpes_initialized = FALSE;
+	acpi_gbl_all_gpes_initialized = FALSE;//标记全局GPE未完全初始化
 
-	/* Find all GPE methods (_Lxx or_Exx) for this block */
-
+	/* 遍历命名空间查找该GPE块相关的控制方法(_Lxx/_Exx) */
 	walk_info.gpe_block = gpe_block;
 	walk_info.gpe_device = gpe_device;
 	walk_info.execute_by_owner_id = FALSE;
@@ -380,7 +394,7 @@ acpi_ev_create_gpe_block(struct acpi_namespace_node *gpe_device,
 
 	/* Return the new block */
 
-	if (return_gpe_block) {
+	if (return_gpe_block) {//通过输出参数返回新创建的GPE块
 		(*return_gpe_block) = gpe_block;
 	}
 
@@ -396,7 +410,7 @@ acpi_ev_create_gpe_block(struct acpi_namespace_node *gpe_device,
 
 	/* Update global count of currently available GPEs */
 
-	acpi_current_gpe_count += gpe_block->gpe_count;
+	acpi_current_gpe_count += gpe_block->gpe_count;//更新全局可用GPE计数器
 	return_ACPI_STATUS(AE_OK);
 }
 

@@ -535,10 +535,10 @@ struct acpi_fixed_event_handler {
 };
 
 struct acpi_fixed_event_info {
-	u8 status_register_id;
-	u8 enable_register_id;
-	u16 status_bit_mask;
-	u16 enable_bit_mask;
+	u8 status_register_id;//状态寄存器的索引
+	u8 enable_register_id;//使能寄存器的索引
+	u16 status_bit_mask;//状态位掩码
+	u16 enable_bit_mask;//使能位掩码
 };
 
 /* Information used during field processing */
