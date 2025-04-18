@@ -121,40 +121,38 @@ acpi_status acpi_ns_initialize_objects(void)
  *
  ******************************************************************************/
 
-acpi_status acpi_ns_initialize_devices(u32 flags)
+acpi_status acpi_ns_initialize_devices(u32 flags)//初始化ACPI命名空间中的设备对象
 {
 	acpi_status status = AE_OK;
-	struct acpi_device_walk_info info;
-	acpi_handle handle;
+	struct acpi_device_walk_info info;//设备遍历信息结构体，用于收集初始化过程中的统计信息
+	acpi_handle handle;//临时节点句柄，用于存储查找的ACPI对象
 
 	ACPI_FUNCTION_TRACE(ns_initialize_devices);
 
-	if (!(flags & ACPI_NO_DEVICE_INIT)) {
+	if (!(flags & ACPI_NO_DEVICE_INIT)) {//检查是否跳过设备初始化阶段,ACPI_NO_DEVICE_INIT标志表示不执行设备初始化
 		ACPI_DEBUG_PRINT((ACPI_DB_EXEC,
 				  "[Init] Initializing ACPI Devices\n"));
 
-		/* Init counters */
-
-		info.device_count = 0;
-		info.num_STA = 0;
-		info.num_INI = 0;
+		/* 初始化遍历计数器 */
+		info.device_count = 0;//已检查的设备总数
+		info.num_STA = 0;//已执行的_STA方法计数
+		info.num_INI = 0;//已执行的_INI方法计数
 
 		ACPI_DEBUG_PRINT_RAW((ACPI_DB_INIT,
 				      "Initializing Device/Processor/Thermal objects "
 				      "and executing _INI/_STA methods:\n"));
 
 		/* Tree analysis: find all subtrees that contain _INI methods */
-
+		/* 第一阶段：遍历ACPI命名空间,查找所有包含_INI方法的子树,并标记存在_INI方法 */
 		status = acpi_ns_walk_namespace(ACPI_TYPE_ANY, ACPI_ROOT_OBJECT,
 						ACPI_UINT32_MAX, FALSE,
 						acpi_ns_find_ini_methods, NULL,
 						&info, NULL);
-		if (ACPI_FAILURE(status)) {
+		if (ACPI_FAILURE(status)) {//如果遍历失败，跳转到错误处理
 			goto error_exit;
 		}
 
-		/* Allocate the evaluation information block */
-
+		/* 为方法评估分配信息结构体,使用ACPI内存分配器，并初始化为全零 */
 		info.evaluate_info =
 		    ACPI_ALLOCATE_ZEROED(sizeof(struct acpi_evaluate_info));
 		if (!info.evaluate_info) {
@@ -162,19 +160,17 @@ acpi_status acpi_ns_initialize_devices(u32 flags)
 			goto error_exit;
 		}
 
-		/*
-		 * Execute the "global" _INI method that may appear at the root.
-		 * This support is provided for Windows compatibility (Vista+) and
-		 * is not part of the ACPI specification.
+		/* 执行根节点的全局_INI方法（Windows兼容性支持）
+		 * 注意：这不是标准ACPI规范的一部分
 		 */
-		info.evaluate_info->prefix_node = acpi_gbl_root_node;
-		info.evaluate_info->relative_pathname = METHOD_NAME__INI;
-		info.evaluate_info->parameters = NULL;
-		info.evaluate_info->flags = ACPI_IGNORE_RETURN_VALUE;
+		info.evaluate_info->prefix_node = acpi_gbl_root_node;//设置根节点
+		info.evaluate_info->relative_pathname = METHOD_NAME__INI;//_INI方法名
+		info.evaluate_info->parameters = NULL;//无输入参数
+		info.evaluate_info->flags = ACPI_IGNORE_RETURN_VALUE;//忽略返回值
 
-		status = acpi_ns_evaluate(info.evaluate_info);
+		status = acpi_ns_evaluate(info.evaluate_info);//执行方法
 		if (ACPI_SUCCESS(status)) {
-			info.num_INI++;
+			info.num_INI++;//成功执行则增加计数器
 		}
 
 		/*
@@ -182,17 +178,21 @@ acpi_status acpi_ns_initialize_devices(u32 flags)
 		 * There appears to be a strict order requirement for \_SB._INI,
 		 * which should be evaluated before any _REG evaluations.
 		 */
-		status = acpi_get_handle(NULL, "\\_SB", &handle);
+		/*
+		 * 执行\_SB._INI方法（系统总线初始化）
+		 * 注意：这里存在严格的执行顺序要求,必须在任何_REG评估之前执行
+		 * */
+		status = acpi_get_handle(NULL, "\\_SB", &handle);//获取\_SB节点的句柄
 		if (ACPI_SUCCESS(status)) {
 			memset(info.evaluate_info, 0,
-			       sizeof(struct acpi_evaluate_info));
-			info.evaluate_info->prefix_node = handle;
+			       sizeof(struct acpi_evaluate_info));//重置评估信息结构
+			info.evaluate_info->prefix_node = handle;//设置SB节点
 			info.evaluate_info->relative_pathname =
-			    METHOD_NAME__INI;
-			info.evaluate_info->parameters = NULL;
-			info.evaluate_info->flags = ACPI_IGNORE_RETURN_VALUE;
+			    METHOD_NAME__INI;//设置方法名
+			info.evaluate_info->parameters = NULL;//无参数
+			info.evaluate_info->flags = ACPI_IGNORE_RETURN_VALUE;//忽略返回值
 
-			status = acpi_ns_evaluate(info.evaluate_info);
+			status = acpi_ns_evaluate(info.evaluate_info);//执行方法
 			if (ACPI_SUCCESS(status)) {
 				info.num_INI++;
 			}
@@ -212,20 +212,31 @@ acpi_status acpi_ns_initialize_devices(u32 flags)
 	 * root bus that doesn't contain _BBN object. So this code is kept here
 	 * in order not to break things.
 	 */
+	/*
+	 * 第二阶段：执行所有_REG方法（操作区域注册）
+	 * 注意：
+	 * 1. 任何被_REG方法访问的对象都会自动初始化
+	 * 2. 根据规范，系统内存/IO区域理论上不需要_REG
+	 * 3. 但PCI配置区域需要_REG方法
+	 * 4. 保留此代码以确保最大兼容性
+	 * */
 	if (!(flags & ACPI_NO_ADDRESS_SPACE_INIT)) {
 		ACPI_DEBUG_PRINT((ACPI_DB_EXEC,
 				  "[Init] Executing _REG OpRegion methods\n"));
 
-		status = acpi_ev_initialize_op_regions();
+		status = acpi_ev_initialize_op_regions();//调用操作区域初始化函数
 		if (ACPI_FAILURE(status)) {
 			goto error_exit;
 		}
 	}
 
+	/* 第三阶段：设备初始化主流程 */
 	if (!(flags & ACPI_NO_DEVICE_INIT)) {
 
 		/* Walk namespace to execute all _INIs on present devices */
-
+		/* 再次遍历命名空间,这次执行所有存在设备的_INI方法,
+		 * 使用acpi_ns_init_one_device作为回调函数 
+		 */
 		status = acpi_ns_walk_namespace(ACPI_TYPE_ANY, ACPI_ROOT_OBJECT,
 						ACPI_UINT32_MAX, FALSE,
 						acpi_ns_init_one_device, NULL,
@@ -235,13 +246,14 @@ acpi_status acpi_ns_initialize_devices(u32 flags)
 		 * Any _OSI requests should be completed by now. If the BIOS has
 		 * requested any Windows OSI strings, we will always truncate
 		 * I/O addresses to 16 bits -- for Windows compatibility.
+		 * Windows兼容性处理：
 		 */
 		if (acpi_gbl_osi_data >= ACPI_OSI_WIN_2000) {
 			acpi_gbl_truncate_io_addresses = TRUE;
 		}
 
-		ACPI_FREE(info.evaluate_info);
-		if (ACPI_FAILURE(status)) {
+		ACPI_FREE(info.evaluate_info);// 释放之前分配的评估信息内存 
+		if (ACPI_FAILURE(status)) {//检查初始化是否成功
 			goto error_exit;
 		}
 
@@ -252,7 +264,7 @@ acpi_status acpi_ns_initialize_devices(u32 flags)
 				      info.device_count));
 	}
 
-	return_ACPI_STATUS(status);
+	return_ACPI_STATUS(status);//正常执行路径，返回状态码
 
 error_exit:
 	ACPI_EXCEPTION((AE_INFO, status, "During device initialization"));
@@ -477,44 +489,53 @@ acpi_ns_init_one_object(acpi_handle obj_handle,//当前空间节点句柄
  *              that do not contain an _INI.
  *
  ******************************************************************************/
-
+/*
+ * acpi_ns_find_ini_methods - 遍历ACPI命名空间查找_INI方法的回调函数
+ * @obj_handle: 当前遍历到的ACPI对象句柄
+ * @nesting_level: 当前命名空间层级深度
+ * @context: 传入的用户上下文(这里指向acpi_device_walk_info结构)
+ * @return_value: 用于返回值的指针(未使用)
+ * 返回值: 始终返回AE_OK以继续遍历
+ */
 static acpi_status
 acpi_ns_find_ini_methods(acpi_handle obj_handle,
 			 u32 nesting_level, void *context, void **return_value)
 {
 	struct acpi_device_walk_info *info =
-	    ACPI_CAST_PTR(struct acpi_device_walk_info, context);
+	    ACPI_CAST_PTR(struct acpi_device_walk_info, context);//将上下文转换为设备遍历信息结构指针
 	struct acpi_namespace_node *node;
 	struct acpi_namespace_node *parent_node;
 
-	/* Keep count of device/processor/thermal objects */
-
-	node = ACPI_CAST_PTR(struct acpi_namespace_node, obj_handle);
-	if ((node->type == ACPI_TYPE_DEVICE) ||
-	    (node->type == ACPI_TYPE_PROCESSOR) ||
-	    (node->type == ACPI_TYPE_THERMAL)) {
-		info->device_count++;
+	/* 统计设备类对象数量 */
+	node = ACPI_CAST_PTR(struct acpi_namespace_node, obj_handle);//将对象句柄转换为命名空间节点指针
+	if ((node->type == ACPI_TYPE_DEVICE) ||//ACPI设备对象
+	    (node->type == ACPI_TYPE_PROCESSOR) ||//处理器对象
+	    (node->type == ACPI_TYPE_THERMAL)) {//散热对象 
+		info->device_count++;//增加设备计数器
 		return (AE_OK);
 	}
 
 	/* We are only looking for methods named _INI */
-
+	/* 只处理名为_INI的方法 */
 	if (!ACPI_COMPARE_NAMESEG(node->name.ascii, METHOD_NAME__INI)) {
-		return (AE_OK);
+		return (AE_OK);//非_INI方法直接跳过
 	}
 
 	/*
-	 * The only _INI methods that we care about are those that are
-	 * present under Device, Processor, and Thermal objects.
+	 * 标记有效的_INI方法
+	 * 只关心位于Device/Processor/Thermal对象下的_INI方法
 	 */
-	parent_node = node->parent;
-	switch (parent_node->type) {
-	case ACPI_TYPE_DEVICE:
-	case ACPI_TYPE_PROCESSOR:
-	case ACPI_TYPE_THERMAL:
+	parent_node = node->parent;//获取父节点
+	switch (parent_node->type) {//检查父节点类型
+	case ACPI_TYPE_DEVICE://设备对象
+	case ACPI_TYPE_PROCESSOR://处理器对象
+	case ACPI_TYPE_THERMAL://散热对象
 
 		/* Mark parent and bubble up the INI present flag to the root */
-
+		/* 标记父节点及所有祖先节点
+		 * 设置ANOBJ_SUBTREE_HAS_INI标志位
+		 * 这样上层可以知道该子树包含需要执行的_INI方法
+		 */
 		while (parent_node) {
 			parent_node->flags |= ANOBJ_SUBTREE_HAS_INI;
 			parent_node = parent_node->parent;
@@ -542,26 +563,34 @@ acpi_ns_find_ini_methods(acpi_handle obj_handle,
  *              present, and if so, calls _INI.
  *
  ******************************************************************************/
-
+/*
+ * acpi_ns_init_one_device - 初始化单个ACPI设备的回调函数
+ * @obj_handle: 当前设备对象的句柄
+ * @nesting_level: 当前命名空间层级深度
+ * @context: 指向acpi_device_walk_info结构的指针
+ * @return_value: 未使用的返回值指针
+ * 返回值: 状态码，控制命名空间遍历行为
+ */
 static acpi_status
 acpi_ns_init_one_device(acpi_handle obj_handle,
 			u32 nesting_level, void *context, void **return_value)
 {
 	struct acpi_device_walk_info *walk_info =
-	    ACPI_CAST_PTR(struct acpi_device_walk_info, context);
-	struct acpi_evaluate_info *info = walk_info->evaluate_info;
+	    ACPI_CAST_PTR(struct acpi_device_walk_info, context);//获取设备遍历上下文
+	struct acpi_evaluate_info *info = walk_info->evaluate_info;//方法评估信息结构
 	u32 flags;
 	acpi_status status;
-	struct acpi_namespace_node *device_node;
+	struct acpi_namespace_node *device_node;//当前设备节点指针
 
 	ACPI_FUNCTION_TRACE(ns_init_one_device);
 
 	/* We are interested in Devices, Processors and thermal_zones only */
 
-	device_node = ACPI_CAST_PTR(struct acpi_namespace_node, obj_handle);
-	if ((device_node->type != ACPI_TYPE_DEVICE) &&
-	    (device_node->type != ACPI_TYPE_PROCESSOR) &&
-	    (device_node->type != ACPI_TYPE_THERMAL)) {
+	device_node = ACPI_CAST_PTR(struct acpi_namespace_node, obj_handle);//将对象句柄转换为命名空间节点指针
+	/* 检查节点类型，只处理设备/处理器/散热区三种类型 */
+	if ((device_node->type != ACPI_TYPE_DEVICE) &&//非设备对象
+	    (device_node->type != ACPI_TYPE_PROCESSOR) &&//非处理器对象
+	    (device_node->type != ACPI_TYPE_THERMAL)) {//非散热区对象
 		return_ACPI_STATUS(AE_OK);
 	}
 
@@ -571,6 +600,7 @@ acpi_ns_init_one_device(acpi_handle obj_handle,
 	 *
 	 * If this device subtree does not contain any _INI methods, we
 	 * can exit now and stop traversing this entire subtree.
+	 * 如果该子树不包含_INI方法(ANOBJ_SUBTREE_HAS_INI未设置),则跳过整个子树的遍历
 	 */
 	if (!(device_node->flags & ANOBJ_SUBTREE_HAS_INI)) {
 		return_ACPI_STATUS(AE_CTRL_DEPTH);
@@ -590,12 +620,12 @@ acpi_ns_init_one_device(acpi_handle obj_handle,
 	ACPI_DEBUG_EXEC(acpi_ut_display_init_pathname
 			(ACPI_TYPE_METHOD, device_node, METHOD_NAME__STA));
 
-	status = acpi_ut_execute_STA(device_node, &flags);
+	status = acpi_ut_execute_STA(device_node, &flags);//执行_STA方法获取设备状态
 	if (ACPI_FAILURE(status)) {
 
 		/* Ignore error and move on to next device */
 
-		return_ACPI_STATUS(AE_OK);
+		return_ACPI_STATUS(AE_OK);//忽略_STA执行错误(如方法不存在) ,继续处理下一个设备
 	}
 
 	/*
@@ -607,9 +637,11 @@ acpi_ns_init_one_device(acpi_handle obj_handle,
 	 * "If a device object (including the processor object) does not have an
 	 * _STA object, then OSPM assumes that all of the above bits are set (in
 	 * other words, the device is present, ..., and functioning)"
+	 * 处理_STA返回值：
+	 * 如果flags不是最大值(0xFFFFFFFF)，说明_STA方法存在且已执行
 	 */
 	if (flags != ACPI_UINT32_MAX) {
-		walk_info->num_STA++;
+		walk_info->num_STA++;//增加_STA执行计数器
 	}
 
 	/*
@@ -618,11 +650,16 @@ acpi_ns_init_one_device(acpi_handle obj_handle,
 	 * Note: ACPI spec does not seem to specify behavior for the present but
 	 * not functioning case, so we assume functioning if present.
 	 */
-	if (!(flags & ACPI_STA_DEVICE_PRESENT)) {
+        /*
+         * 设备状态检查：
+         * ACPI_STA_DEVICE_PRESENT - 位0表示设备存在
+         * ACPI_STA_DEVICE_FUNCTIONING - 位3表示设备功能正常
+         */
+	if (!(flags & ACPI_STA_DEVICE_PRESENT)) {//检查设备存在位
 
 		/* Device is not present, we must examine the Functioning bit */
 
-		if (flags & ACPI_STA_DEVICE_FUNCTIONING) {
+		if (flags & ACPI_STA_DEVICE_FUNCTIONING) {//检查功能正常位
 			/*
 			 * Device is not present but is "functioning". In this case,
 			 * we will not run _INI, but we continue to examine the children
@@ -638,7 +675,7 @@ acpi_ns_init_one_device(acpi_handle obj_handle,
 			 * valid. OSPM should continue enumeration below a device whose
 			 * _STA returns this bit combination"
 			 */
-			return_ACPI_STATUS(AE_OK);
+			return_ACPI_STATUS(AE_OK);//设备不存在但标记为功能正常(如桥设备),不执行_INI但继续检查子设备
 		} else {
 			/*
 			 * Device is not present and is not functioning. We must abort the
@@ -650,6 +687,7 @@ acpi_ns_init_one_device(acpi_handle obj_handle,
 			 * "If the _STA method indicates that the device is not present,
 			 * OSPM will not run the _INI and will not examine the children
 			 * of the device for _INI methods"
+			 * 设备不存在且不工作：跳过整个子树的遍历
 			 */
 			return_ACPI_STATUS(AE_CTRL_DEPTH);
 		}
@@ -662,49 +700,55 @@ acpi_ns_init_one_device(acpi_handle obj_handle,
 	 * Note: We know there is an _INI within this subtree, but it may not be
 	 * under this particular device, it may be lower in the branch.
 	 */
-	if (!ACPI_COMPARE_NAMESEG(device_node->name.ascii, "_SB_") ||
-	    device_node->parent != acpi_gbl_root_node) {
+        /*
+         * 执行_INI方法的条件检查：
+         * 1. 当前设备不是_SB_设备 或 
+         * 2. 不是根节点的直接子节点
+         * (避免重复执行已在acpi_ns_initialize_devices中处理过的_SB_._INI)
+         */
+	if (!ACPI_COMPARE_NAMESEG(device_node->name.ascii, "_SB_") ||//检查设备名
+	    device_node->parent != acpi_gbl_root_node) {// 检查父节点
 		ACPI_DEBUG_EXEC(acpi_ut_display_init_pathname
 				(ACPI_TYPE_METHOD, device_node,
 				 METHOD_NAME__INI));
 
-		memset(info, 0, sizeof(struct acpi_evaluate_info));
-		info->prefix_node = device_node;
-		info->relative_pathname = METHOD_NAME__INI;
-		info->parameters = NULL;
-		info->flags = ACPI_IGNORE_RETURN_VALUE;
+		memset(info, 0, sizeof(struct acpi_evaluate_info));//清空评估信息结构体
+		info->prefix_node = device_node;//设置当前节点
+		info->relative_pathname = METHOD_NAME__INI;//设置方法名
+		info->parameters = NULL;//无输入参数
+		info->flags = ACPI_IGNORE_RETURN_VALUE;//忽略返回值
 
-		status = acpi_ns_evaluate(info);
+		status = acpi_ns_evaluate(info);//调用命名空间评估函数,执行_INI方法
 		if (ACPI_SUCCESS(status)) {
-			walk_info->num_INI++;
+			walk_info->num_INI++;//执行成功,增加_INI执行计数器
 		}
-#ifdef ACPI_DEBUG_OUTPUT
-		else if (status != AE_NOT_FOUND) {
+#ifdef ACPI_DEBUG_OUTPUT//调试模式下的错误处理
+		else if (status != AE_NOT_FOUND) {//忽略"方法未找到"错误
 
 			/* Ignore error and move on to next device */
 
 			char *scope_name =
-			    acpi_ns_get_normalized_pathname(device_node, TRUE);
+			    acpi_ns_get_normalized_pathname(device_node, TRUE);//获取设备路径用于错误报告
 
 			ACPI_EXCEPTION((AE_INFO, status,
 					"during %s._INI execution",
 					scope_name));
-			ACPI_FREE(scope_name);
+			ACPI_FREE(scope_name);//释放路径字符串内存
 		}
 #endif
 	}
 
 	/* Ignore errors from above */
 
-	status = AE_OK;
+	status = AE_OK;//重置状态为成功，忽略之前可能出现的错误
 
 	/*
 	 * The _INI method has been run if present; call the Global Initialization
 	 * Handler for this device.
 	 */
-	if (acpi_gbl_init_handler) {
+	if (acpi_gbl_init_handler) {//检查是否注册了全局初始化处理程序
 		status =
-		    acpi_gbl_init_handler(device_node, ACPI_INIT_DEVICE_INI);
+		    acpi_gbl_init_handler(device_node, ACPI_INIT_DEVICE_INI);//调用全局初始化处理程序
 	}
 
 	return_ACPI_STATUS(status);

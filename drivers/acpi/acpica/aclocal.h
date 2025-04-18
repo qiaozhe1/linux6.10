@@ -162,20 +162,21 @@ struct acpi_namespace_node {
 };
 
 /* Namespace Node flags */
+/* 通用标志位 (内核运行时使用) */
+#define ANOBJ_RESERVED                  0x01	//【保留位】可供未来使用
+#define ANOBJ_TEMPORARY                 0x02	//【临时节点】由控制方法创建的临时对象，执行完成后应删除
+#define ANOBJ_METHOD_ARG                0x04	//【方法参数】节点作为控制方法的参数对象
+#define ANOBJ_METHOD_LOCAL              0x08	//【方法局部变量】节点作为控制方法的局部变量
+#define ANOBJ_SUBTREE_HAS_INI           0x10	//【优化初始化】标记该子树包含_INI方法，用于加速设备初始化流程
+#define ANOBJ_EVALUATED                 0x20	//【已评估】节点首次执行后设置，避免重复评估
+#define ANOBJ_ALLOCATED_BUFFER          0x40	//【动态AML缓存】方法的AML代码存储在动态分配缓冲区中(通过install_method)
+#define ANOBJ_NODE_EARLY_INIT           0x80	//【早期初始化】仅acpi_exec使用：通过初始化文件(-fi)创建的节点
 
-#define ANOBJ_RESERVED                  0x01	/* Available for use */
-#define ANOBJ_TEMPORARY                 0x02	/* Node is create by a method and is temporary */
-#define ANOBJ_METHOD_ARG                0x04	/* Node is a method argument */
-#define ANOBJ_METHOD_LOCAL              0x08	/* Node is a method local */
-#define ANOBJ_SUBTREE_HAS_INI           0x10	/* Used to optimize device initialization */
-#define ANOBJ_EVALUATED                 0x20	/* Set on first evaluation of node */
-#define ANOBJ_ALLOCATED_BUFFER          0x40	/* Method AML buffer is dynamic (install_method) */
-#define ANOBJ_NODE_EARLY_INIT           0x80	/* acpi_exec only: Node was create via init file (-fi) */
-
-#define ANOBJ_IS_EXTERNAL               0x08	/* iASL only: This object created via External() */
-#define ANOBJ_METHOD_NO_RETVAL          0x10	/* iASL only: Method has no return value */
-#define ANOBJ_METHOD_SOME_NO_RETVAL     0x20	/* iASL only: Method has at least one return value */
-#define ANOBJ_IS_REFERENCED             0x80	/* iASL only: Object was referenced */
+/* iASL编译器专用标志位 (不与运行时标志冲突) */
+#define ANOBJ_IS_EXTERNAL               0x08	//【外部声明】对象通过External()语句创建
+#define ANOBJ_METHOD_NO_RETVAL          0x10	//【无返回值方法】方法不返回任何值(与_SUBTREE_HAS_INI共享位)
+#define ANOBJ_METHOD_SOME_NO_RETVAL     0x20	//【部分无返回值】方法某些路径不返回值(与_EVALUATED共享位)
+#define ANOBJ_IS_REFERENCED             0x80	//【被引用对象】对象在代码中被引用(与_NODE_EARLY_INIT共享位)
 
 /* Internal ACPI table management - master table list */
 
