@@ -106,13 +106,22 @@ struct acpi_object_buffer {
 	struct acpi_namespace_node *node;	/* Link back to parent node */
 };
 
+/*
+ * struct acpi_object_package - ACPI包对象(Package)的内部表示
+ *
+ * 该结构定义了ACPI包对象的完整内存表示，用于存储有序的对象集合。
+ * 包是ACPI中最重要的复合数据类型之一，用于实现：
+ * - 方法参数传递
+ * - 可变长度数据集合
+ * - 硬件寄存器组表示
+ */
 struct acpi_object_package {
-	ACPI_OBJECT_COMMON_HEADER;
-	struct acpi_namespace_node *node;	/* Link back to parent node */
-	union acpi_operand_object **elements;	/* Array of pointers to acpi_objects */
-	u8 *aml_start;
-	u32 aml_length;
-	u32 count;		/* # of elements in package */
+	ACPI_OBJECT_COMMON_HEADER;//标准对象头(类型/引用计数等)
+	struct acpi_namespace_node *node;	//回指父命名空间节点
+	union acpi_operand_object **elements;	//对象指针数组
+	u8 *aml_start;//原始AML代码起始位置
+	u32 aml_length;//包定义的AML代码长度
+	u32 count;		//实际元素数量
 };
 
 /******************************************************************************

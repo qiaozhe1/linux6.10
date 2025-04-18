@@ -192,112 +192,130 @@ acpi_ut_create_update_state_and_push(union acpi_operand_object *object,
  * DESCRIPTION: Walk through a package, including subpackages
  *
  ******************************************************************************/
-
+/*
+ * acpi_ut_walk_package_tree - 递归遍历ACPI包对象树
+ * 
+ * 该函数使用状态机机制深度优先遍历包及其嵌套子包，对每个元素调用回调函数
+ * 
+ * @source_object: 要遍历的根包对象
+ * @target_object: 目标对象(用于复制操作)
+ * @walk_callback: 每个元素调用的回调函数
+ * @context: 传递给回调的上下文
+ * 
+ * 返回值: 
+ *   AE_OK - 成功
+ *   AE_NO_MEMORY - 内存不足
+ *   其他 - 回调函数返回的错误状态
+ */
 acpi_status
 acpi_ut_walk_package_tree(union acpi_operand_object *source_object,
 			  void *target_object,
 			  acpi_pkg_callback walk_callback, void *context)
 {
 	acpi_status status = AE_OK;
-	union acpi_generic_state *state_list = NULL;
-	union acpi_generic_state *state;
-	union acpi_operand_object *this_source_obj;
-	u32 this_index;
+	union acpi_generic_state *state_list = NULL;//状态堆栈
+	union acpi_generic_state *state;//当前状态
+	union acpi_operand_object *this_source_obj;//当前元素对象
+	u32 this_index;//当前元素索引
 
 	ACPI_FUNCTION_TRACE(ut_walk_package_tree);
 
-	state = acpi_ut_create_pkg_state(source_object, target_object, 0);
+	state = acpi_ut_create_pkg_state(source_object, target_object, 0);//创建初始状态(从根包开始)
 	if (!state) {
 		return_ACPI_STATUS(AE_NO_MEMORY);
 	}
 
-	while (state) {
+	while (state) {//主状态机循环
 
 		/* Get one element of the package */
-
+		/* 获取当前包中的下一个元素 */
 		this_index = state->pkg.index;
 		this_source_obj =
 		    state->pkg.source_object->package.elements[this_index];
 		state->pkg.this_target_obj =
 		    &state->pkg.source_object->package.elements[this_index];
 
-		/*
-		 * Check for:
-		 * 1) An uninitialized package element. It is completely
-		 *    legal to declare a package and leave it uninitialized
-		 * 2) Not an internal object - can be a namespace node instead
-		 * 3) Any type other than a package. Packages are handled in else
-		 *    case below.
-		 */
-		if ((!this_source_obj) ||
+                /*
+                 * 处理三种情况：
+                 * 1. 未初始化的包元素(合法情况)
+                 * 2. 非操作对象(非ACPI_DESC_TYPE_OPERAND)
+                 * 3. 非包类型的普通元素
+                 */
+		if ((!this_source_obj) ||//空元素
 		    (ACPI_GET_DESCRIPTOR_TYPE(this_source_obj) !=
-		     ACPI_DESC_TYPE_OPERAND) ||
-		    (this_source_obj->common.type != ACPI_TYPE_PACKAGE)) {
+		     ACPI_DESC_TYPE_OPERAND) ||//非操作对象
+		    (this_source_obj->common.type != ACPI_TYPE_PACKAGE)) {//非包类型
 			status =
 			    walk_callback(ACPI_COPY_TYPE_SIMPLE,
-					  this_source_obj, state, context);
+					  this_source_obj, state, context);//调用回调函数处理简单类型元素
 			if (ACPI_FAILURE(status)) {
 				return_ACPI_STATUS(status);
 			}
 
-			state->pkg.index++;
+			state->pkg.index++;//移动到下一个元素
+			/*
+    			 * 处理当前包遍历完成的情况(索引超过元素数量)
+    			 * 需要循环处理因为可能有多个嵌套层级同时完成
+    			 */
 			while (state->pkg.index >=
 			       state->pkg.source_object->package.count) {
-				/*
-				 * We've handled all of the objects at this level,  This means
-				 * that we have just completed a package. That package may
-				 * have contained one or more packages itself.
-				 *
-				 * Delete this state and pop the previous state (package).
-				 */
-				acpi_ut_delete_generic_state(state);
-				state = acpi_ut_pop_generic_state(&state_list);
+        			/*
+        			 * 当前层级的包已遍历完成：
+        			 * 1. 释放已完成包的状态对象
+        			 * 2. 弹出上一级状态继续处理
+        			 */
+				acpi_ut_delete_generic_state(state);//释放当前状态内存
+				state = acpi_ut_pop_generic_state(&state_list);//弹出父包状态
 
 				/* Finished when there are no more states */
 
-				if (!state) {
-					/*
-					 * We have handled all of the objects in the top level
-					 * package just add the length of the package objects
-					 * and exit
-					 */
-					return_ACPI_STATUS(AE_OK);
+				if (!state) {// 检查状态堆栈是否已空
+            				/* 
+            				 * 所有层级的包都已处理完成：
+            				 * - 已回到最外层的根包
+            				 * - 整个遍历过程正常结束
+            				 */
+					return_ACPI_STATUS(AE_OK);//已完成根包遍历,返回
 				}
 
-				/*
-				 * Go back up a level and move the index past the just
-				 * completed package object.
-				 */
-				state->pkg.index++;
+        			/* 
+        			 * 返回到父包层级后：
+        			 * 需要移动到父包的下一个元素
+       				 * (因为刚完成的是父包中的一个子包元素)
+        			 */
+				state->pkg.index++;//返回上一级后移动到下一个元素
 			}
 		} else {
 			/* This is a subobject of type package */
-
+			/* 当前元素是嵌套包对象(ACPI_TYPE_PACKAGE)
+			 * 先调用回调函数处理这个包元素
+			 */
 			status =
 			    walk_callback(ACPI_COPY_TYPE_PACKAGE,
-					  this_source_obj, state, context);
+					  this_source_obj, state, context);//处理嵌套包元素
 			if (ACPI_FAILURE(status)) {
 				return_ACPI_STATUS(status);
 			}
 
-			/*
-			 * Push the current state and create a new one
-			 * The callback above returned a new target package object.
-			 */
-			acpi_ut_push_generic_state(&state_list, state);
+    			/*
+    			 * 准备深入遍历嵌套包：
+    			 * 1. 将当前状态压入堆栈(保存父包遍历进度)
+    			 * 2. 为子包创建新的遍历状态
+    			 */
+			acpi_ut_push_generic_state(&state_list, state);//当前状态压栈
 			state =
 			    acpi_ut_create_pkg_state(this_source_obj,
 						     state->pkg.this_target_obj,
-						     0);
-			if (!state) {
+						     0);//创建子包的遍历状态,从子包的第0个元素开始
+			if (!state) {//内存分配失败时的处理
 
 				/* Free any stacked Update State objects */
 
-				while (state_list) {
+				while (state_list) {//循环释放堆栈中所有已保存的状态
 					state =
 					    acpi_ut_pop_generic_state
-					    (&state_list);
-					acpi_ut_delete_generic_state(state);
+					    (&state_list);//弹出状态
+					acpi_ut_delete_generic_state(state);//释放内存
 				}
 				return_ACPI_STATUS(AE_NO_MEMORY);
 			}

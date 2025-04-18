@@ -187,7 +187,19 @@ union acpi_generic_state *acpi_ut_create_update_state(union acpi_operand_object
  * DESCRIPTION: Create a "Package State"
  *
  ******************************************************************************/
-
+/*
+ * acpi_ut_create_pkg_state - 创建包遍历状态对象
+ * 
+ * 该函数为包遍历操作创建并初始化一个状态控制块，用于跟踪包遍历过程中的上下文信息
+ *
+ * @internal_object: 要遍历的ACPI内部包对象(源对象)
+ * @external_object: 关联的外部对象(目标对象)
+ * @index: 当前包中的起始元素索引
+ *
+ * 返回值:
+ *   成功 - 指向新创建的状态对象的指针
+ *   失败 - NULL(内存不足)
+ */
 union acpi_generic_state *acpi_ut_create_pkg_state(void *internal_object,
 						   void *external_object,
 						   u32 index)
@@ -198,20 +210,20 @@ union acpi_generic_state *acpi_ut_create_pkg_state(void *internal_object,
 
 	/* Create the generic state object */
 
-	state = acpi_ut_create_generic_state();
+	state = acpi_ut_create_generic_state();//创建基础状态对象,从ACPI状态缓存分配
 	if (!state) {
 		return (NULL);
 	}
 
 	/* Init fields specific to the update struct */
 
-	state->common.descriptor_type = ACPI_DESC_TYPE_STATE_PACKAGE;
-	state->pkg.source_object = (union acpi_operand_object *)internal_object;
-	state->pkg.dest_object = external_object;
-	state->pkg.index = index;
-	state->pkg.num_packages = 1;
+	state->common.descriptor_type = ACPI_DESC_TYPE_STATE_PACKAGE;//标记为包状态
+	state->pkg.source_object = (union acpi_operand_object *)internal_object;//设置源包
+	state->pkg.dest_object = external_object;//设置目标位置
+	state->pkg.index = index;// 初始化当前索引
+	state->pkg.num_packages = 1;// 初始化包计数器
 
-	return (state);
+	return (state);// 返回初始化完成的状态对象
 }
 
 /*******************************************************************************

@@ -319,17 +319,31 @@ acpi_ds_build_internal_package_obj(struct acpi_walk_state *walk_state,
  * DESCRIPTION: Resolve a named reference element within a package object
  *
  ******************************************************************************/
-
+/*
+ * acpi_ds_init_package_element - 初始化/解析包元素
+ * 
+ * 该函数处理包元素的特殊初始化需求，主要针对引用类型元素和嵌套包：
+ * 1. 解析ACPI引用对象到实际的命名空间节点
+ * 2. 标记已初始化的嵌套包
+ *
+ * @object_type: 当前元素的ACPI类型(未使用)
+ * @source_object: 要处理的包元素对象
+ * @state: 当前包遍历状态(包含上下文信息)
+ * @context: 直接调用时提供的目标位置指针
+ *
+ * 返回值:
+ *   AE_OK - 总是成功返回(错误通过element_ptr间接返回)
+ */
 acpi_status
 acpi_ds_init_package_element(u8 object_type,
 			     union acpi_operand_object *source_object,
 			     union acpi_generic_state *state, void *context)
 {
-	union acpi_operand_object **element_ptr;
+	union acpi_operand_object **element_ptr;//指向包元素存储位置的指针
 
 	ACPI_FUNCTION_TRACE(ds_init_package_element);
 
-	if (!source_object) {
+	if (!source_object) {//处理空元素
 		return_ACPI_STATUS(AE_OK);
 	}
 
@@ -339,26 +353,34 @@ acpi_ds_init_package_element(u8 object_type,
 	 * to the location within the element array because a new object
 	 * may be created and stored there.
 	 */
+    	/* 
+    	 * 确定元素指针位置:
+    	 * 1. 直接调用时使用context参数
+    	 * 2. 通过walk_package_tree调用时使用状态对象中的目标指针
+    	 */
 	if (context) {
 
 		/* A direct call was made to this function */
 
-		element_ptr = (union acpi_operand_object **)context;
+		element_ptr = (union acpi_operand_object **)context;//直接调用场景(如包复制操作) 
 	} else {
 		/* Call came from acpi_ut_walk_package_tree */
 
-		element_ptr = state->pkg.this_target_obj;
+		element_ptr = state->pkg.this_target_obj;//包遍历器调用场景
 	}
 
-	/* We are only interested in reference objects/elements */
-
-	if (source_object->common.type == ACPI_TYPE_LOCAL_REFERENCE) {
+	/* 我们只处理引用对象或引用元素 */
+	if (source_object->common.type == ACPI_TYPE_LOCAL_REFERENCE) {//如果是引用类型元素
 
 		/* Attempt to resolve the (named) reference to a namespace node */
-
+        	/*
+        	 * 解析命名引用到实际节点:
+        	 * - 转换如`\REF_NAME`到对应的命名空间节点
+        	 * - 可能修改element_ptr指向的内容
+        	 */
 		acpi_ds_resolve_package_element(element_ptr);
-	} else if (source_object->common.type == ACPI_TYPE_PACKAGE) {
-		source_object->package.flags |= AOPOBJ_DATA_VALID;
+	} else if (source_object->common.type == ACPI_TYPE_PACKAGE) {//如果是嵌套包元素
+		source_object->package.flags |= AOPOBJ_DATA_VALID;//设置DATA_VALID标志避免重复处理
 	}
 
 	return_ACPI_STATUS(AE_OK);
@@ -376,24 +398,34 @@ acpi_ds_init_package_element(u8 object_type,
  *              object.
  *
  ******************************************************************************/
-
+/*
+ * acpi_ds_resolve_package_element - 解析包中的引用元素到实际对象
+ * 
+ * 该函数完成从命名引用到实际ACPI对象的转换过程，处理以下关键场景：
+ * 1. 普通命名引用解析(如\_SB.PCI0)
+ * 2. 别名(Alias)对象处理
+ * 3. 不同类型节点的差异化处理
+ * 4. 错误处理和调试输出
+ *
+ * @element_ptr: 指向包元素指针的二级指针(可能被修改)
+ */
 static void
 acpi_ds_resolve_package_element(union acpi_operand_object **element_ptr)
 {
 	acpi_status status;
 	acpi_status status2;
-	union acpi_generic_state scope_info;
-	union acpi_operand_object *element = *element_ptr;
-	struct acpi_namespace_node *resolved_node;
-	struct acpi_namespace_node *original_node;
-	char *external_path = "";
+	union acpi_generic_state scope_info;//命名空间查找的上下文信息
+	union acpi_operand_object *element = *element_ptr;//解引用获取当前包元素
+	struct acpi_namespace_node *resolved_node;//存储解析后的命名空间节点
+	struct acpi_namespace_node *original_node;//保存原始节点用于引用计数
+	char *external_path = "";//存储外部化路径名(用于错误报告)
 	acpi_object_type type;
 
 	ACPI_FUNCTION_TRACE(ds_resolve_package_element);
 
 	/* Check if reference element is already resolved */
 
-	if (element->reference.resolved) {
+	if (element->reference.resolved) {//检查引用元素是否已经解析过
 		ACPI_DEBUG_PRINT_RAW((ACPI_DB_PARSE,
 				      "%s: Package element is already resolved\n",
 				      ACPI_GET_FUNCTION_NAME));
@@ -403,15 +435,15 @@ acpi_ds_resolve_package_element(union acpi_operand_object **element_ptr)
 
 	/* Element must be a reference object of correct type */
 
-	scope_info.scope.node = element->reference.node;	/* Prefix node */
+	scope_info.scope.node = element->reference.node;	//设置命名空间查找的起始节点
 
 	status = acpi_ns_lookup(&scope_info, (char *)element->reference.aml,
 				ACPI_TYPE_ANY, ACPI_IMODE_EXECUTE,
 				ACPI_NS_SEARCH_PARENT | ACPI_NS_DONT_OPEN_SCOPE,
-				NULL, &resolved_node);
+				NULL, &resolved_node);//在命名空间中查找目标节点
 	if (ACPI_FAILURE(status)) {
-		if ((status == AE_NOT_FOUND)
-		    && acpi_gbl_ignore_package_resolution_errors) {
+		if ((status == AE_NOT_FOUND)//检查错误类型
+		    && acpi_gbl_ignore_package_resolution_errors) {//检查全局静默标志
 			/*
 			 * Optionally be silent about the NOT_FOUND case for the referenced
 			 * name. Although this is potentially a serious problem,
@@ -426,20 +458,20 @@ acpi_ds_resolve_package_element(union acpi_operand_object **element_ptr)
 
 			/* Referenced name not found, set the element to NULL */
 
-			acpi_ut_remove_reference(*element_ptr);
-			*element_ptr = NULL;
+			acpi_ut_remove_reference(*element_ptr);//减少引用计数
+			*element_ptr = NULL;//设置为空指针
 			return_VOID;
 		}
 
 		status2 = acpi_ns_externalize_name(ACPI_UINT32_MAX,
 						   (char *)element->reference.
-						   aml, NULL, &external_path);
+						   aml, NULL, &external_path);//将AML名称转换为可读字符串用于错误报告
 
 		ACPI_EXCEPTION((AE_INFO, status,
 				"While resolving a named reference package element - %s",
 				external_path));
-		if (ACPI_SUCCESS(status2)) {
-			ACPI_FREE(external_path);
+		if (ACPI_SUCCESS(status2)) {//检查转换是否成功
+			ACPI_FREE(external_path);//成功,则释放分配的内存
 		}
 
 		/* Could not resolve name, set the element to NULL */
@@ -447,7 +479,7 @@ acpi_ds_resolve_package_element(union acpi_operand_object **element_ptr)
 		acpi_ut_remove_reference(*element_ptr);
 		*element_ptr = NULL;
 		return_VOID;
-	} else if (resolved_node->type == ACPI_TYPE_ANY) {
+	} else if (resolved_node->type == ACPI_TYPE_ANY) {//检查是否解析到无效节点类型
 
 		/* Named reference not resolved, return a NULL package element */
 
@@ -455,7 +487,7 @@ acpi_ds_resolve_package_element(union acpi_operand_object **element_ptr)
 			    "Could not resolve named package element [%4.4s] in [%4.4s]",
 			    resolved_node->name.ascii,
 			    scope_info.scope.node->name.ascii));
-		*element_ptr = NULL;
+		*element_ptr = NULL;//设置为空指针
 		return_VOID;
 	}
 
@@ -463,67 +495,64 @@ acpi_ds_resolve_package_element(union acpi_operand_object **element_ptr)
 	 * Special handling for Alias objects. We need resolved_node to point
 	 * to the Alias target. This effectively "resolves" the alias.
 	 */
-	if (resolved_node->type == ACPI_TYPE_LOCAL_ALIAS) {
+	if (resolved_node->type == ACPI_TYPE_LOCAL_ALIAS) {//如果是别名(Alias)空间节点
 		resolved_node = ACPI_CAST_PTR(struct acpi_namespace_node,
-					      resolved_node->object);
+					      resolved_node->object);//获取别名实际的目标节点
 	}
 
-	/* Update the reference object */
+	/* 更新引用对象的状态 */
+	element->reference.resolved = TRUE;//标记为已解析
+	element->reference.node = resolved_node;//更新节点指针
+	type = element->reference.node->type;//获取节点类型
 
-	element->reference.resolved = TRUE;
-	element->reference.node = resolved_node;
-	type = element->reference.node->type;
-
-	/*
-	 * Attempt to resolve the node to a value before we insert it into
-	 * the package. If this is a reference to a common data type,
-	 * resolve it immediately. According to the ACPI spec, package
-	 * elements can only be "data objects" or method references.
-	 * Attempt to resolve to an Integer, Buffer, String or Package.
-	 * If cannot, return the named reference (for things like Devices,
-	 * Methods, etc.) Buffer Fields and Fields will resolve to simple
-	 * objects (int/buf/str/pkg).
-	 *
-	 * NOTE: References to things like Devices, Methods, Mutexes, etc.
-	 * will remain as named references. This behavior is not described
-	 * in the ACPI spec, but it appears to be an oversight.
-	 */
-	original_node = resolved_node;
-	status = acpi_ex_resolve_node_to_value(&resolved_node, NULL);
-	if (ACPI_FAILURE(status)) {
-		return_VOID;
+        /*
+         * 尝试在将节点插入到包中之前将其解析为具体的值。
+         * 如果这是对常见数据类型的引用，立即解析它。
+         * 根据 ACPI 规范，包元素只能是“数据对象”或方法引用。
+         * 尝试解析为 Integer、Buffer、String 或 Package。
+         * 如果不能解析，则返回命名引用（用于设备、方法等）。
+         * Buffer Fields 和 Fields 将解析为简单对象（整数/缓冲区/字符串/包）。
+         *
+         * 注意：对设备、方法、互斥量等的引用将仍然作为命名引用保留。
+         * 这种行为未在 ACPI 规范中描述，但似乎是一个疏忽。
+         */
+	original_node = resolved_node;//保存原始节点
+	status = acpi_ex_resolve_node_to_value(&resolved_node, NULL);//值解析
+	if (ACPI_FAILURE(status)) {//检查解析状态
+		return_VOID;//失败则保持引用不变
 	}
 
+	/* 根据节点类型进行差异化处理 */
 	switch (type) {
 		/*
 		 * These object types are a result of named references, so we will
 		 * leave them as reference objects. In other words, these types
 		 * have no intrinsic "value".
 		 */
-	case ACPI_TYPE_DEVICE:
-	case ACPI_TYPE_THERMAL:
-	case ACPI_TYPE_METHOD:
-		break;
+	case ACPI_TYPE_DEVICE://设备对象
+	case ACPI_TYPE_THERMAL://热区对象
+	case ACPI_TYPE_METHOD://方法对象
+		break;//不做转换
 
-	case ACPI_TYPE_MUTEX:
-	case ACPI_TYPE_POWER:
-	case ACPI_TYPE_PROCESSOR:
-	case ACPI_TYPE_EVENT:
-	case ACPI_TYPE_REGION:
+	case ACPI_TYPE_MUTEX://互斥锁对象
+	case ACPI_TYPE_POWER://电源资源对象
+	case ACPI_TYPE_PROCESSOR://处理器对象
+	case ACPI_TYPE_EVENT://事件对象
+	case ACPI_TYPE_REGION://操作区域对象
 
 		/* acpi_ex_resolve_node_to_value gave these an extra reference */
 
-		acpi_ut_remove_reference(original_node->object);
+		acpi_ut_remove_reference(original_node->object);//调整引用计数
 		break;
 
 	default:
 		/*
-		 * For all other types - the node was resolved to an actual
-		 * operand object with a value, return the object. Remove
-		 * a reference on the existing object.
-		 */
-		acpi_ut_remove_reference(element);
-		*element_ptr = (union acpi_operand_object *)resolved_node;
+                 * 对于所有其他类型 —— 节点已解析为一个具有实际值的操作数对象，
+                 * 则直接返回该对象。同时减少该对象的引用计数。
+                 */
+		/* 默认情况：替换为实际对象 */
+		acpi_ut_remove_reference(element);//释放原引用
+		*element_ptr = (union acpi_operand_object *)resolved_node;//更新指针
 		break;
 	}
 

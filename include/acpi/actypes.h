@@ -633,75 +633,73 @@ typedef u64 acpi_integer;
 #define ACPI_SPECIFIC_NOTIFY_MAX        0x84
 
 /*
- * Types associated with ACPI names and objects. The first group of
- * values (up to ACPI_TYPE_EXTERNAL_MAX) correspond to the definition
- * of the ACPI object_type() operator (See the ACPI Spec). Therefore,
- * only add to the first group if the spec changes.
- *
- * NOTE: Types must be kept in sync with the global acpi_ns_properties
- * and acpi_ns_type_names arrays.
+ * ACPI对象类型宏定义
+ * 定义了ACPI规范中所有支持的对象类型
+ * 注：这些类型代码用于AML字节码和ACPI内部对象表示
  */
 typedef u32 acpi_object_type;
 
-#define ACPI_TYPE_ANY                   0x00
-#define ACPI_TYPE_INTEGER               0x01	/* Byte/Word/Dword/Zero/One/Ones */
-#define ACPI_TYPE_STRING                0x02
-#define ACPI_TYPE_BUFFER                0x03
-#define ACPI_TYPE_PACKAGE               0x04	/* byte_const, multiple data_term/Constant/super_name */
-#define ACPI_TYPE_FIELD_UNIT            0x05
-#define ACPI_TYPE_DEVICE                0x06	/* Name, multiple Node */
-#define ACPI_TYPE_EVENT                 0x07
-#define ACPI_TYPE_METHOD                0x08	/* Name, byte_const, multiple Code */
-#define ACPI_TYPE_MUTEX                 0x09
-#define ACPI_TYPE_REGION                0x0A
-#define ACPI_TYPE_POWER                 0x0B	/* Name,byte_const,word_const,multi Node */
-#define ACPI_TYPE_PROCESSOR             0x0C	/* Name,byte_const,Dword_const,byte_const,multi nm_o */
-#define ACPI_TYPE_THERMAL               0x0D	/* Name, multiple Node */
-#define ACPI_TYPE_BUFFER_FIELD          0x0E
-#define ACPI_TYPE_DDB_HANDLE            0x0F
-#define ACPI_TYPE_DEBUG_OBJECT          0x10
+#define ACPI_TYPE_ANY                   0x00	//通配类型，匹配任何对象类型
+#define ACPI_TYPE_INTEGER               0x01	//整数类型对象,可表示：字节/字/双字/特殊常量(零/一/全1)
+#define ACPI_TYPE_STRING                0x02	//字符串类型对象(ASCII字符串)
+#define ACPI_TYPE_BUFFER                0x03	//缓冲区类型(原始二进制数据) 
+#define ACPI_TYPE_PACKAGE               0x04	//包类型(ACPI的集合/数组类型).包含：固定长度(首字节指定元素数量);可变元素(数据项/常量/名称引用)
+#define ACPI_TYPE_FIELD_UNIT            0x05	//字段单元(字段定义的一部分)
+#define ACPI_TYPE_DEVICE                0x06	//设备对象
+#define ACPI_TYPE_EVENT                 0x07	//事件对象(同步原语)
+#define ACPI_TYPE_METHOD                0x08	//方法对象(可执行AML代码)
+#define ACPI_TYPE_MUTEX                 0x09	//互斥锁对象(同步原语)
+#define ACPI_TYPE_REGION                0x0A	//操作区域(硬件地址空间映射)
+#define ACPI_TYPE_POWER                 0x0B	//电源资源对象
+#define ACPI_TYPE_PROCESSOR             0x0C	//处理器对象
+#define ACPI_TYPE_THERMAL               0x0D	//温控区域对象
+#define ACPI_TYPE_BUFFER_FIELD          0x0E	//缓冲区字段(缓冲区内的位字段)
+#define ACPI_TYPE_DDB_HANDLE            0x0F	//DDB句柄(调试设备绑定)
+#define ACPI_TYPE_DEBUG_OBJECT          0x10	//调试对象(调试输出控制)
 
-#define ACPI_TYPE_EXTERNAL_MAX          0x10
+#define ACPI_TYPE_EXTERNAL_MAX          0x10	//外部对象类型的最大值
 #define ACPI_NUM_TYPES                  (ACPI_TYPE_EXTERNAL_MAX + 1)
 
 /*
- * These are object types that do not map directly to the ACPI
- * object_type() operator. They are used for various internal purposes
- * only. If new predefined ACPI_TYPEs are added (via the ACPI
- * specification), these internal types must move upwards. (There
- * is code that depends on these values being contiguous with the
- * external types above.)
+ * 以下是ACPI内部使用的特殊对象类型
+ * 这些类型不会直接映射到ACPI object_type()操作符
+ * 注意：如果ACPI规范新增了预定义类型，这些内部类型必须向上移动
+ * (有代码依赖这些值与前述外部类型值的连续性)
  */
-#define ACPI_TYPE_LOCAL_REGION_FIELD    0x11
-#define ACPI_TYPE_LOCAL_BANK_FIELD      0x12
-#define ACPI_TYPE_LOCAL_INDEX_FIELD     0x13
-#define ACPI_TYPE_LOCAL_REFERENCE       0x14	/* Arg#, Local#, Name, Debug, ref_of, Index */
-#define ACPI_TYPE_LOCAL_ALIAS           0x15
-#define ACPI_TYPE_LOCAL_METHOD_ALIAS    0x16
-#define ACPI_TYPE_LOCAL_NOTIFY          0x17
-#define ACPI_TYPE_LOCAL_ADDRESS_HANDLER 0x18
-#define ACPI_TYPE_LOCAL_RESOURCE        0x19
-#define ACPI_TYPE_LOCAL_RESOURCE_FIELD  0x1A
-#define ACPI_TYPE_LOCAL_SCOPE           0x1B	/* 1 Name, multiple object_list Nodes */
+#define ACPI_TYPE_LOCAL_REGION_FIELD    0x11//区域字段(操作区域内的字段)
+#define ACPI_TYPE_LOCAL_BANK_FIELD      0x12//bank字段(需要bank切换的字段)
+#define ACPI_TYPE_LOCAL_INDEX_FIELD     0x13//索引字段(通过索引寄存器访问的字段)
+#define ACPI_TYPE_LOCAL_REFERENCE       0x14//本地引用类型.包含：参数引用(Arg#)、局部变量(Local#)、名称引用、调试对象引用、引用操作结果(ref_of)、索引引用
+#define ACPI_TYPE_LOCAL_ALIAS           0x15//别名(普通对象别名)
+#define ACPI_TYPE_LOCAL_METHOD_ALIAS    0x16//方法别名(对方法的引用)
+#define ACPI_TYPE_LOCAL_NOTIFY          0x17//通知处理对象
+#define ACPI_TYPE_LOCAL_ADDRESS_HANDLER 0x18//地址空间处理程序对象
+#define ACPI_TYPE_LOCAL_RESOURCE        0x19//资源描述符对象 
+#define ACPI_TYPE_LOCAL_RESOURCE_FIELD  0x1A//资源字段对象
+#define ACPI_TYPE_LOCAL_SCOPE           0x1B//作用域对象,包含：1个名称节点和多个对象列表节点
 
-#define ACPI_TYPE_NS_NODE_MAX           0x1B	/* Last typecode used within a NS Node */
+#define ACPI_TYPE_NS_NODE_MAX           0x1B//命名空间节点中使用的最大类型值
 #define ACPI_TOTAL_TYPES                (ACPI_TYPE_NS_NODE_MAX + 1)
 
 /*
  * These are special object types that never appear in
  * a Namespace node, only in an object of union acpi_operand_object
  */
-#define ACPI_TYPE_LOCAL_EXTRA           0x1C
-#define ACPI_TYPE_LOCAL_DATA            0x1D
+/*
+ * 以下是特殊对象类型
+ * 这些类型永远不会出现在命名空间节点中，
+ * 仅出现在union acpi_operand_object对象中
+ */
+#define ACPI_TYPE_LOCAL_EXTRA           0x1C//额外本地类型(特殊用途)
+#define ACPI_TYPE_LOCAL_DATA            0x1D//本地数据对象(内部数据存储)
 
-#define ACPI_TYPE_LOCAL_MAX             0x1D
+#define ACPI_TYPE_LOCAL_MAX             0x1D//本地类型的最大值
 
-/* All types above here are invalid */
+/* 所有大于此值的类型都是无效的 */
+#define ACPI_TYPE_INVALID               0x1E//无效类型标识
+#define ACPI_TYPE_NOT_FOUND             0xFF//未找到类型标识
 
-#define ACPI_TYPE_INVALID               0x1E
-#define ACPI_TYPE_NOT_FOUND             0xFF
-
-#define ACPI_NUM_NS_TYPES               (ACPI_TYPE_INVALID + 1)
+#define ACPI_NUM_NS_TYPES               (ACPI_TYPE_INVALID + 1)//命名空间类型总数(包括无效类型)
 
 /*
  * All I/O

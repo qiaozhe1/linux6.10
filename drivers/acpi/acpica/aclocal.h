@@ -593,14 +593,20 @@ struct acpi_update_state {
 /*
  * Pkg state - used to traverse nested package structures
  */
+/*
+ * struct acpi_pkg_state - ACPI包遍历状态结构
+ *
+ * 该结构专门用于跟踪ACPI包对象(Package)的遍历状态，支持嵌套包处理、
+ * 包复制操作和状态恢复等功能。是ACPI对象遍历机制的核心数据结构之一。
+ */
 struct acpi_pkg_state {
-	ACPI_STATE_COMMON;
-	u32 index;
-	union acpi_operand_object *source_object;
-	union acpi_operand_object *dest_object;
-	struct acpi_walk_state *walk_state;
-	void *this_target_obj;
-	u32 num_packages;
+	ACPI_STATE_COMMON;//基础状态字段(8字节头部)
+	u32 index;//当前处理的元素索引(0-based)
+	union acpi_operand_object *source_object;//正在遍历的源包对象
+	union acpi_operand_object *dest_object;//目标包对象(用于复制操作)
+	struct acpi_walk_state *walk_state;//关联的walk状态(控制方法执行上下文)
+	void *this_target_obj;//当前处理元素的目标存储位置
+	u32 num_packages;//嵌套包计数器(调试/验证用)
 };
 
 /*
@@ -683,17 +689,22 @@ struct acpi_notify_info {
 };
 
 /* Generic state is union of structs above */
-
+/*
+ * acpi_generic_state - ACPI通用状态联合体
+ * 
+ * 这个联合体定义了ACPI子系统使用的所有可能状态类型，通过共用内存空间实现高效状态管理。
+ * 各状态类型共享相同的起始结构(acpi_common_state)，通过descriptor_type字段区分具体类型。
+ */
 union acpi_generic_state {
-	struct acpi_common_state common;
-	struct acpi_control_state control;
-	struct acpi_update_state update;
-	struct acpi_scope_state scope;
-	struct acpi_pscope_state parse_scope;
-	struct acpi_pkg_state pkg;
-	struct acpi_thread_state thread;
-	struct acpi_result_values results;
-	struct acpi_notify_info notify;
+	struct acpi_common_state common;//基础状态字段
+	struct acpi_control_state control;//控制方法执行状态
+	struct acpi_update_state update;//对象更新状态
+	struct acpi_scope_state scope;//命名空间作用域状态
+	struct acpi_pscope_state parse_scope;//解析器作用域状态
+	struct acpi_pkg_state pkg;//包遍历状态(重点)
+	struct acpi_thread_state thread;//线程状态
+	struct acpi_result_values results;//方法结果状态
+	struct acpi_notify_info notify;//通知处理状态
 };
 
 /*****************************************************************************
@@ -706,12 +717,21 @@ typedef
 acpi_status (*acpi_execute_op) (struct acpi_walk_state * walk_state);
 
 /* Address Range info block */
-
+/*
+ * struct acpi_address_range - ACPI地址范围描述符
+ *
+ * 该结构用于跟踪系统内存和I/O空间的已分配区域，主要功能包括：
+ * 1. 维护硬件资源的全局视图
+ * 2. 防止地址空间冲突
+ * 3. 支持区域查询和验证
+ * 
+ * 组成全局链表，按地址空间类型分类存储(通过acpi_gbl_address_range_list数组索引)
+ */
 struct acpi_address_range {
-	struct acpi_address_range *next;
-	struct acpi_namespace_node *region_node;
-	acpi_physical_address start_address;
-	acpi_physical_address end_address;
+	struct acpi_address_range *next;//链表指针
+	struct acpi_namespace_node *region_node;//关联的ACPI命名空间节点
+	acpi_physical_address start_address;//区域起始地址
+	acpi_physical_address end_address;//区域结束地址
 };
 
 /*****************************************************************************

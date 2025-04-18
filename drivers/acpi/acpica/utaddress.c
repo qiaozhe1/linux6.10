@@ -37,15 +37,32 @@ ACPI_MODULE_NAME("utaddress")
  * address conflicts can be detected.
  *
  ******************************************************************************/
+/*
+ * acpi_ut_add_address_range - 添加地址范围到全局管理列表
+ *
+ * 管理特殊地址空间范围(SystemMemory/SystemIO)，主要功能：
+ * 1. 过滤非内存/IO空间请求
+ * 2. 分配并初始化范围描述符
+ * 3. 插入到全局链表头部
+ *
+ * @space_id:   地址空间类型(ACPI_ADR_SPACE_*)
+ * @address:    起始物理地址
+ * @length:     区域长度
+ * @region_node: 关联的命名空间节点
+ * 返回值:
+ *   AE_OK       - 成功
+ *   AE_NO_MEMORY - 内存分配失败
+ */ 
 acpi_status
 acpi_ut_add_address_range(acpi_adr_space_type space_id,
 			  acpi_physical_address address,
 			  u32 length, struct acpi_namespace_node *region_node)
 {
-	struct acpi_address_range *range_info;
+	struct acpi_address_range *range_info;//范围描述符
 
 	ACPI_FUNCTION_TRACE(ut_add_address_range);
 
+	/* 只处理系统内存和IO空间 */
 	if ((space_id != ACPI_ADR_SPACE_SYSTEM_MEMORY) &&
 	    (space_id != ACPI_ADR_SPACE_SYSTEM_IO)) {
 		return_ACPI_STATUS(AE_OK);
@@ -53,15 +70,17 @@ acpi_ut_add_address_range(acpi_adr_space_type space_id,
 
 	/* Allocate/init a new info block, add it to the appropriate list */
 
-	range_info = ACPI_ALLOCATE(sizeof(struct acpi_address_range));
+	range_info = ACPI_ALLOCATE(sizeof(struct acpi_address_range));//分配范围描述符
 	if (!range_info) {
 		return_ACPI_STATUS(AE_NO_MEMORY);
 	}
 
-	range_info->start_address = address;
-	range_info->end_address = (address + length - 1);
-	range_info->region_node = region_node;
+	/* 初始化描述符 */
+	range_info->start_address = address;//起始地址
+	range_info->end_address = (address + length - 1);//结束地址(包含)
+	range_info->region_node = region_node;//关联节点
 
+	/* 插入到全局链表头部 */
 	range_info->next = acpi_gbl_address_range_list[space_id];
 	acpi_gbl_address_range_list[space_id] = range_info;
 

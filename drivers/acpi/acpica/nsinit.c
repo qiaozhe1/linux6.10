@@ -274,40 +274,51 @@ error_exit:
  *              within the namespace. Used during dynamic load of an SSDT.
  *
  ******************************************************************************/
-
+/*
+ * acpi_ns_init_one_package - 初始化ACPI包对象
+ * 
+ * 此函数负责完成包对象的延迟初始化，处理可能的前向引用情况
+ * 
+ * @obj_handle: 要初始化的包对象的命名空间节点句柄
+ * @level: 命名空间树中的深度(未使用)
+ * @context: 上下文参数(未使用)
+ * @return_value: 返回值指针(未使用)
+ * 
+ * 返回值: 始终返回AE_OK，即使初始化失败也允许继续执行
+ */
 acpi_status
 acpi_ns_init_one_package(acpi_handle obj_handle,
 			 u32 level, void *context, void **return_value)
 {
 	acpi_status status;
-	union acpi_operand_object *obj_desc;
+	union acpi_operand_object *obj_desc;//包对象描述符
 	struct acpi_namespace_node *node =
-	    (struct acpi_namespace_node *)obj_handle;
+	    (struct acpi_namespace_node *)obj_handle;//转换为命名空间节点
 
-	obj_desc = acpi_ns_get_attached_object(node);
+	obj_desc = acpi_ns_get_attached_object(node);//获取附加到节点的对象描述符
 	if (!obj_desc) {
 		return (AE_OK);
 	}
 
 	/* Exit if package is already initialized */
 
-	if (obj_desc->package.flags & AOPOBJ_DATA_VALID) {
+	if (obj_desc->package.flags & AOPOBJ_DATA_VALID) {// 检查包是否已经初始化完成 
 		return (AE_OK);
 	}
 
-	status = acpi_ds_get_package_arguments(obj_desc);
+	status = acpi_ds_get_package_arguments(obj_desc);//获取包参数(元素数量和类型),对于预定义包，这会解析包的固定结构
 	if (ACPI_FAILURE(status)) {
 		return (AE_OK);
 	}
 
 	status =
 	    acpi_ut_walk_package_tree(obj_desc, NULL,
-				      acpi_ds_init_package_element, NULL);
+				      acpi_ds_init_package_element, NULL);//遍历包树,初始化每个元素.acpi_ds_init_package_element: 元素初始化回调
 	if (ACPI_FAILURE(status)) {
 		return (AE_OK);
 	}
 
-	obj_desc->package.flags |= AOPOBJ_DATA_VALID;
+	obj_desc->package.flags |= AOPOBJ_DATA_VALID;//标记包对象为已初始化完成 
 	return (AE_OK);
 }
 
@@ -330,103 +341,104 @@ acpi_ns_init_one_package(acpi_handle obj_handle,
  *              2) Op Regions
  *
  ******************************************************************************/
-
+/*
+ * acpi_ns_init_one_object - 初始化ACPI命名空间中的单个对象
+ * 这是命名空间遍历的回调函数，用于初始化ACPI对象
+ */
 static acpi_status
-acpi_ns_init_one_object(acpi_handle obj_handle,
+acpi_ns_init_one_object(acpi_handle obj_handle,//当前空间节点句柄
 			u32 level, void *context, void **return_value)
 {
-	acpi_object_type type;
+	acpi_object_type type;//存储当前对象的类型
 	acpi_status status = AE_OK;
 	struct acpi_init_walk_info *info =
-	    (struct acpi_init_walk_info *)context;
+	    (struct acpi_init_walk_info *)context;//转换上下文为信息结构
 	struct acpi_namespace_node *node =
-	    (struct acpi_namespace_node *)obj_handle;
-	union acpi_operand_object *obj_desc;
+	    (struct acpi_namespace_node *)obj_handle;//转换句柄为命名空间节点
+	union acpi_operand_object *obj_desc;//对象描述符指针
 
 	ACPI_FUNCTION_NAME(ns_init_one_object);
 
-	info->object_count++;
+	info->object_count++;//增加总对象计数器 ,统计遍历过的所有对象
 
 	/* And even then, we are only interested in a few object types */
-
-	type = acpi_ns_get_type(obj_handle);
-	obj_desc = acpi_ns_get_attached_object(node);
+	/* 只处理我们感兴趣的特定对象类型,其他类型直接跳过 */
+	type = acpi_ns_get_type(obj_handle);//获取命名空间类型代码
+	obj_desc = acpi_ns_get_attached_object(node);//获取命名空间节点关联的对象描述符
 	if (!obj_desc) {
-		return (AE_OK);
+		return (AE_OK);//如果没有附加对象，直接返回成功
 	}
 
-	/* Increment counters for object types we are looking for */
-
+	/* 根据不同类型增加相应的计数器 */
 	switch (type) {
-	case ACPI_TYPE_REGION:
+	case ACPI_TYPE_REGION://操作区域对象
 
-		info->op_region_count++;
+		info->op_region_count++;//增加操作区域计数
 		break;
 
-	case ACPI_TYPE_BUFFER_FIELD:
+	case ACPI_TYPE_BUFFER_FIELD://缓冲区字段对象
 
-		info->field_count++;
+		info->field_count++;//增加字段计数
 		break;
 
-	case ACPI_TYPE_LOCAL_BANK_FIELD:
+	case ACPI_TYPE_LOCAL_BANK_FIELD://bank字段对象
 
-		info->field_count++;
+		info->field_count++;//增加字段计数(与缓冲区字段合并统计)
 		break;
 
-	case ACPI_TYPE_BUFFER:
+	case ACPI_TYPE_BUFFER://缓冲区对象
 
-		info->buffer_count++;
+		info->buffer_count++;//增加缓冲区计数
 		break;
 
-	case ACPI_TYPE_PACKAGE:
+	case ACPI_TYPE_PACKAGE://包对象
 
-		info->package_count++;
+		info->package_count++;//增加包对象计数
 		break;
 
 	default:
 
 		/* No init required, just exit now */
 
-		return (AE_OK);
+		return (AE_OK);//其他类型不处理,直接返回成功
 	}
 
 	/* If the object is already initialized, nothing else to do */
 
-	if (obj_desc->common.flags & AOPOBJ_DATA_VALID) {
+	if (obj_desc->common.flags & AOPOBJ_DATA_VALID) {//检查对象是否已经初始化,AOPOBJ_DATA_VALID标志表示已完成初始化
 		return (AE_OK);
 	}
 
 	/* Must lock the interpreter before executing AML code */
 
-	acpi_ex_enter_interpreter();
+	acpi_ex_enter_interpreter();//执行AML代码前必须获取解释器锁,防止多线程环境下的竞争条件
 
 	/*
-	 * Only initialization of Package objects can be deferred, in order
-	 * to support forward references.
+	 * 对象初始化处理开关,只有特定类型需要在这里处理
 	 */
 	switch (type) {
-	case ACPI_TYPE_LOCAL_BANK_FIELD:
+	case ACPI_TYPE_LOCAL_BANK_FIELD://bank字段初始化
 
 		/* TBD: bank_fields do not require deferred init, remove this code */
 
-		info->field_init++;
-		status = acpi_ds_get_bank_field_arguments(obj_desc);
+		info->field_init++;//增加已初始化字段计数
+		status = acpi_ds_get_bank_field_arguments(obj_desc);//获取银行字段参数
 		break;
 
-	case ACPI_TYPE_PACKAGE:
+	case ACPI_TYPE_PACKAGE://包对象初始化
 
 		/* Complete the initialization/resolution of the package object */
 
-		info->package_init++;
+		info->package_init++;//增加已初始化包计数
 		status =
-		    acpi_ns_init_one_package(obj_handle, level, NULL, NULL);
+		    acpi_ns_init_one_package(obj_handle, level, NULL, NULL);//调用包对象初始化函数
 		break;
 
 	default:
 
 		/* No other types should get here */
-
-		status = AE_TYPE;
+		/* 理论上不应该执行到这里,因为前面已经过滤了不需要处理的对象类型 */
+		status = AE_TYPE;//设置类型错误状态
 		ACPI_EXCEPTION((AE_INFO, status,
 				"Opcode is not deferred [%4.4s] (%s)",
 				acpi_ut_get_node_name(node),
@@ -434,6 +446,7 @@ acpi_ns_init_one_object(acpi_handle obj_handle,
 		break;
 	}
 
+	/* 错误处理部分 */
 	if (ACPI_FAILURE(status)) {
 		ACPI_EXCEPTION((AE_INFO, status,
 				"Could not execute arguments for [%4.4s] (%s)",
@@ -445,7 +458,7 @@ acpi_ns_init_one_object(acpi_handle obj_handle,
 	 * We ignore errors from above, and always return OK, since we don't want
 	 * to abort the walk on any single error.
 	 */
-	acpi_ex_exit_interpreter();
+	acpi_ex_exit_interpreter();//释放解释器锁
 	return (AE_OK);
 }
 

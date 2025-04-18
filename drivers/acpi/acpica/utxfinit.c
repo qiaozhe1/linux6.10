@@ -227,13 +227,27 @@ ACPI_EXPORT_SYMBOL_INIT(acpi_enable_subsystem)
  *              objects and executing AML code for Regions, buffers, etc.
  *
  ******************************************************************************/
+/*
+ * acpi_initialize_objects - ACPI对象初始化主函数
+ *
+ * 该函数完成ACPI子系统的三阶段初始化：
+ * 1. (过时)遗留对象初始化(ACPI 5.0之前的行为)
+ * 2. 设备/区域初始化(执行_STA/_INI/_REG等方法)
+ * 3. 缓存清理(释放初始化期间使用的临时内存)
+ *
+ * @flags: 控制初始化的标志位组合
+ * 返回值:
+ *   AE_OK            - 成功
+ *   AE_NO_MEMORY     - 内存不足
+ *   其他ACPI状态码   - 来自下级函数
+ */
 acpi_status ACPI_INIT_FUNCTION acpi_initialize_objects(u32 flags)
 {
 	acpi_status status = AE_OK;
 
 	ACPI_FUNCTION_TRACE(acpi_initialize_objects);
 
-#ifdef ACPI_OBSOLETE_BEHAVIOR
+#ifdef ACPI_OBSOLETE_BEHAVIORa//阶段1: 遗留对象初始化 (ACPI 5.0+默认禁用)
 	/*
 	 * 05/2019: Removed, initialization now happens at both object
 	 * creation and table load time
@@ -245,6 +259,10 @@ acpi_status ACPI_INIT_FUNCTION acpi_initialize_objects(u32 flags)
 	 * declaration of these objects: operation_regions, buffer_fields,
 	 * bank_fields, Buffers, and Packages.
 	 */
+	/*
+    	 * 注意：此部分在2019年5月后已废弃
+    	 * 现代ACPI实现改为在对象创建和表加载时直接初始化
+    	 */
 	if (!(flags & ACPI_NO_OBJECT_INIT)) {
 		status = acpi_ns_initialize_objects();
 		if (ACPI_FAILURE(status)) {
@@ -257,21 +275,30 @@ acpi_status ACPI_INIT_FUNCTION acpi_initialize_objects(u32 flags)
 	 * Initialize all device/region objects in the namespace. This runs
 	 * the device _STA and _INI methods and region _REG methods.
 	 */
+	/* 阶段2: 设备/区域初始化 */
 	if (!(flags & (ACPI_NO_DEVICE_INIT | ACPI_NO_ADDRESS_SPACE_INIT))) {
+       		/*
+        	 * 关键初始化路径：
+        	 * 1. 执行所有设备的_STA(状态)方法
+        	 * 2. 执行_INI(初始化)方法
+        	 * 3. 执行_REG(区域设置)方法
+        	 */
 		status = acpi_ns_initialize_devices(flags);
 		if (ACPI_FAILURE(status)) {
 			return_ACPI_STATUS(status);
 		}
 	}
 
+	/* 阶段3: 缓存清理 */
 	/*
-	 * Empty the caches (delete the cached objects) on the assumption that
-	 * the table load filled them up more than they will be at runtime --
-	 * thus wasting non-paged memory.
-	 */
-	status = acpi_purge_cached_objects();
+    	 * 设计考虑：
+    	 * - 表加载期间缓存了大量临时对象
+    	 * - 运行时不需要保留这些缓存
+    	 * - 特别重要对于非分页内存
+   	 */
+	status = acpi_purge_cached_objects();//释放初始化缓存
 
-	acpi_gbl_startup_flags |= ACPI_INITIALIZED_OK;
+	acpi_gbl_startup_flags |= ACPI_INITIALIZED_OK;//标记初始化完成
 	return_ACPI_STATUS(status);
 }
 
